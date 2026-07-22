@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "tinyjuice codex-post-tool-use",
-            "statusMessage": "compressing Bash output with TinyJuice",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      }
-    ]
+    "PostToolUse": []
   }
 }
