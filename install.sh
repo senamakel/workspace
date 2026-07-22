@@ -77,29 +77,44 @@ for d in "$REPO_ROOT"/claude/skills/*/; do
   link "$d" "$HOME/.claude/skills/$(basename "$d")"
 done
 
+# --- Codex global config ------------------------------------------------------
+# config.toml is deliberately NOT synced: it mixes machine state (project
+# trust list, marketplace caches) with at least one embedded API key.
+link "$REPO_ROOT/codex/AGENTS.md"   "$HOME/.codex/AGENTS.md"
+link "$REPO_ROOT/codex/CODEX.md"    "$HOME/.codex/CODEX.md"
+link "$REPO_ROOT/codex/hooks.json"  "$HOME/.codex/hooks.json"
+
+for d in "$REPO_ROOT"/codex/skills/*/; do
+  [ -d "$d" ] || continue
+  d="${d%/}"
+  link "$d" "$HOME/.codex/skills/$(basename "$d")"
+done
+
 # --- zsh ----------------------------------------------------------------------
-# zsh/zshrc holds only our custom functions/aliases. ~/.zshrc stays a local,
+# zshrc holds only our custom functions/aliases. ~/.zshrc stays a local,
 # machine-specific file (oh-my-zsh, PATH exports, installer snippets) that
-# loads the repo file via a marker line we ensure is present.
+# loads the repo file via a marker line we ensure is present and current.
 ensure_zshrc_loader() {
   local rc="$HOME/.zshrc"
   local marker="# workspace-custom (managed by install.sh)"
-  local line="[ -f \"$REPO_ROOT/zsh/zshrc\" ] && source \"$REPO_ROOT/zsh/zshrc\""
+  local line="[ -f \"$REPO_ROOT/zshrc\" ] && source \"$REPO_ROOT/zshrc\""
 
-  if [ -f "$rc" ] && grep -qF "$marker" "$rc"; then
+  if [ -f "$rc" ] && grep -qF "$line" "$rc"; then
     echo "[ok]   $rc sources repo zshrc"
     return
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[would append] loader line to $rc"
+    echo "[would update] loader line in $rc"
     return
   fi
+  # Drop any stale marker + following line, then append the current pair.
+  if [ -f "$rc" ] && grep -qF "$marker" "$rc"; then
+    sed -i '' "/^# workspace-custom (managed by install.sh)\$/{N;d;}" "$rc"
+  fi
   printf '\n%s\n%s\n' "$marker" "$line" >> "$rc"
-  echo "[append] loader line -> $rc"
+  echo "[update] loader line -> $rc"
 }
 ensure_zshrc_loader
-
-link "$REPO_ROOT/zsh/zshenv"  "$HOME/.zshenv"
 
 echo
 if [ "$DRY_RUN" -eq 1 ]; then
