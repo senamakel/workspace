@@ -63,6 +63,14 @@ When the agent exits you're asked whether to delete the worktree.
 overrides repo resolution. Conventions follow
 `tinyhumansai/openhuman/scripts/shortcuts`.
 
+### `workflow-update [--no-commit]`
+
+For workflow superprojects (repos with submodules). Fetches the canonical
+remote (`upstream` preferred, else `origin`) and merges its default branch,
+then bumps each first-level submodule (no recursion) to the tip of its own
+canonical remote's default branch, stages the moved pointers, and commits
+them as "Update submodule pointers". `--no-commit` stages only.
+
 ## Notes
 
 - The `humanizer` and `solana-dev` skills were originally managed by the
