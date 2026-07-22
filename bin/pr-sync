@@ -86,6 +86,7 @@ info "repo: $REPO (canonical remote: $REMOTE)"
 PR_INFO="$(gh pr view "$PR" -R "$REPO" \
   --json headRefName,headRepository,headRepositoryOwner,baseRefName)" \
   || { fail "could not resolve PR #$PR on $REPO"; exit 1; }
+HEAD_OWNER=$(jq -r '.headRepositoryOwner.login' <<<"$PR_INFO")
 HEAD_REPO=$(jq -r '.headRepositoryOwner.login + "/" + .headRepository.name' <<<"$PR_INFO")
 HEAD_BRANCH=$(jq -r '.headRefName' <<<"$PR_INFO")
 BASE_BRANCH=$(jq -r '.baseRefName' <<<"$PR_INFO")
@@ -93,8 +94,9 @@ LOCAL_BRANCH="pr/$PR"
 WT_DIR="$TOPLEVEL/worktrees/pr-$PR"
 info "PR #$PR: $HEAD_REPO:$HEAD_BRANCH -> $REPO:$BASE_BRANCH (local: $LOCAL_BRANCH)"
 
-# ── Fork remote: prefer an existing SSH remote for this fork ───────
-REMOTE_NAME="remote-$PR"
+# ── Fork remote: named after the contributor, one remote per fork owner.
+# Prefer an existing SSH remote already pointing at this fork.
+REMOTE_NAME="remote-$HEAD_OWNER"
 EXISTING_SSH=$(git remote -v \
   | awk -v repo="$HEAD_REPO" '$2 ~ ("[:/]" repo "(\\.git)?$") && $3 == "(fetch)" {print $1; exit}')
 if [ -n "$EXISTING_SSH" ]; then
