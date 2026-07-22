@@ -49,7 +49,9 @@
   "effortLevel": "medium",
   "agent": "tinyhumansai",
   "skipDangerousModePermissionPrompt": true,
+  "theme": "auto",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "tui": "fullscreen"
 }
