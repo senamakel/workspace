@@ -17,14 +17,6 @@
             "command": "afplay /System/Library/Sounds/Glass.aiff"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x '/Users/enamakel/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/enamakel/.orca/agent-hooks/claude-hook.sh'; fi"
-          }
-        ]
       }
     ],
     "Notification": [
@@ -37,60 +29,11 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x '/Users/enamakel/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/enamakel/.orca/agent-hooks/claude-hook.sh'; fi"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x '/Users/enamakel/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/enamakel/.orca/agent-hooks/claude-hook.sh'; fi"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x '/Users/enamakel/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/enamakel/.orca/agent-hooks/claude-hook.sh'; fi"
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x '/Users/enamakel/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/enamakel/.orca/agent-hooks/claude-hook.sh'; fi"
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x '/Users/enamakel/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/enamakel/.orca/agent-hooks/claude-hook.sh'; fi"
-          }
-        ]
-      }
-    ]
+    "UserPromptSubmit": [],
+    "PreToolUse": [],
+    "PostToolUse": [],
+    "PostToolUseFailure": [],
+    "PermissionRequest": []
   },
   "statusLine": {
     "type": "command",
@@ -104,7 +47,7 @@
   },
   "extraKnownMarketplaces": {},
   "effortLevel": "medium",
-  "agent": "woz:code-free",
+  "agent": "tinyhumansai",
   "skipDangerousModePermissionPrompt": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
