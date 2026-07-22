@@ -1,0 +1,346 @@
+res() {
+  local remote=upstream
+  git remote get-url upstream >/dev/null 2>&1 || remote=origin
+  git checkout main && git fetch "$remote" && git merge "$remote/main" \
+    && git submodule update --init --recursive && clear
+}
+alias mrg="gf upstream && gm"
+alias k="kubectl"
+alias desk="cd ~/Desktop"
+alias home="cd ~"
+alias down="cd ~/Downloads"
+alias ping8="ping 8.8.8.8"
+alias agunt="agent --yolo"
+alias gumini="gemini --yolo"
+alias human-tmux="~/tmux-work.sh"
+alias cudex="codex --yolo"
+alias aliases="vim ~/.zshrc"
+alias cleude="claude"
+alias work="cd ~/work"
+alias human="cd ~/work/tinyhumansai/openhuman"
+
+human-clean() {
+  local workspace="$HOME/work/tinyhumansai"
+  local dry_run=0
+  [ "$1" = "--dry-run" ] && dry_run=1
+
+  local manifest target found=0
+  local -A seen_targets
+  while IFS= read -r -d '' manifest; do
+    target="${manifest:h}/target"
+    [ -d "$target" ] || continue
+    [ -z "${seen_targets[$target]-}" ] || continue
+    seen_targets[$target]=1
+    found=1
+
+    if [ "$dry_run" -eq 1 ]; then
+      echo "[dry-run] $target"
+    else
+      echo "[rm] $target"
+      rm -rf "$target"
+    fi
+  done < <(rg --files -0 -uu \
+    -g 'Cargo.toml' \
+    -g '!**/.git/**' \
+    -g '!**/node_modules/**' \
+    -g '!**/target/**' \
+    "$workspace" 2>/dev/null)
+
+  if [ "$found" -eq 0 ]; then
+    echo "No matching target directories found."
+  elif [ "$dry_run" -eq 1 ]; then
+    echo "Dry run only. Re-run with: human-clean"
+  else
+    echo "Done."
+  fi
+}
+
+# Reset every ~/work/tinyhumansai/openhuman-N worktree to the latest upstream/main.
+# Skips dirs with uncommitted changes. Pass --force to reset anyway (DESTRUCTIVE).
+human-reset() {
+  local workspace="$HOME/work/tinyhumansai"
+  local force=0
+  [ "$1" = "--force" ] && force=1
+
+  local dir
+  for dir in "$workspace"/openhuman-[0-9]*(/N); do
+    echo "\n=== ${dir##*/} ==="
+    (
+      cd "$dir" || exit 1
+
+      # Pick remote: prefer upstream, else origin
+      local remote="upstream"
+      git remote get-url upstream >/dev/null 2>&1 || remote="origin"
+
+      if [ "$force" -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
+        echo "[skip] uncommitted changes (use --force to override)"
+        exit 0
+      fi
+
+      git fetch "$remote" main --prune || { echo "[!] fetch failed"; exit 1; }
+      git checkout main || { echo "[!] checkout main failed"; exit 1; }
+      git reset --hard "$remote/main" || { echo "[!] reset failed"; exit 1; }
+      git submodule update --init --recursive
+
+
+      echo "[ok] reset to $remote/main @ $(git rev-parse --short HEAD)"
+    )
+  done
+}
+
+_pr_sync() {
+  local pr="$1"
+  
+  # 1. Sync local main with upstream
+  git checkout main && \
+  git pull origin main && \
+  git fetch upstream && \
+  git merge upstream/main && \
+  git submodule update --init --recursive || return 1
+
+  # 2. Resolve the PR's head repo + branch
+  local info head_repo head_branch local_branch
+  info=$(gh pr view "$pr" -R tinyhumansai/openhuman \
+    --json headRefName,headRepository,headRepositoryOwner) || return 1
+  
+  head_repo=$(echo "$info" | jq -r '.headRepositoryOwner.login + "/" + .headRepository.name')
+  head_branch=$(echo "$info" | jq -r '.headRefName')
+  local_branch="pr/$pr"
+
+  echo "[preem] PR #$pr -> $head_repo:$head_branch (local: $local_branch)"
+
+  # 3. Fetch PR branch from the fork
+  git fetch "https://github.com/${head_repo}.git" \
+    "+${head_branch}:${local_branch}" || return 1
+  
+  git checkout "$local_branch"
+
+  # 4. Attempt merge main into PR branch, ignoring errors/conflicts
+  echo "[preem] Attempting to merge main into $local_branch..."
+  git merge main || echo "[!] Conflicts detected in PR #$pr, but continuing as requested."
+
+  # 5. Set upstream + push remote to the PR's fork
+  echo "[preem] Configuring upstream tracking for $head_repo..."
+
+  local remote_name="remote-$pr"
+  local remote_url="https://github.com/${head_repo}.git"
+
+  # Prefer SSH remote if one already points at this fork (avoids https auth prompts on push)
+  local existing_ssh
+  existing_ssh=$(git remote -v | awk -v repo="$head_repo" '$2 ~ ("[:/]" repo "(\\.git)?$") && $3 == "(fetch)" {print $1; exit}')
+  if [ -n "$existing_ssh" ]; then
+    remote_name="$existing_ssh"
+    echo "[preem] Reusing existing remote '$remote_name' -> $(git remote get-url "$remote_name")"
+  else
+    git remote add "$remote_name" "$remote_url" 2>/dev/null || \
+      git remote set-url "$remote_name" "$remote_url"
+  fi
+
+  # Explicit refspec ensures refs/remotes/<remote>/<branch> is populated
+  # (a bare `git fetch <remote> <branch>` only writes FETCH_HEAD in some git versions)
+  git fetch "$remote_name" "+refs/heads/${head_branch}:refs/remotes/${remote_name}/${head_branch}" || {
+    echo "[!] Failed to fetch $head_branch from $remote_name."
+    return 1
+  }
+
+  # Track upstream (for pulls/status) and set pushRemote (so `git push` lands on the fork)
+  if git branch --set-upstream-to="$remote_name/$head_branch" "$local_branch"; then
+    git config "branch.${local_branch}.pushRemote" "$remote_name"
+    git config "branch.${local_branch}.merge" "refs/heads/${head_branch}"
+    echo "[preem] Upstream + pushRemote set to $remote_name/$head_branch"
+  else
+    echo "[!] Failed to set upstream. You may need to push manually."
+    return 1
+  fi
+}
+
+preem() {
+  if [ -z "$1" ]; then
+    echo "Usage: preem <pr-number> [review|fix|resolve_comments(default)]"
+    return 1
+  fi
+
+  if [ "$2" = "review" ]; then
+    action="review"
+  elif [ "$2" = "fix" ]; then
+    action="fix"
+  else
+    action="resolve_comments"
+  fi
+
+
+  if [ "$action" = "review" ]; then 
+    _pr_sync "$1" && \  # sync the PR and set upstream + push remote to the PR's fork
+    cleude "I've already checked out branch pr/$1 with main merged in and upstream tracking set. Use the pr-reviewer agent to review the PR #$1 and publish review comments."
+  elif [ "$action" = "fix" ]; then
+    _pr_sync "$1" && \  # sync the PR and set upstream + push remote to the PR's fork
+    cleude "I've already checked out branch pr/$1 with main merged in and upstream tracking set. Use the pr-reviewer agent to review the PR #$1 and fix the issues. Then use the pr-manager-lite agent to push the changes to the PR."
+  else
+    _pr_sync "$1" && \  # sync the PR and set upstream + push remote to the PR's fork
+    cleude "I've already checked out branch pr/$1 with main merged in and upstream tracking set. Use the pr-manager-lite agent to resolve the review comments on PR #$1."
+  fi
+}
+
+cream() {
+  if [ -z "$1" ]; then
+    echo "Usage: cream <pr-number>"
+    return 1
+  fi
+  _pr_sync "$1" && \
+  cudex "I've already checked out branch pr/$1 with main merged in and upstream tracking set. Use the pr-manager-lite agent to review and resolve the review comments on PR #$1."
+}
+
+# If you come from bash you might have to change your $PATH.
+# export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
+
+# Path to your Oh My Zsh installation.
+export ZSH="$HOME/.oh-my-zsh"
+
+# Set name of the theme to load --- if set to "random", it will
+# load a random theme each time Oh My Zsh is loaded, in which case,
+# to know which specific one was loaded, run: echo $RANDOM_THEME
+# See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
+ZSH_THEME="clean"
+
+# Set list of themes to pick from when loading at random
+# Setting this variable when ZSH_THEME=random will cause zsh to load
+# a theme from this variable instead of looking in $ZSH/themes/
+# If set to an empty array, this variable will have no effect.
+# ZSH_THEME_RANDOM_CANDIDATES=( "robbyrussell" "agnoster" )
+
+# Uncomment the following line to use case-sensitive completion.
+# CASE_SENSITIVE="true"
+
+# Uncomment the following line to use hyphen-insensitive completion.
+# Case-sensitive completion must be off. _ and - will be interchangeable.
+# HYPHEN_INSENSITIVE="true"
+
+# Uncomment one of the following lines to change the auto-update behavior
+# zstyle ':omz:update' mode disabled  # disable automatic updates
+# zstyle ':omz:update' mode auto      # update automatically without asking
+# zstyle ':omz:update' mode reminder  # just remind me to update when it's time
+
+# Uncomment the following line to change how often to auto-update (in days).
+# zstyle ':omz:update' frequency 13
+
+# Uncomment the following line if pasting URLs and other text is messed up.
+# DISABLE_MAGIC_FUNCTIONS="true"
+
+# Uncomment the following line to disable colors in ls.
+# DISABLE_LS_COLORS="true"
+
+# Uncomment the following line to disable auto-setting terminal title.
+# DISABLE_AUTO_TITLE="true"
+
+# Uncomment the following line to enable command auto-correction.
+# ENABLE_CORRECTION="true"
+
+# Uncomment the following line to display red dots whilst waiting for completion.
+# You can also set it to another string to have that shown instead of the default red dots.
+# e.g. COMPLETION_WAITING_DOTS="%F{yellow}waiting...%f"
+# Caution: this setting can cause issues with multiline prompts in zsh < 5.7.1 (see #5765)
+# COMPLETION_WAITING_DOTS="true"
+
+# Uncomment the following line if you want to disable marking untracked files
+# under VCS as dirty. This makes repository status check for large repositories
+# much, much faster.
+# DISABLE_UNTRACKED_FILES_DIRTY="true"
+
+# Uncomment the following line if you want to change the command execution time
+# stamp shown in the history command output.
+# You can set one of the optional three formats:
+# "mm/dd/yyyy"|"dd.mm.yyyy"|"yyyy-mm-dd"
+# or set a custom format using the strftime function format specifications,
+# see 'man strftime' for details.
+# HIST_STAMPS="mm/dd/yyyy"
+
+# Would you like to use another custom folder than $ZSH/custom?
+# ZSH_CUSTOM=/path/to/new-custom-folder
+
+# Which plugins would you like to load?
+# Standard plugins can be found in $ZSH/plugins/
+# Custom plugins may be added to $ZSH_CUSTOM/plugins/
+# Example format: plugins=(rails git textmate ruby lighthouse)
+# Add wisely, as too many plugins slow down shell startup.
+plugins=(git)
+
+source $ZSH/oh-my-zsh.sh
+
+# User configuration
+
+# export MANPATH="/usr/local/man:$MANPATH"
+
+# You may need to manually set your language environment
+# export LANG=en_US.UTF-8
+
+# Preferred editor for local and remote sessions
+# if [[ -n $SSH_CONNECTION ]]; then
+#   export EDITOR='vim'
+# else
+#   export EDITOR='nvim'
+# fi
+
+# Compilation flags
+# export ARCHFLAGS="-arch $(uname -m)"
+
+# Set personal aliases, overriding those provided by Oh My Zsh libs,
+# plugins, and themes. Aliases can be placed here, though Oh My Zsh
+# users are encouraged to define aliases within a top-level file in
+# the $ZSH_CUSTOM folder, with .zsh extension. Examples:
+# - $ZSH_CUSTOM/aliases.zsh
+# - $ZSH_CUSTOM/macos.zsh
+# For a full list of active aliases, run `alias`.
+#
+# Example aliases
+# alias zshconfig="mate ~/.zshrc"
+# alias ohmyzsh="mate ~/.oh-my-zsh"
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+export PATH="$HOME/.local/bin:$PATH"
+
+# opencode
+export PATH=/Users/enamakel/.opencode/bin:$PATH
+export PATH="$HOME/.pyenv/bin:$PATH"
+if command -v pyenv >/dev/null; then
+  eval "$(pyenv init --path --no-rehash)"
+  eval "$(pyenv init - --no-rehash)"
+fi
+
+# Rust: prefer rustup-managed toolchain over Homebrew's rustc
+# (project pins 1.93.0 via rust-toolchain.toml to avoid matrix-sdk recursion-limit bug)
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# The next line updates PATH for the Google Cloud SDK.
+if [ -f '/Users/enamakel/work/tinyhumansai/openhuman-2/google-cloud-sdk/path.zsh.inc' ]; then . '/Users/enamakel/work/tinyhumansai/openhuman-2/google-cloud-sdk/path.zsh.inc'; fi
+
+# The next line enables shell command completion for gcloud.
+if [ -f '/Users/enamakel/work/tinyhumansai/openhuman-2/google-cloud-sdk/completion.zsh.inc' ]; then . '/Users/enamakel/work/tinyhumansai/openhuman-2/google-cloud-sdk/completion.zsh.inc'; fi
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/Users/enamakel/.lmstudio/bin"
+# End of LM Studio CLI section
+
+
+# Android SDK / Tauri mobile
+export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export NDK_HOME="$ANDROID_HOME/ndk/27.0.12077973"
+export PATH="$HOME/.cargo/bin:$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+
+# pnpm
+export PNPM_HOME="/Users/enamakel/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
+
+# Added by Devin
+export PATH="/Users/enamakel/.codeium/windsurf/bin:$PATH"
+export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+
+# Added by the Medulla installer
+export PATH="/Users/enamakel/.medulla/bin:$PATH"

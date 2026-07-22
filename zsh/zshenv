@@ -1,0 +1,8 @@
+# Ensure Homebrew bins are on PATH even for non-interactive shells
+# (Apple Silicon uses /opt/homebrew, Intel uses /usr/local).
+[ -d /opt/homebrew/bin ] && export PATH="/opt/homebrew/bin:$PATH"
+case ":$PATH:" in *:/usr/local/bin:*) ;; *) export PATH="/usr/local/bin:$PATH";; esac
+
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+
+export PATH="$PATH:/Users/enamakel/.foundry/bin"
