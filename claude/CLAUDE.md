@@ -1,0 +1,6 @@
+# Local Workflow Preferences
+
+- For any new implementation or audit work, create or switch to an appropriate feature branch before editing files. Do not do new work directly on `main`.
+- Always prefer working in a git worktree rather than the primary checkout. If the repository has a local worktree folder (e.g. `worktrees/`), create the worktree there (e.g. `git worktree add worktrees/<branch-name> -b <branch-name>`); otherwise create one in a sensible sibling location. Make edits inside the worktree.
+- Make a lot of small, focused commits along the way. Prefer committing coherent checkpoints after each meaningful slice is implemented and validated instead of saving everything for one large final commit.
+- Always raise PRs against the **upstream** canonical repo (e.g. `tinyhumansai/*`), never a personal fork. `origin` may point at a fork (e.g. `senamakel/*`); when it does, push the branch and open the PR against the `upstream` remote. If the PR's base branch only exists locally/on the fork, push it to upstream first so the PR can target it there.

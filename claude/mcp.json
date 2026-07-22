@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "rive": {
+      "command": "open",
+      "args": [
+        "-a",
+        "Rive Early Access",
+        "--args",
+        "--mcp"
+      ]
+    }
+  }
+}
