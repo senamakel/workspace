@@ -1,4 +1,4 @@
-# Expose this repo's CLI tools (bin/, e.g. pr-sync) on PATH.
+# Expose this repo's CLI tools (bin/, e.g. pr-fix) on PATH.
 # Self-locating: resolves relative to this file, wherever the repo lives.
 _workspace_bin="${${(%):-%x}:A:h}/bin"
 case ":$PATH:" in

@@ -51,7 +51,7 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 
 ## Tools
 
-### `pr-sync <pr-number> [extra prompt text...] [claude|codex]`
+### `pr-fix <pr-number> [extra prompt text...] [claude|codex]`
 
 Checks a PR out into `<repo>/worktrees/pr-<n>` (preferring the `upstream`
 remote, i.e. the canonical `tinyhumansai/*` repo), merges the base branch in
@@ -59,7 +59,7 @@ remote, i.e. the canonical `tinyhumansai/*` repo), merges the base branch in
 to the contributor's fork so `git push` updates the PR, then launches the
 chosen agent (default `claude`) with a fix-the-PR prompt plus any extra text.
 When the agent exits you're asked whether to delete the worktree.
-`PR_SYNC_SAFE=1` disables the yolo/bypass agent flags; `PR_SYNC_REPO`
+`PR_FIX_SAFE=1` disables the yolo/bypass agent flags; `PR_FIX_REPO`
 overrides repo resolution. Conventions follow
 `tinyhumansai/openhuman/scripts/shortcuts`.
 

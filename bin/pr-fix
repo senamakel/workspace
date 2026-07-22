@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# pr-sync — check out a PR into a worktree, merge main, and hand it to an agent.
+# pr-fix — check out a PR into a worktree, merge main, and hand it to an agent.
 #
-# Usage: pr-sync <pr-number> [extra prompt text...] [claude|codex]
+# Usage: pr-fix <pr-number> [extra prompt text...] [claude|codex]
 #
-#   pr-sync 123                          fix PR 123 with claude (default)
-#   pr-sync 123 codex                    same, with codex
-#   pr-sync 123 "focus on the API tests" codex
+#   pr-fix 123                          fix PR 123 with claude (default)
+#   pr-fix 123 codex                    same, with codex
+#   pr-fix 123 "focus on the API tests" codex
 #
 # Run from anywhere inside the target repo. Prefers the `upstream` remote
 # (the canonical tinyhumansai/* repo) over `origin`. The PR branch is checked
@@ -14,8 +14,8 @@
 # fork, and the chosen agent is launched inside the worktree. On agent exit
 # you are asked whether to delete the worktree.
 #
-# Env: PR_SYNC_SAFE=1 launches the agent without yolo/bypass flags.
-#      PR_SYNC_REPO=owner/name overrides repo resolution.
+# Env: PR_FIX_SAFE=1 launches the agent without yolo/bypass flags.
+#      PR_FIX_REPO=owner/name overrides repo resolution.
 #
 # Conventions follow tinyhumansai/openhuman scripts/shortcuts (review/lib.sh).
 set -euo pipefail
@@ -44,8 +44,8 @@ require() {
 }
 
 resolve_repo() {
-  if [ -n "${PR_SYNC_REPO:-}" ]; then
-    echo "$PR_SYNC_REPO"
+  if [ -n "${PR_FIX_REPO:-}" ]; then
+    echo "$PR_FIX_REPO"
     return
   fi
   local url
@@ -171,7 +171,7 @@ Additional instructions: $EXTRA"
 
 info "launching $AGENT in $WT_DIR"
 set +e
-if [ "${PR_SYNC_SAFE:-0}" = "1" ]; then
+if [ "${PR_FIX_SAFE:-0}" = "1" ]; then
   "$AGENT" "$PROMPT"
 else
   case "$AGENT" in
@@ -185,7 +185,7 @@ set -e
 
 # ── Cleanup prompt ─────────────────────────────────────────────────
 printf '\n'
-read -r -p "[pr-sync] clean up worktree $WT_DIR? [y/N] " REPLY
+read -r -p "[pr-fix] clean up worktree $WT_DIR? [y/N] " REPLY
 case "$REPLY" in
   [yY]*)
     cd "$TOPLEVEL"
