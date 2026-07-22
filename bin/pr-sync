@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# pr-sync — check out a PR into a worktree, merge main, and hand it to an agent.
+#
+# Usage: pr-sync <pr-number> [extra prompt text...] [claude|codex]
+#
+#   pr-sync 123                          fix PR 123 with claude (default)
+#   pr-sync 123 codex                    same, with codex
+#   pr-sync 123 "focus on the API tests" codex
+#
+# Run from anywhere inside the target repo. Prefers the `upstream` remote
+# (the canonical tinyhumansai/* repo) over `origin`. The PR branch is checked
+# out into <repo>/worktrees/pr-<n>, the base branch is merged in (conflicts
+# are left for the agent), tracking + pushRemote are wired to the PR's head
+# fork, and the chosen agent is launched inside the worktree. On agent exit
+# you are asked whether to delete the worktree.
+#
+# Env: PR_SYNC_SAFE=1 launches the agent without yolo/bypass flags.
+#      PR_SYNC_REPO=owner/name overrides repo resolution.
+#
+# Conventions follow tinyhumansai/openhuman scripts/shortcuts (review/lib.sh).
+set -euo pipefail
+
+# ── Coloured output (disabled when stdout is not a terminal) ───────
+if [ -t 1 ]; then
+  _R=$'\033[0;31m' _G=$'\033[0;32m' _Y=$'\033[0;33m' _B=$'\033[1m' _0=$'\033[0m'
+else
+  _R="" _G="" _Y="" _B="" _0=""
+fi
+pass()  { printf '%s[PASS]%s %s\n' "$_G" "$_0" "$*"; }
+fail()  { printf '%s[FAIL]%s %s\n' "$_R" "$_0" "$*" >&2; }
+warn()  { printf '%s[WARN]%s %s\n' "$_Y" "$_0" "$*" >&2; }
+info()  { printf '%s[INFO]%s %s\n' "$_B" "$_0" "$*"; }
+
+usage() {
+  sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+  exit 1
+}
+
+require() {
+  local bin
+  for bin in "$@"; do
+    command -v "$bin" >/dev/null 2>&1 || { fail "missing required tool: $bin"; exit 1; }
+  done
+}
+
+resolve_repo() {
+  if [ -n "${PR_SYNC_REPO:-}" ]; then
+    echo "$PR_SYNC_REPO"
+    return
+  fi
+  local url
+  url=$(git remote get-url upstream 2>/dev/null || git remote get-url origin)
+  echo "$url" \
+    | sed -E 's#^git@github\.com:##; s#^https?://github\.com/##; s#\.git$##'
+}
+
+# ── Args: <pr> [extra text...] [claude|codex] ──────────────────────
+[ $# -ge 1 ] || usage
+PR="$1"; shift
+case "$PR" in ''|*[!0-9]*) fail "pr-number must be numeric, got: $PR"; usage;; esac
+
+AGENT="claude"
+EXTRA=""
+if [ $# -ge 1 ]; then
+  last="${!#}"
+  if [ "$last" = "claude" ] || [ "$last" = "codex" ]; then
+    AGENT="$last"
+    [ $# -ge 2 ] && EXTRA="${*:1:$#-1}"
+  else
+    EXTRA="$*"
+  fi
+fi
+
+require git gh jq "$AGENT"
+
+TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || { fail "not inside a git repository"; exit 1; }
+cd "$TOPLEVEL"
+
+REPO="$(resolve_repo)"
+REMOTE="upstream"
+git remote get-url upstream >/dev/null 2>&1 || REMOTE="origin"
+info "repo: $REPO (canonical remote: $REMOTE)"
+
+# ── Resolve PR head fork + branches ────────────────────────────────
+PR_INFO="$(gh pr view "$PR" -R "$REPO" \
+  --json headRefName,headRepository,headRepositoryOwner,baseRefName)" \
+  || { fail "could not resolve PR #$PR on $REPO"; exit 1; }
+HEAD_REPO=$(jq -r '.headRepositoryOwner.login + "/" + .headRepository.name' <<<"$PR_INFO")
+HEAD_BRANCH=$(jq -r '.headRefName' <<<"$PR_INFO")
+BASE_BRANCH=$(jq -r '.baseRefName' <<<"$PR_INFO")
+LOCAL_BRANCH="pr/$PR"
+WT_DIR="$TOPLEVEL/worktrees/pr-$PR"
+info "PR #$PR: $HEAD_REPO:$HEAD_BRANCH -> $REPO:$BASE_BRANCH (local: $LOCAL_BRANCH)"
+
+# ── Fork remote: prefer an existing SSH remote for this fork ───────
+REMOTE_NAME="remote-$PR"
+EXISTING_SSH=$(git remote -v \
+  | awk -v repo="$HEAD_REPO" '$2 ~ ("[:/]" repo "(\\.git)?$") && $3 == "(fetch)" {print $1; exit}')
+if [ -n "$EXISTING_SSH" ]; then
+  REMOTE_NAME="$EXISTING_SSH"
+  info "reusing remote '$REMOTE_NAME' -> $(git remote get-url "$REMOTE_NAME")"
+else
+  git remote add "$REMOTE_NAME" "https://github.com/${HEAD_REPO}.git" 2>/dev/null \
+    || git remote set-url "$REMOTE_NAME" "https://github.com/${HEAD_REPO}.git"
+fi
+
+# ── Fetch base + PR head ───────────────────────────────────────────
+git fetch "$REMOTE" "$BASE_BRANCH" --prune
+git fetch "$REMOTE_NAME" \
+  "+refs/heads/${HEAD_BRANCH}:refs/remotes/${REMOTE_NAME}/${HEAD_BRANCH}"
+
+# ── Worktree with the local PR branch ──────────────────────────────
+if [ -d "$WT_DIR" ]; then
+  warn "reusing existing worktree $WT_DIR (state kept as-is)"
+else
+  if git show-ref --verify --quiet "refs/heads/$LOCAL_BRANCH"; then
+    git branch -f "$LOCAL_BRANCH" "refs/remotes/${REMOTE_NAME}/${HEAD_BRANCH}"
+  else
+    git branch "$LOCAL_BRANCH" "refs/remotes/${REMOTE_NAME}/${HEAD_BRANCH}"
+  fi
+  mkdir -p "$TOPLEVEL/worktrees"
+  git worktree add "$WT_DIR" "$LOCAL_BRANCH"
+fi
+cd "$WT_DIR"
+
+# Wire tracking so `git push` lands on the contributor's fork.
+git branch --set-upstream-to="$REMOTE_NAME/$HEAD_BRANCH" "$LOCAL_BRANCH"
+git config "branch.${LOCAL_BRANCH}.pushRemote" "$REMOTE_NAME"
+git config "branch.${LOCAL_BRANCH}.merge" "refs/heads/${HEAD_BRANCH}"
+info "upstream + pushRemote set to $REMOTE_NAME/$HEAD_BRANCH"
+
+# ── Pull latest PR head, then merge base (conflicts left in place) ─
+git merge --ff-only "refs/remotes/${REMOTE_NAME}/${HEAD_BRANCH}" 2>/dev/null \
+  || warn "local $LOCAL_BRANCH has diverged from PR head; keeping local state"
+
+HAS_CONFLICTS=0
+CONFLICT_FILES=""
+info "merging $REMOTE/$BASE_BRANCH into $LOCAL_BRANCH (conflicts will not abort)..."
+if ! git merge --no-edit "refs/remotes/${REMOTE}/${BASE_BRANCH}"; then
+  CONFLICT_FILES=$(git diff --name-only --diff-filter=U | sort -u)
+  if [ -z "$CONFLICT_FILES" ]; then
+    fail "git merge failed for a non-conflict reason"
+    exit 1
+  fi
+  HAS_CONFLICTS=1
+  warn "conflicts detected, continuing:"
+  printf '%s\n' "$CONFLICT_FILES"
+fi
+git submodule update --init --recursive 2>/dev/null || true
+
+# ── Build prompt and launch agent ──────────────────────────────────
+PROMPT="You are in a git worktree on branch $LOCAL_BRANCH for PR #$PR of $REPO.
+$REMOTE/$BASE_BRANCH has been merged into the branch."
+if [ "$HAS_CONFLICTS" = "1" ]; then
+  PROMPT="$PROMPT The merge has unresolved conflicts in:
+$CONFLICT_FILES
+Resolve the conflicts and commit the merge first."
+else
+  PROMPT="$PROMPT The merge completed cleanly."
+fi
+PROMPT="$PROMPT
+Then fix the PR: address review comments and make sure it builds and tests
+pass. Upstream tracking and pushRemote are configured, so a plain 'git push'
+updates the PR."
+[ -n "$EXTRA" ] && PROMPT="$PROMPT
+
+Additional instructions: $EXTRA"
+
+info "launching $AGENT in $WT_DIR"
+set +e
+if [ "${PR_SYNC_SAFE:-0}" = "1" ]; then
+  "$AGENT" "$PROMPT"
+else
+  case "$AGENT" in
+    claude) claude --dangerously-skip-permissions "$PROMPT" ;;
+    codex)  codex --dangerously-bypass-approvals-and-sandbox "$PROMPT" ;;
+  esac
+fi
+AGENT_STATUS=$?
+set -e
+[ "$AGENT_STATUS" -eq 0 ] || warn "$AGENT exited with status $AGENT_STATUS"
+
+# ── Cleanup prompt ─────────────────────────────────────────────────
+printf '\n'
+read -r -p "[pr-sync] clean up worktree $WT_DIR? [y/N] " REPLY
+case "$REPLY" in
+  [yY]*)
+    cd "$TOPLEVEL"
+    git worktree remove --force "$WT_DIR"
+    git branch -D "$LOCAL_BRANCH"
+    pass "removed worktree and branch $LOCAL_BRANCH"
+    ;;
+  *)
+    info "worktree kept at $WT_DIR"
+    ;;
+esac

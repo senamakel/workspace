@@ -14,6 +14,7 @@ as symlinks by `install.sh`, so this repo is the source of truth and
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `claude/agents/*.md` | `~/.claude/agents/<name>.md` (one link per file) |
 | `claude/skills/<name>/` | `~/.claude/skills/<name>` (one link per skill dir) |
+| `bin/*` | `~/.local/bin/<name>` (on PATH) |
 | `codex/AGENTS.md` | `~/.codex/AGENTS.md` |
 | `codex/CODEX.md` | `~/.codex/CODEX.md` |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
@@ -47,6 +48,20 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
   re-run `./install.sh`.
 - New slash command: create `claude/commands/`, add it to `install.sh` the
   same way agents are handled, and re-run.
+
+## Tools
+
+### `pr-sync <pr-number> [extra prompt text...] [claude|codex]`
+
+Checks a PR out into `<repo>/worktrees/pr-<n>` (preferring the `upstream`
+remote, i.e. the canonical `tinyhumansai/*` repo), merges the base branch in
+(conflicts are left for the agent), wires upstream tracking + `pushRemote`
+to the contributor's fork so `git push` updates the PR, then launches the
+chosen agent (default `claude`) with a fix-the-PR prompt plus any extra text.
+When the agent exits you're asked whether to delete the worktree.
+`PR_SYNC_SAFE=1` disables the yolo/bypass agent flags; `PR_SYNC_REPO`
+overrides repo resolution. Conventions follow
+`tinyhumansai/openhuman/scripts/shortcuts`.
 
 ## Notes
 
