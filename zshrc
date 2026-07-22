@@ -4,6 +4,7 @@ res() {
   git checkout main && git fetch "$remote" && git merge "$remote/main" \
     && git submodule update --init --recursive && clear
 }
+
 alias mrg="gf upstream && gm"
 alias k="kubectl"
 alias desk="cd ~/Desktop"
@@ -12,15 +13,13 @@ alias down="cd ~/Downloads"
 alias ping8="ping 8.8.8.8"
 alias agunt="agent --yolo"
 alias gumini="gemini --yolo"
-alias human-tmux="~/tmux-work.sh"
 alias cudex="codex --yolo"
 alias aliases="vim ~/.zshrc"
 alias cleude="claude"
 alias work="cd ~/work"
-alias human="cd ~/work/tinyhumansai/openhuman"
 
-human-clean() {
-  local workspace="$HOME/work/tinyhumansai"
+rust-clean() {
+  local workspace="$HOME/work/"
   local dry_run=0
   [ "$1" = "--dry-run" ] && dry_run=1
 
@@ -53,39 +52,6 @@ human-clean() {
   else
     echo "Done."
   fi
-}
-
-# Reset every ~/work/tinyhumansai/openhuman-N worktree to the latest upstream/main.
-# Skips dirs with uncommitted changes. Pass --force to reset anyway (DESTRUCTIVE).
-human-reset() {
-  local workspace="$HOME/work/tinyhumansai"
-  local force=0
-  [ "$1" = "--force" ] && force=1
-
-  local dir
-  for dir in "$workspace"/openhuman-[0-9]*(/N); do
-    echo "\n=== ${dir##*/} ==="
-    (
-      cd "$dir" || exit 1
-
-      # Pick remote: prefer upstream, else origin
-      local remote="upstream"
-      git remote get-url upstream >/dev/null 2>&1 || remote="origin"
-
-      if [ "$force" -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
-        echo "[skip] uncommitted changes (use --force to override)"
-        exit 0
-      fi
-
-      git fetch "$remote" main --prune || { echo "[!] fetch failed"; exit 1; }
-      git checkout main || { echo "[!] checkout main failed"; exit 1; }
-      git reset --hard "$remote/main" || { echo "[!] reset failed"; exit 1; }
-      git submodule update --init --recursive
-
-
-      echo "[ok] reset to $remote/main @ $(git rev-parse --short HEAD)"
-    )
-  done
 }
 
 _pr_sync() {
