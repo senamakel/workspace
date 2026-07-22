@@ -78,10 +78,19 @@ for d in "$REPO_ROOT"/claude/skills/*/; do
 done
 
 # --- CLI tools ----------------------------------------------------------------
-# Everything in bin/ goes on PATH via ~/.local/bin (already in zshrc PATH).
+# bin/ is exposed on PATH by the repo zshrc (sourced from ~/.zshrc), not by
+# symlinks. Clean up any ~/.local/bin links from the old scheme.
 for f in "$REPO_ROOT"/bin/*; do
   [ -f "$f" ] || continue
-  link "$f" "$HOME/.local/bin/$(basename "$f")"
+  dest="$HOME/.local/bin/$(basename "$f")"
+  if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$f" ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "[would remove] legacy link $dest"
+    else
+      rm "$dest"
+      echo "[unlink] legacy $dest (bin/ is on PATH via zshrc)"
+    fi
+  fi
 done
 
 # --- Codex global config ------------------------------------------------------

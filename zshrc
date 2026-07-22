@@ -1,3 +1,12 @@
+# Expose this repo's CLI tools (bin/, e.g. pr-sync) on PATH.
+# Self-locating: resolves relative to this file, wherever the repo lives.
+_workspace_bin="${${(%):-%x}:A:h}/bin"
+case ":$PATH:" in
+  *":$_workspace_bin:"*) ;;
+  *) export PATH="$_workspace_bin:$PATH" ;;
+esac
+unset _workspace_bin
+
 res() {
   local remote=upstream
   git remote get-url upstream >/dev/null 2>&1 || remote=origin

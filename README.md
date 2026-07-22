@@ -14,7 +14,7 @@ as symlinks by `install.sh`, so this repo is the source of truth and
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `claude/agents/*.md` | `~/.claude/agents/<name>.md` (one link per file) |
 | `claude/skills/<name>/` | `~/.claude/skills/<name>` (one link per skill dir) |
-| `bin/*` | `~/.local/bin/<name>` (on PATH) |
+| `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
 | `codex/AGENTS.md` | `~/.codex/AGENTS.md` |
 | `codex/CODEX.md` | `~/.codex/CODEX.md` |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
