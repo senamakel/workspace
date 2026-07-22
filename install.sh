@@ -77,6 +77,13 @@ for d in "$REPO_ROOT"/claude/skills/*/; do
   link "$d" "$HOME/.claude/skills/$(basename "$d")"
 done
 
+# --- CLI tools ----------------------------------------------------------------
+# Everything in bin/ goes on PATH via ~/.local/bin (already in zshrc PATH).
+for f in "$REPO_ROOT"/bin/*; do
+  [ -f "$f" ] || continue
+  link "$f" "$HOME/.local/bin/$(basename "$f")"
+done
+
 # --- Codex global config ------------------------------------------------------
 # config.toml is deliberately NOT synced: it mixes machine state (project
 # trust list, marketplace caches) with at least one embedded API key.
