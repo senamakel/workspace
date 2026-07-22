@@ -14,12 +14,20 @@ as symlinks by `install.sh`, so this repo is the source of truth and
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `claude/agents/*.md` | `~/.claude/agents/<name>.md` (one link per file) |
 | `claude/skills/<name>/` | `~/.claude/skills/<name>` (one link per skill dir) |
-| `zsh/zshrc` | sourced from `~/.zshrc` via an appended loader line |
-| `zsh/zshenv` | `~/.zshenv` |
+| `codex/AGENTS.md` | `~/.codex/AGENTS.md` |
+| `codex/CODEX.md` | `~/.codex/CODEX.md` |
+| `codex/hooks.json` | `~/.codex/hooks.json` |
+| `codex/skills/<name>/` | `~/.codex/skills/<name>` (one link per skill dir) |
+| `zshrc` | sourced from `~/.zshrc` via an appended loader line |
 
-`zsh/zshrc` holds only custom functions and aliases. `~/.zshrc` remains a
-local machine-specific file (oh-my-zsh setup, PATH exports, tool installer
-snippets); `install.sh` appends a marker-guarded `source` line to it once.
+`zshrc` holds only custom functions and aliases. `~/.zshrc` and `~/.zshenv`
+remain local machine-specific files (oh-my-zsh setup, PATH exports, tool
+installer snippets); `install.sh` keeps a marker-guarded `source` line in
+`~/.zshrc` pointing at the repo `zshrc`.
+
+`~/.codex/config.toml` is deliberately not synced: it mixes machine state
+(project trust list, marketplace caches, desktop theme) with at least one
+embedded API key, which must not be committed.
 
 ## Install
 
