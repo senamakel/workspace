@@ -14,8 +14,12 @@ as symlinks by `install.sh`, so this repo is the source of truth and
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `claude/agents/*.md` | `~/.claude/agents/<name>.md` (one link per file) |
 | `claude/skills/<name>/` | `~/.claude/skills/<name>` (one link per skill dir) |
-| `zsh/zshrc` | `~/.zshrc` |
+| `zsh/zshrc` | sourced from `~/.zshrc` via an appended loader line |
 | `zsh/zshenv` | `~/.zshenv` |
+
+`zsh/zshrc` holds only custom functions and aliases. `~/.zshrc` remains a
+local machine-specific file (oh-my-zsh setup, PATH exports, tool installer
+snippets); `install.sh` appends a marker-guarded `source` line to it once.
 
 ## Install
 

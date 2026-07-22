@@ -78,7 +78,27 @@ for d in "$REPO_ROOT"/claude/skills/*/; do
 done
 
 # --- zsh ----------------------------------------------------------------------
-link "$REPO_ROOT/zsh/zshrc"   "$HOME/.zshrc"
+# zsh/zshrc holds only our custom functions/aliases. ~/.zshrc stays a local,
+# machine-specific file (oh-my-zsh, PATH exports, installer snippets) that
+# loads the repo file via a marker line we ensure is present.
+ensure_zshrc_loader() {
+  local rc="$HOME/.zshrc"
+  local marker="# workspace-custom (managed by install.sh)"
+  local line="[ -f \"$REPO_ROOT/zsh/zshrc\" ] && source \"$REPO_ROOT/zsh/zshrc\""
+
+  if [ -f "$rc" ] && grep -qF "$marker" "$rc"; then
+    echo "[ok]   $rc sources repo zshrc"
+    return
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "[would append] loader line to $rc"
+    return
+  fi
+  printf '\n%s\n%s\n' "$marker" "$line" >> "$rc"
+  echo "[append] loader line -> $rc"
+}
+ensure_zshrc_loader
+
 link "$REPO_ROOT/zsh/zshenv"  "$HOME/.zshenv"
 
 echo
