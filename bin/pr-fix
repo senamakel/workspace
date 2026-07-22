@@ -94,6 +94,13 @@ LOCAL_BRANCH="pr/$PR"
 WT_DIR="$TOPLEVEL/worktrees/pr-$PR"
 info "PR #$PR: $HEAD_REPO:$HEAD_BRANCH -> $REPO:$BASE_BRANCH (local: $LOCAL_BRANCH)"
 
+# Taking up the PR — assign it to me (non-fatal if it fails, e.g. no perms).
+if gh pr edit "$PR" -R "$REPO" --add-assignee "@me" >/dev/null 2>&1; then
+  info "assigned PR #$PR to @me"
+else
+  warn "could not assign PR #$PR to @me; continuing"
+fi
+
 # ── Fork remote: named after the contributor, one remote per fork owner.
 # Prefer an existing SSH remote already pointing at this fork.
 REMOTE_NAME="remote-$HEAD_OWNER"
