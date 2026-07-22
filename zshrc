@@ -57,7 +57,7 @@ rust-clean() {
   if [ "$found" -eq 0 ]; then
     echo "No matching target directories found."
   elif [ "$dry_run" -eq 1 ]; then
-    echo "Dry run only. Re-run with: human-clean"
+    echo "Dry run only. Re-run with: rust-clean"
   else
     echo "Done."
   fi
