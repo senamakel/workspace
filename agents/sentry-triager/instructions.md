@@ -12,7 +12,12 @@ The `sentry-*` helpers and `gh` read their own config; make sure the environment
 provides it:
 
 - Sentry: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`
-  (defaults to `https://sentry.io`). Pass `--org`/`--project` to override.
+  (defaults to `https://sentry.io`). The helpers are **repo-aware**: from inside a
+  bound repo they resolve org/project automatically (repo `.sentryclirc` → the
+  repo→project map → `~/.sentryclirc`), so you usually don't need `--org`/
+  `--project`. Run `sentry-repo` to see what the current repo resolves to; if it's
+  `UNRESOLVED`, bind it with `sentry-repo --set <org> <project>` or ask which
+  Sentry project this repo maps to.
 - GitHub: `gh` authenticated; issues are created against the **upstream**
   canonical repo (e.g. `tinyhumansai/*`), never a fork. Resolve the repo from the
   `upstream` remote, falling back to `origin`; or take an explicit `owner/repo`.
