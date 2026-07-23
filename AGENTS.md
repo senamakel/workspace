@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is the source of truth for personal shell and coding-agent configuration. `install.sh` links managed files into the user’s home directory. Shared workflow rules live in `RULES.md`; shared agent sources live in `agents/<name>/` and `install.sh` renders them into a user-level generated cache for Claude and Codex. Other harness-specific configuration is under `claude/`, `codex/`, and `opencode/`. Executable helpers belong in `bin/`, while custom shell aliases and functions live in `zshrc`. Keep each skill self-contained in `<agent>/skills/<skill-name>/`, with `SKILL.md` as its entry point.
+This repository is the source of truth for personal shell and coding-agent configuration. `install.sh` links managed files into the user’s home directory. Shared workflow rules live in `RULES.md`; shared agent sources live in `agents/<name>/` and are rendered into harness-native files. Shared skills live in `skills/<name>/` and are linked into both Claude and Codex. Other harness-specific configuration is under `claude/`, `codex/`, and `opencode/`. Executable helpers belong in `bin/`, while custom shell aliases and functions live in `zshrc`. Keep every skill self-contained, with `SKILL.md` as its entry point and optional resources inside the same directory.
 
 Do not commit machine-local credentials or generated state. In particular, `~/.codex/config.toml` and the local OpenCode package/config files are intentionally excluded.
 
@@ -11,6 +11,7 @@ Do not commit machine-local credentials or generated state. In particular, `~/.c
 There is no compilation step or centralized test suite. Validate the part you change:
 
 - `./install.sh --dry-run` previews symlink and loader changes without modifying home-directory files.
+- `bin/check-skills` validates every canonical skill’s directory and frontmatter.
 - `bash -n install.sh bin/* claude/statusline-command.sh` checks Bash syntax.
 - `zsh -n zshrc` checks the sourced Zsh configuration.
 - `git diff --check` catches whitespace errors before committing.
