@@ -96,6 +96,7 @@ sentry_config() {
 
   local url="${SENTRY_URL:-}"
   [ -n "$url" ] || { [ -n "$rc_repo" ] && url="$(sentry_ini_get "$rc_repo" defaults url)"; }
+  [ -n "$url" ] || { [ -f "$rc_home" ] && url="$(sentry_ini_get "$rc_home" defaults url)"; }
   [ -n "$url" ] || url="https://sentry.io"
   SENTRY_BASE="${url%/}/api/0"
 
