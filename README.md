@@ -83,6 +83,51 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
   a high-confidence dropped issue with evidence or enriches an escalated issue
   with a managed, code-grounded implementation plan.
 
+The following workflow agents are adapted from the
+[superpowers](https://github.com/obra/superpowers) skill set as dispatchable,
+isolated-context subagents:
+
+- `plan-writer` turns an approved spec into a bite-sized, TDD-structured
+  implementation plan (exact paths, complete code per step, no placeholders)
+  saved to `docs/plans/`.
+- `plan-executor` executes a written plan task-by-task in one isolated session,
+  following each task's TDD steps and reporting a completion summary.
+- `tdd-implementer` implements one well-specified task via strict
+  red-green-refactor, commits in scoped slices, self-reviews, and reports
+  `DONE` / `DONE_WITH_CONCERNS` / `BLOCKED` / `NEEDS_CONTEXT`.
+- `code-reviewer` reviews a completed diff or branch against its plan and
+  quality standards, returning calibrated Critical/Important/Minor findings and
+  a merge verdict without mutating the tree.
+- `systematic-debugger` investigates a bug to root cause through a four-phase
+  method before proposing any fix, then optionally implements the minimal fix
+  behind a failing regression test.
+- `completion-verifier` independently verifies a completion claim by running the
+  proving commands and reporting evidence-backed pass/fail.
+
+## Shared Skills
+
+Skills live in `skills/<name>/` and are linked into both Claude and Codex.
+Alongside `humanizer`, the following workflow skills are adapted from
+[superpowers](https://github.com/obra/superpowers) — guidance you follow in the
+main loop, several of which dispatch the workflow agents above. `using-superpowers`
+is the map that ties the whole arc together.
+
+- `using-superpowers` — the workflow map: which agent or skill to reach for, and
+  the `brainstorming → plan-writer → execute → finish` arc.
+- `brainstorming` — turn an idea into an approved design/spec before any code;
+  hands off to the `plan-writer` agent.
+- `subagent-driven-development` — execute a plan by dispatching a fresh
+  `tdd-implementer` per task with a `code-reviewer` gate after each.
+- `dispatching-parallel-agents` — split 2+ independent problems across
+  concurrent subagents.
+- `finishing-a-development-branch` — verify tests, then integrate via an
+  upstream PR (this repo's conventions; no local merge to `main`).
+- `receiving-code-review` — evaluate review feedback technically instead of
+  performing agreement.
+- `using-git-worktrees` — set up an isolated workspace, preferring the
+  `worktree` command.
+- `writing-skills` — create or edit a skill as TDD applied to documentation.
+
 ## Tools
 
 ### `worktree <slug> [--json]`
