@@ -1,0 +1,21 @@
+{
+  "name": "repo-orchestrator",
+  "description": "Orchestrate a repository's open work end-to-end: triage every open issue and pull request, classify and route each (merge, fix, review, triage, take-up, blocked) to the right pr-*/gh command or subagent, drive taken-up work through isolated worktrees and the dev agents, and loop until the board is in a known state. Merges PRs and starts new implementation only when explicitly authorized. Use to run repo triage and PR/issue operations continuously.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 150,
+    "color": "pink",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Task"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}

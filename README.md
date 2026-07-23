@@ -104,6 +104,15 @@ isolated-context subagents:
 - `completion-verifier` independently verifies a completion claim by running the
   proving commands and reporting evidence-backed pass/fail.
 
+`repo-orchestrator` is the top-level conductor over a whole repository's open
+work. It triages every open issue and pull request, classifies each into a bucket
+(merge-ready, needs-work, needs-review, needs-triage, can-be-taken-up, blocked),
+and routes it to the right `pr-*`/`gh` command or subagent — driving fixes and
+taken-up work through isolated worktrees and the review/dev agents, and looping
+until the board is in a known state. It merges PRs and starts net-new work only
+when explicitly authorized. Spin it up in any harness with `repo-orchestrate`
+(see Tools).
+
 ## Shared Skills
 
 Skills live in `skills/<name>/` and are linked into both Claude and Codex.
@@ -203,6 +212,35 @@ Harnesses live in a small registry near the top of `bin/pr-fix`
 launch branch. Bypass flags per harness: `claude
 --dangerously-skip-permissions`, `codex
 --dangerously-bypass-approvals-and-sandbox`, `opencode --auto`.
+
+### `repo-orchestrate [claude|codex|opencode|deepcode|deepcode-flash] [options] [extra prompt...]`
+
+Spins up the `repo-orchestrator` agent (above) in the chosen harness (default
+`claude`) from the repo root. The launched session enumerates every open issue
+and pull request, classifies each, and routes them to the `pr-*`/`gh` commands
+and review/dev subagents, looping until the board is in a known state and ending
+each cycle with a two-table (PRs + Issues) triage ledger. Prefers the `upstream`
+remote over `origin`.
+
+Both irreversible actions are gated off by default and opt-in per launch:
+`--merge` authorizes merging PRs that pass `pr-merge --dry-run` cleanly;
+`--take-up` authorizes starting net-new work on ready issues through a worktree
+(`worktree` → `plan-writer` → `subagent-driven-development` →
+`finishing-a-development-branch`). Without them the orchestrator prepares and
+surfaces items but does not merge or start implementing. `-R owner/name` targets
+another repo, `--limit N` hints the PR census. `REPO_ORCH_SAFE=1` drops the
+yolo/bypass flags; `REPO_ORCH_REPO` overrides repo resolution. Shares the harness
+registry shape with `pr-fix`.
+
+```sh
+repo-orchestrate                       # triage all open issues + PRs, safe (no merge/take-up)
+repo-orchestrate --merge               # also merge gate-passing PRs
+repo-orchestrate codex --merge --take-up
+repo-orchestrate -R tinyhumansai/openhuman --limit 30
+```
+
+For continuous operation, wrap it in the `/loop` skill or a scheduled run — each
+tick is one triage cycle.
 
 ### `deepcode [claude args...]`
 
