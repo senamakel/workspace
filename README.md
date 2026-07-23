@@ -219,26 +219,30 @@ launch branch. Bypass flags per harness: `claude
 ### `repo-orchestrate [claude|codex|opencode|deepcode|deepcode-flash] [options] [extra prompt...]`
 
 Spins up the `repo-orchestrator` agent (above) in the chosen harness (default
-`claude`) from the repo root. The launched session enumerates every open issue
-and pull request, classifies each, and routes them to the `pr-*`/`gh` commands
-and review/dev subagents, looping until the board is in a known state and ending
-each cycle with a two-table (PRs + Issues) triage ledger. Prefers the `upstream`
-remote over `origin`.
+`claude`) from the repo root. The launched session reviews every open issue and
+pull request, classifies each, and then **merges, works, closes, and fixes as
+much as it can** — routing to the `pr-*`/`gh` commands and review/dev subagents,
+fanning work out to subagents and background jobs, and looping until the board is
+in a known state, ending each cycle with a two-table (PRs + Issues) triage ledger.
+Prefers the `upstream` remote over `origin`.
 
-Both irreversible actions are gated off by default and opt-in per launch:
-`--merge` authorizes merging PRs that pass `pr-merge --dry-run` cleanly;
-`--take-up` authorizes starting net-new work on ready issues through a worktree
-(`worktree` → `plan-writer` → `subagent-driven-development` →
-`finishing-a-development-branch`). Without them the orchestrator prepares and
-surfaces items but does not merge or start implementing. `-R owner/name` targets
-another repo, `--limit N` hints the PR census. `REPO_ORCH_SAFE=1` drops the
-yolo/bypass flags; `REPO_ORCH_REPO` overrides repo resolution. Shares the harness
-registry shape with `pr-fix`.
+**The harness is launched without permission-bypass flags.** The orchestrator acts
+strictly within the permission system and never bypasses a prompt, sandbox, or
+approval — anything it lacks permission for is surfaced, not forced. (`REPO_ORCH_YOLO=1`
+opts into bypass flags, but that defeats the point and is not recommended.)
+
+By default it is authorized to merge gate-passing PRs and to take up ready work;
+narrow that per launch: `--triage-only` (triage/prepare/surface only, no
+irreversible action), `--no-merge` (everything but merging), `--no-take-up`
+(everything but starting net-new work). `-R owner/name` targets another repo,
+`--limit N` hints the PR census; `REPO_ORCH_REPO` overrides repo resolution. Every
+merge still passes `pr-merge --dry-run`; drafts are always skipped. Shares the
+harness registry shape with `pr-fix`.
 
 ```sh
-repo-orchestrate                       # triage all open issues + PRs, safe (no merge/take-up)
-repo-orchestrate --merge               # also merge gate-passing PRs
-repo-orchestrate codex --merge --take-up
+repo-orchestrate                       # review + merge/work/close/fix all open issues + PRs
+repo-orchestrate --triage-only         # only triage/prepare/surface
+repo-orchestrate codex --no-take-up    # do everything but start new work
 repo-orchestrate -R tinyhumansai/openhuman --limit 30
 ```
 
