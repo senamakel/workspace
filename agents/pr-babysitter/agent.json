@@ -1,0 +1,22 @@
+{
+  "name": "pr-babysitter",
+  "description": "Maintain a pull request through review and CI: verify unit-test evidence and human or bot feedback, implement confirmed fixes, push atomic commits, resolve addressed threads, and report when the PR is ready for independent approval.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 100,
+    "color": "green",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
