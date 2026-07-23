@@ -163,10 +163,9 @@ if [ "$FORMAT" = "json" ]; then
   jq . <<<"$REPORT"
 else
   jq -r '
-    "[PASS] ATOMIC_COMMIT_CREATED",
-    "  commit: \(.commitShort)",
-    "  message: \(.message)",
-    "  files: \(.files | join(", "))",
-    "  unrelated staged paths preserved and unstaged: \(.unrelatedStagedPathsPreserved)"
+    "[PASS] \(.commitShort) \(.message) (\(.files | length) file(s))"
+      + (if .unrelatedStagedPathsPreserved > 0
+         then " · \(.unrelatedStagedPathsPreserved) unrelated unstaged"
+         else "" end)
   ' <<<"$REPORT"
 fi
