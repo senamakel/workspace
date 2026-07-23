@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# sentry-issue — agent-friendly detail report for one Sentry issue.
+#
+# Usage: sentry-issue <issue-id|SHORT-ID> [--json] [--frames <N>] [--org <slug>]
+#
+#   sentry-issue 4567890123
+#   sentry-issue MYPROJ-1A2 --json
+#
+# Combines the issue's metadata with its latest event: exception type/value,
+# culprit, top in-app stack frames, and key tags (release, environment,
+# handled). User/request context is deliberately EXCLUDED — it may contain PII;
+# open the Sentry permalink to inspect it. Config: SENTRY_AUTH_TOKEN /
+# SENTRY_ORG / SENTRY_PROJECT / SENTRY_URL (same as sentry-cli).
+set -euo pipefail
+# shellcheck source=bin/sentry-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sentry-lib.sh"
+
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"
+FRAMES=8
+ORG=""
+REF=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)     FORMAT="json"; shift ;;
+    --frames)   [ $# -ge 2 ] || { usage; sentry_fail "--frames needs a value"; }
+                FRAMES="$2"; shift 2 ;;
+    --org)      [ $# -ge 2 ] || { usage; sentry_fail "--org needs a value"; }
+                ORG="$2"; shift 2 ;;
+    -h|--help)  usage; exit 0 ;;
+    -*)         usage; sentry_fail "unknown option: $1" ;;
+    *)          [ -z "$REF" ] || { usage; sentry_fail "only one issue id may be supplied"; }
+                REF="$1"; shift ;;
+  esac
+done
+[ -n "$REF" ] || { usage; sentry_fail "an issue id or SHORT-ID is required"; }
+case "$FRAMES" in ''|*[!0-9]*) sentry_fail "--frames must be a non-negative integer" ;; esac
+
+sentry_require curl jq
+sentry_config "$ORG" ""
+
+ID="$(sentry_issue_id "$REF")"
+ISSUE="$(sentry_api GET "/issues/$ID/")"
+EVENT="$(sentry_api GET "/issues/$ID/events/latest/" 2>/dev/null || true)"
+[ -n "$EVENT" ] || EVENT='{}'
+
+REPORT="$(jq -n --argjson issue "$ISSUE" --argjson event "$EVENT" --argjson frames "$FRAMES" '
+  ($event.entries // []) as $entries
+  | ($entries | map(select(.type == "exception")) | last) as $exc
+  | ($exc.data.values // [] | last) as $val
+  | ($val.stacktrace.frames // []) as $allframes
+  | ( ($allframes | map(select(.inApp == true))) as $app
+      | (if ($app | length) > 0 then $app else $allframes end) ) as $useframes
+  | ($event.tags // [] | map({(.key): .value}) | add // {}) as $tags
+  | {
+      shortId: $issue.shortId,
+      id: $issue.id,
+      title: $issue.title,
+      status: $issue.status,
+      level: ($issue.level // "error"),
+      events: ($issue.count // "0"),
+      users: ($issue.userCount // 0),
+      culprit: $issue.culprit,
+      firstSeen: $issue.firstSeen,
+      lastSeen: $issue.lastSeen,
+      exception: (if $val then {type: $val.type, value: $val.value, module: $val.module} else null end),
+      frames: [ $useframes[-$frames:][] | {
+        file: (.filename // .absPath // .module // "?"),
+        function: (.function // "?"),
+        line: (.lineNo // null),
+        inApp: (.inApp // false)
+      } ],
+      tags: {
+        release: ($tags.release // null),
+        environment: ($tags.environment // null),
+        handled: ($tags.handled // null),
+        level: ($tags.level // null)
+      },
+      permalink: $issue.permalink
+    }')"
+
+if [ "$FORMAT" = "json" ]; then
+  jq . <<<"$REPORT"
+  exit 0
+fi
+
+jq -r '
+  "Sentry issue \(.shortId) — \(.title)",
+  "  status: \(.status)  level: \(.level)  events: \(.events)  users: \(.users)",
+  (if .culprit and .culprit != "" then "  culprit: \(.culprit)" else empty end),
+  "  first seen: \(.firstSeen)   last seen: \(.lastSeen)",
+  "  release: \(.tags.release // "?")   environment: \(.tags.environment // "?")   handled: \(.tags.handled // "?")",
+  (if .exception then "  exception: \(.exception.type // "?"): \(.exception.value // "")" else empty end),
+  (if (.frames | length) > 0 then
+    "  stack (app frames, most recent last):",
+    (.frames[] | "    \(.file)\(if .line then ":\(.line)" else "" end) in \(.function)")
+   else empty end),
+  "  link: \(.permalink)",
+  "  NOTE: user/request context omitted (possible PII) — inspect in Sentry."
+' <<<"$REPORT"
