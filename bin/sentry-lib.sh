@@ -26,16 +26,81 @@ SENTRY_ORG_R=""
 SENTRY_PROJECT_R=""
 SENTRY_TOKEN_R=""
 
+# --- Repo-aware resolution -------------------------------------------------
+
+# sentry_repo_slug — the current repo's canonical owner/name (upstream preferred,
+# else origin); empty when not in a GitHub repo.
+sentry_repo_slug() {
+  local url
+  url=$(git remote get-url upstream 2>/dev/null || git remote get-url origin 2>/dev/null) || return 0
+  printf '%s' "$url" | sed -E 's#^git@[^:]+:##; s#^https?://[^/]+/##; s#\.git$##'
+}
+
+# sentry_map_file — the repo->project map: lines of "owner/repo<TAB>org<TAB>project".
+sentry_map_file() { printf '%s' "${SENTRY_REPO_MAP:-$HOME/.config/sentry/repos.tsv}"; }
+
+# sentry_map_lookup <slug> — the matching "slug<TAB>org<TAB>project" line, if any.
+sentry_map_lookup() {
+  local f; f="$(sentry_map_file)"
+  [ -f "$f" ] || return 0
+  awk -F'\t' -v s="$1" '!/^[[:space:]]*#/ && $1 == s { print; exit }' "$f"
+}
+
+# sentry_ini_get <file> <section> <key> — read a value from a .sentryclirc INI file.
+sentry_ini_get() {
+  local file="$1" section="[$2]" key="$3"
+  [ -f "$file" ] || return 0
+  awk -v sect="$section" -v key="$key" '
+    /^[[:space:]]*\[/ { insect = (index($0, sect) > 0); next }
+    insect && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") {
+      sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); print; exit
+    }
+  ' "$file"
+}
+
 # sentry_config <org-or-empty> <project-or-empty>
-# Flags win over env; the API token is required.
+# Resolves org/project/token/url. Precedence for org/project:
+#   flags > env > repo .sentryclirc > repo->project map > ~/.sentryclirc
+# so the sentry-* helpers "just work" from inside a bound repo. A token is
+# required (env or a .sentryclirc [auth] token).
 sentry_config() {
-  SENTRY_ORG_R="${1:-${SENTRY_ORG:-}}"
-  SENTRY_PROJECT_R="${2:-${SENTRY_PROJECT:-}}"
+  local flag_org="${1:-}" flag_project="${2:-}"
+  local root rc_repo="" rc_home="$HOME/.sentryclirc"
+  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$root" ] && [ -f "$root/.sentryclirc" ] && rc_repo="$root/.sentryclirc"
+
+  SENTRY_ORG_R="${flag_org:-${SENTRY_ORG:-}}"
+  SENTRY_PROJECT_R="${flag_project:-${SENTRY_PROJECT:-}}"
+  if [ -n "$rc_repo" ]; then
+    [ -n "$SENTRY_ORG_R" ]     || SENTRY_ORG_R="$(sentry_ini_get "$rc_repo" defaults org)"
+    [ -n "$SENTRY_PROJECT_R" ] || SENTRY_PROJECT_R="$(sentry_ini_get "$rc_repo" defaults project)"
+  fi
+  if [ -z "$SENTRY_ORG_R" ] || [ -z "$SENTRY_PROJECT_R" ]; then
+    local slug mapline; slug="$(sentry_repo_slug)"
+    if [ -n "$slug" ]; then
+      mapline="$(sentry_map_lookup "$slug")"
+      if [ -n "$mapline" ]; then
+        [ -n "$SENTRY_ORG_R" ]     || SENTRY_ORG_R="$(printf '%s' "$mapline" | cut -f2)"
+        [ -n "$SENTRY_PROJECT_R" ] || SENTRY_PROJECT_R="$(printf '%s' "$mapline" | cut -f3)"
+      fi
+    fi
+  fi
+  if [ -f "$rc_home" ]; then
+    [ -n "$SENTRY_ORG_R" ]     || SENTRY_ORG_R="$(sentry_ini_get "$rc_home" defaults org)"
+    [ -n "$SENTRY_PROJECT_R" ] || SENTRY_PROJECT_R="$(sentry_ini_get "$rc_home" defaults project)"
+  fi
+
   SENTRY_TOKEN_R="${SENTRY_AUTH_TOKEN:-}"
-  local url="${SENTRY_URL:-https://sentry.io}"
+  [ -n "$SENTRY_TOKEN_R" ] || { [ -n "$rc_repo" ] && SENTRY_TOKEN_R="$(sentry_ini_get "$rc_repo" auth token)"; }
+  [ -n "$SENTRY_TOKEN_R" ] || { [ -f "$rc_home" ] && SENTRY_TOKEN_R="$(sentry_ini_get "$rc_home" auth token)"; }
+
+  local url="${SENTRY_URL:-}"
+  [ -n "$url" ] || { [ -n "$rc_repo" ] && url="$(sentry_ini_get "$rc_repo" defaults url)"; }
+  [ -n "$url" ] || url="https://sentry.io"
   SENTRY_BASE="${url%/}/api/0"
+
   [ -n "$SENTRY_TOKEN_R" ] \
-    || sentry_fail "SENTRY_AUTH_TOKEN is not set (needed for the Sentry API)"
+    || sentry_fail "no Sentry auth token (set SENTRY_AUTH_TOKEN, or add an [auth] token to ~/.sentryclirc)"
 }
 
 sentry_need_project() {

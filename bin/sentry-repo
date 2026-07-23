@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# sentry-repo — show or bind the Sentry project the current git repo "listens" to.
+#
+# Usage:
+#   sentry-repo                        show the Sentry context resolved for this repo
+#   sentry-repo --set <org> <project>  bind this repo -> org/project (user map)
+#   sentry-repo --unset                remove this repo's mapping
+#   sentry-repo --list                 list all repo -> project mappings
+#   sentry-repo --write-rc [org proj]  write .sentryclirc [defaults] in the repo root
+#   sentry-repo --json                 machine-readable context (with show)
+#
+# Once bound, the sentry-* helpers and the sentry-triager agent resolve org and
+# project automatically from inside this repo — no --org/--project needed.
+# Resolution precedence: flags/env > repo .sentryclirc > repo map
+# (~/.config/sentry/repos.tsv, override SENTRY_REPO_MAP) > ~/.sentryclirc.
+# --set writes the user map, so it never modifies the repo.
+set -euo pipefail
+# shellcheck source=bin/sentry-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sentry-lib.sh"
+
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+MODE="show"
+FORMAT="text"
+ORG=""
+PROJECT=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --set)       MODE="set"; shift
+                 [ $# -ge 2 ] || { usage; sentry_fail "--set needs <org> <project>"; }
+                 ORG="$1"; PROJECT="$2"; shift 2 ;;
+    --unset)     MODE="unset"; shift ;;
+    --list)      MODE="list"; shift ;;
+    --write-rc)  MODE="write-rc"; shift
+                 if [ $# -ge 2 ] && [ "${1#-}" = "$1" ] && [ "${2#-}" = "$2" ]; then
+                   ORG="$1"; PROJECT="$2"; shift 2
+                 fi ;;
+    --json)      FORMAT="json"; shift ;;
+    -h|--help)   usage; exit 0 ;;
+    *)           usage; sentry_fail "unknown argument: $1" ;;
+  esac
+done
+
+sentry_require git awk
+SLUG="$(sentry_repo_slug || true)"
+
+# Resolve org/project (token-optional) with a source label, mirroring sentry_config.
+resolve() {
+  R_ORG="${SENTRY_ORG:-}"; R_PROJECT="${SENTRY_PROJECT:-}"; R_SRC="env"
+  [ -n "$R_ORG" ] && [ -n "$R_PROJECT" ] && return 0
+  local root rc_repo=""
+  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$root" ] && [ -f "$root/.sentryclirc" ] && rc_repo="$root/.sentryclirc"
+  if [ -n "$rc_repo" ]; then
+    [ -n "$R_ORG" ]     || { R_ORG="$(sentry_ini_get "$rc_repo" defaults org)"; [ -n "$R_ORG" ] && R_SRC="repo .sentryclirc"; }
+    [ -n "$R_PROJECT" ] || R_PROJECT="$(sentry_ini_get "$rc_repo" defaults project)"
+  fi
+  if { [ -z "$R_ORG" ] || [ -z "$R_PROJECT" ]; } && [ -n "$SLUG" ]; then
+    local line; line="$(sentry_map_lookup "$SLUG")"
+    if [ -n "$line" ]; then
+      [ -n "$R_ORG" ]     || R_ORG="$(printf '%s' "$line" | cut -f2)"
+      [ -n "$R_PROJECT" ] || R_PROJECT="$(printf '%s' "$line" | cut -f3)"
+      R_SRC="repo map"
+    fi
+  fi
+  if [ -f "$HOME/.sentryclirc" ] && { [ -z "$R_ORG" ] || [ -z "$R_PROJECT" ]; }; then
+    [ -n "$R_ORG" ]     || { R_ORG="$(sentry_ini_get "$HOME/.sentryclirc" defaults org)"; [ -n "$R_ORG" ] && R_SRC="~/.sentryclirc"; }
+    [ -n "$R_PROJECT" ] || R_PROJECT="$(sentry_ini_get "$HOME/.sentryclirc" defaults project)"
+  fi
+  { [ -n "$R_ORG" ] && [ -n "$R_PROJECT" ]; } || R_SRC="UNRESOLVED"
+}
+
+token_source() {
+  [ -n "${SENTRY_AUTH_TOKEN:-}" ] && { echo "env"; return; }
+  local root rc; root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$root" ] && rc="$root/.sentryclirc" && [ -f "$rc" ] && [ -n "$(sentry_ini_get "$rc" auth token)" ] && { echo "repo .sentryclirc"; return; }
+  [ -f "$HOME/.sentryclirc" ] && [ -n "$(sentry_ini_get "$HOME/.sentryclirc" auth token)" ] && { echo "~/.sentryclirc"; return; }
+  echo "MISSING"
+}
+
+case "$MODE" in
+  show)
+    resolve
+    TSRC="$(token_source)"
+    if [ "$FORMAT" = "json" ]; then
+      jq -n --arg repo "${SLUG:-}" --arg org "$R_ORG" --arg project "$R_PROJECT" \
+            --arg source "$R_SRC" --arg token "$TSRC" \
+        '{repo: (if $repo=="" then null else $repo end), org: (if $org=="" then null else $org end),
+          project: (if $project=="" then null else $project end), source: $source, token: $token}'
+      exit 0
+    fi
+    printf 'Repo:    %s\n' "${SLUG:-（not a GitHub repo / no remote）}"
+    if [ "$R_SRC" = "UNRESOLVED" ]; then
+      printf 'Sentry:  UNRESOLVED\n'
+      printf 'Token:   %s\n' "$TSRC"
+      printf 'Bind it: sentry-repo --set <org> <project>\n'
+    else
+      printf 'Sentry:  %s/%s   (source: %s)\n' "$R_ORG" "$R_PROJECT" "$R_SRC"
+      printf 'Token:   %s\n' "$TSRC"
+    fi
+    ;;
+  set)
+    [ -n "$SLUG" ] || sentry_fail "not in a GitHub repo — cannot bind a mapping here"
+    f="$(sentry_map_file)"; mkdir -p "$(dirname "$f")"; touch "$f"
+    tmp="$(mktemp)"
+    awk -F'\t' -v s="$SLUG" '$1 != s' "$f" > "$tmp"
+    printf '%s\t%s\t%s\n' "$SLUG" "$ORG" "$PROJECT" >> "$tmp"
+    mv "$tmp" "$f"
+    printf '[PASS] bound %s -> %s/%s  (%s)\n' "$SLUG" "$ORG" "$PROJECT" "$f"
+    ;;
+  unset)
+    [ -n "$SLUG" ] || sentry_fail "not in a GitHub repo"
+    f="$(sentry_map_file)"
+    [ -f "$f" ] || { printf 'no map file; nothing to remove\n'; exit 0; }
+    tmp="$(mktemp)"; awk -F'\t' -v s="$SLUG" '$1 != s' "$f" > "$tmp"; mv "$tmp" "$f"
+    printf '[PASS] removed mapping for %s\n' "$SLUG"
+    ;;
+  list)
+    f="$(sentry_map_file)"
+    [ -f "$f" ] || { printf 'no mappings (%s)\n' "$f"; exit 0; }
+    printf '%-40s %-16s %s\n' "REPO" "ORG" "PROJECT"
+    awk -F'\t' '!/^[[:space:]]*#/ && NF>=3 { printf "%-40s %-16s %s\n", $1, $2, $3 }' "$f"
+    ;;
+  write-rc)
+    root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    [ -n "$root" ] || sentry_fail "not in a git repo"
+    if [ -z "$ORG" ] || [ -z "$PROJECT" ]; then
+      resolve
+      ORG="${R_ORG:-$ORG}"; PROJECT="${R_PROJECT:-$PROJECT}"
+    fi
+    [ -n "$ORG" ] && [ -n "$PROJECT" ] || sentry_fail "need org and project (pass them or bind first)"
+    rc="$root/.sentryclirc"
+    { printf '[defaults]\n'; printf 'org = %s\n' "$ORG"; printf 'project = %s\n' "$PROJECT"; } > "$rc"
+    printf '[PASS] wrote %s ([defaults] %s/%s)\n' "$rc" "$ORG" "$PROJECT"
+    printf 'note: keep auth tokens OUT of a committed .sentryclirc — use SENTRY_AUTH_TOKEN or ~/.sentryclirc.\n'
+    ;;
+esac
