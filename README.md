@@ -72,6 +72,9 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 - `pr-unit-test-reviewer` maps changed behavior to truthful regression
   assertions, identifies misleading or missing tests, and evaluates
   compatibility and independent verifiability without mutating the PR.
+- `pr-babysitter` verifies human and bot feedback, fixes confirmed issues in a
+  prepared PR worktree, pushes atomic commits, resolves addressed threads, and
+  monitors CI before handing the stable PR to the independent approval agent.
 - `gh-issue-triager` investigates duplicates and relevance, then either closes
   a high-confidence dropped issue with evidence or enriches an escalated issue
   with a managed, code-grounded implementation plan.
