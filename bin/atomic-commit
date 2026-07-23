@@ -162,10 +162,5 @@ REPORT=$(jq -n \
 if [ "$FORMAT" = "json" ]; then
   jq . <<<"$REPORT"
 else
-  jq -r '
-    "[PASS] \(.commitShort) \(.message) (\(.files | length) file(s))"
-      + (if .unrelatedStagedPathsPreserved > 0
-         then " · \(.unrelatedStagedPathsPreserved) unrelated unstaged"
-         else "" end)
-  ' <<<"$REPORT"
+  jq -r '"[PASS] \(.commitShort) (\(.files | length) file(s))"' <<<"$REPORT"
 fi
