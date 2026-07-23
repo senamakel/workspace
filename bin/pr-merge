@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# pr-merge — safely merge a pull request after every gate is green.
+#
+# Usage: pr-merge <number> [--dry-run] [--json] [-R|--repo <owner/name>]
+#                         [--squash|--merge|--rebase] [--delete-branch]
+#
+# Requires an open, non-draft, approved PR with successful checks, clean
+# mergeability, and no active unresolved review threads. The inspected head
+# SHA is pinned during merge. Squash is the default strategy.
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+require() {
+  local bin
+  for bin in "$@"; do
+    command -v "$bin" >/dev/null 2>&1 \
+      || { fail "missing required tool: $bin"; exit 1; }
+  done
+}
+
+resolve_repo() {
+  if [ -n "$REPO" ]; then
+    printf '%s\n' "$REPO"
+    return
+  fi
+
+  local url
+  url=$(git remote get-url upstream 2>/dev/null || git remote get-url origin 2>/dev/null) \
+    || { fail "no upstream or origin remote found"; exit 1; }
+  printf '%s\n' "$url" \
+    | sed -E 's#^git@github\.com:##; s#^https?://github\.com/##; s#\.git$##'
+}
+
+render_text() {
+  jq -r '
+    def mark($ok): if $ok then "PASS" else "FAIL" end;
+    "PR #\(.number): \(.title)",
+    "Repository: \(.repository)",
+    "URL: \(.url)",
+    "Branches: \(.headRefName) -> \(.baseRefName)",
+    "",
+    "[\(mark(.gates.open))] Open and ready (state: \(.state), draft: \(.isDraft))",
+    "[\(mark(.gates.approved))] Approval (decision: \(.reviewDecision))",
+    "[\(mark(.gates.checksGreen))] Checks (\(.checks.passing) passing, \(.checks.pending) pending, \(.checks.failing) failing)",
+    "[\(mark(.gates.mergeable))] Mergeability (\(.mergeable), \(.mergeStateStatus))",
+    "[\(mark(.gates.reviewThreadsResolved))] Review threads (\(.unresolvedReviewThreads) unresolved)",
+    "",
+    (if .eligible then "Eligible to merge via \(.method)." else
+      "Merge blocked:",
+      (.blockers[] | "  - \(.)")
+     end),
+    (if .outcome == "merged" then "Merged successfully."
+     elif .outcome == "merge_submitted" then "Merge submitted; GitHub may have queued it."
+     elif .outcome == "merge_failed" then "Merge command failed: \(.error)"
+     elif .outcome == "eligible" then "Dry run only; no merge attempted."
+     else empty
+     end)
+  '
+}
+
+output_report() {
+  if [ "$FORMAT" = "json" ]; then
+    jq .
+  else
+    render_text
+  fi
+}
+
+PR=""
+REPO="${PR_MERGE_REPO:-}"
+FORMAT="text"
+METHOD="squash"
+DRY_RUN=0
+DELETE_BRANCH=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --json)
+      FORMAT="json"
+      shift
+      ;;
+    --squash)
+      METHOD="squash"
+      shift
+      ;;
+    --merge)
+      METHOD="merge"
+      shift
+      ;;
+    --rebase)
+      METHOD="rebase"
+      shift
+      ;;
+    --delete-branch)
+      DELETE_BRANCH=1
+      shift
+      ;;
+    -R|--repo)
+      [ $# -ge 2 ] || { fail "$1 requires an owner/name value"; usage; exit 1; }
+      REPO="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown argument: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      if [ -n "$PR" ]; then
+        fail "unexpected argument: $1"
+        usage
+        exit 1
+      fi
+      PR="$1"
+      shift
+      ;;
+  esac
+done
+
+case "$PR" in
+  ''|*[!0-9]*) fail "a numeric PR number is required"; usage; exit 1 ;;
+esac
+
+require gh jq
+if [ -z "$REPO" ]; then
+  require git
+  git rev-parse --git-dir >/dev/null 2>&1 \
+    || { fail "not inside a git repository; pass --repo owner/name"; exit 1; }
+fi
+REPO=$(resolve_repo)
+case "$REPO" in
+  */*) ;;
+  *) fail "could not resolve GitHub repository as owner/name: $REPO"; exit 1 ;;
+esac
+OWNER="${REPO%%/*}"
+NAME="${REPO#*/}"
+
+fetch_pr() {
+  gh pr view "$PR" -R "$REPO" \
+    --json number,title,url,state,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,headRefOid,headRefName,baseRefName
+}
+
+INFO=$(fetch_pr) || { fail "could not inspect PR #$PR on $REPO"; exit 1; }
+if jq -e '.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN"' \
+  >/dev/null <<<"$INFO"; then
+  INFO=$(fetch_pr) || { fail "could not refresh PR #$PR on $REPO"; exit 1; }
+fi
+
+# GraphQL variable names must remain literal for gh to bind them.
+# shellcheck disable=SC2016
+THREADS=$(gh api graphql --paginate --slurp \
+  -f owner="$OWNER" \
+  -f name="$NAME" \
+  -F number="$PR" \
+  -f query='
+    query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100, after: $endCursor) {
+            nodes {
+              isResolved
+              isOutdated
+              comments(first: 1) { nodes { url } }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }
+    }
+  ') || { fail "could not inspect review threads for PR #$PR"; exit 1; }
+
+REPORT=$(jq -n \
+  --arg repository "$REPO" \
+  --arg method "$METHOD" \
+  --argjson info "$INFO" \
+  --argjson threadPages "$THREADS" '
+  def check_state:
+    (.conclusion // .state // .status // "UNKNOWN") | ascii_upcase;
+  def checks:
+    [$info.statusCheckRollup[] | {
+      name: (.name // .context // "unnamed check"),
+      state: check_state,
+      url: (.detailsUrl // .targetUrl // null)
+    }];
+  def is_passing:
+    .state == "SUCCESS" or .state == "NEUTRAL" or .state == "SKIPPED";
+  def is_failing:
+    .state == "FAILURE" or .state == "ERROR" or .state == "CANCELLED" or
+    .state == "TIMED_OUT" or .state == "ACTION_REQUIRED" or
+    .state == "STARTUP_FAILURE" or .state == "STALE";
+
+  checks as $checks
+  | [$threadPages[].data.repository.pullRequest.reviewThreads.nodes[]
+      | select(.isResolved == false and .isOutdated == false)
+      | .comments.nodes[0].url] as $unresolved
+  | {
+      repository: $repository,
+      number: $info.number,
+      title: $info.title,
+      url: $info.url,
+      state: $info.state,
+      isDraft: $info.isDraft,
+      reviewDecision: (($info.reviewDecision // "") | if . == "" then "NONE" else . end),
+      mergeable: $info.mergeable,
+      mergeStateStatus: $info.mergeStateStatus,
+      headRefOid: $info.headRefOid,
+      headRefName: $info.headRefName,
+      baseRefName: $info.baseRefName,
+      method: $method,
+      checks: {
+        passing: [$checks[] | select(is_passing)] | length,
+        pending: [$checks[] | select((is_passing or is_failing) | not)] | length,
+        failing: [$checks[] | select(is_failing)] | length,
+        items: $checks
+      },
+      unresolvedReviewThreads: ($unresolved | length),
+      unresolvedReviewThreadUrls: $unresolved
+    }
+  | .gates = {
+      open: (.state == "OPEN" and .isDraft == false),
+      approved: (.reviewDecision == "APPROVED"),
+      checksGreen: (.checks.pending == 0 and .checks.failing == 0),
+      mergeable: (.mergeable == "MERGEABLE" and .mergeStateStatus == "CLEAN"),
+      reviewThreadsResolved: (.unresolvedReviewThreads == 0)
+    }
+  | .blockers = [
+      if .state != "OPEN" then "PR is not open (state: \(.state))" else empty end,
+      if .isDraft then "PR is still a draft" else empty end,
+      if .reviewDecision != "APPROVED" then "approval is required (decision: \(.reviewDecision))" else empty end,
+      if .checks.failing > 0 then
+        "failing checks: \([.checks.items[] | select(is_failing) | .name] | unique | join(", "))"
+      else empty end,
+      if .checks.pending > 0 then
+        "pending checks: \([.checks.items[] | select((is_passing or is_failing) | not) | .name] | unique | join(", "))"
+      else empty end,
+      if .mergeable != "MERGEABLE" then "PR is not mergeable (status: \(.mergeable))" else empty end,
+      if .mergeStateStatus != "CLEAN" then "GitHub merge state is \(.mergeStateStatus), not CLEAN" else empty end,
+      if .unresolvedReviewThreads > 0 then "\(.unresolvedReviewThreads) active review thread(s) remain unresolved" else empty end
+    ]
+  | .eligible = (.blockers | length) == 0
+  | .outcome = (if .eligible then "eligible" else "blocked" end)
+')
+
+if ! jq -e '.eligible' >/dev/null <<<"$REPORT"; then
+  output_report <<<"$REPORT"
+  exit 2
+fi
+
+if [ "$DRY_RUN" = "1" ]; then
+  output_report <<<"$REPORT"
+  exit 0
+fi
+
+MERGE_ARGS=("$PR" "-R" "$REPO" "--$METHOD" "--match-head-commit" "$(jq -r '.headRefOid' <<<"$REPORT")")
+if [ "$DELETE_BRANCH" = "1" ]; then
+  MERGE_ARGS+=("--delete-branch")
+fi
+
+if ! MERGE_OUTPUT=$(gh pr merge "${MERGE_ARGS[@]}" 2>&1); then
+  REPORT=$(jq --arg error "$MERGE_OUTPUT" '.outcome = "merge_failed" | .error = $error' <<<"$REPORT")
+  output_report <<<"$REPORT"
+  exit 1
+fi
+
+POST=$(gh pr view "$PR" -R "$REPO" --json state,mergedAt,autoMergeRequest) \
+  || { fail "merge command succeeded, but final PR state could not be read"; exit 1; }
+REPORT=$(jq --argjson post "$POST" '
+  .finalState = $post.state
+  | .mergedAt = $post.mergedAt
+  | .outcome = (if $post.state == "MERGED" then "merged" else "merge_submitted" end)
+' <<<"$REPORT")
+output_report <<<"$REPORT"
