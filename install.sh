@@ -5,9 +5,8 @@
 #   ./install.sh            apply (backs up anything it replaces)
 #   ./install.sh --dry-run  show what would happen, change nothing
 #
-# Every managed file in $HOME becomes a symlink pointing back into this
-# repo, so editing either side edits the same file and `git diff` in the
-# repo shows config drift.
+# Most managed files become symlinks pointing into this repo. Shared agents are
+# rendered into a durable user cache, then linked into each harness.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -15,6 +14,7 @@ DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
 BACKUP_DIR="$HOME/.config-backups/workspace-$(date +%Y%m%d-%H%M%S)"
+AGENT_BUILD_ROOT="$HOME/.config/workspace/generated-agents"
 
 case "$REPO_ROOT" in
   */worktrees/*)
@@ -57,6 +57,17 @@ link() {
   echo "[link] $dest -> $src"
 }
 
+# --- Shared agents ------------------------------------------------------------
+# Validate during previews; on apply, render native Claude and Codex files into
+# a durable user cache. Build before changing links so missing tooling or
+# invalid metadata fails the installation early.
+if [ "$DRY_RUN" -eq 1 ]; then
+  "$REPO_ROOT/bin/build-agents" --check
+  echo "[would build] shared agents -> $AGENT_BUILD_ROOT"
+else
+  "$REPO_ROOT/bin/build-agents" --output-root "$AGENT_BUILD_ROOT"
+fi
+
 # --- Shared agent rules -------------------------------------------------------
 # One canonical rules.md is symlinked into every agent's instructions file so
 # claude, codex, and opencode always share the same Local Workflow Preferences.
@@ -71,8 +82,8 @@ link "$REPO_ROOT/claude/settings.json"          "$HOME/.claude/settings.json"
 link "$REPO_ROOT/claude/mcp.json"               "$HOME/.claude/mcp.json"
 link "$REPO_ROOT/claude/statusline-command.sh"  "$HOME/.claude/statusline-command.sh"
 
-# Agents: generated from agents/ by bin/build-agents. Keep one symlink per file
-# so Claude Code can still drop local files into ~/.claude/agents.
+# Keep one symlink per generated file so Claude Code can still drop local files
+# into ~/.claude/agents.
 LEGACY_AI_AGENT="$HOME/.claude/agents/engineering-ai-engineer.md"
 LEGACY_AI_SOURCE="$REPO_ROOT/claude/agents/engineering-ai-engineer.md"
 if [ -L "$LEGACY_AI_AGENT" ] && [ "$(readlink "$LEGACY_AI_AGENT")" = "$LEGACY_AI_SOURCE" ]; then
@@ -84,10 +95,18 @@ if [ -L "$LEGACY_AI_AGENT" ] && [ "$(readlink "$LEGACY_AI_AGENT")" = "$LEGACY_AI
   fi
 fi
 
-for f in "$REPO_ROOT"/claude/agents/*.md; do
-  [ -e "$f" ] || continue
-  link "$f" "$HOME/.claude/agents/$(basename "$f")"
-done
+if [ "$DRY_RUN" -eq 1 ]; then
+  for d in "$REPO_ROOT"/agents/*/; do
+    [ -d "$d" ] || continue
+    name=$(basename "${d%/}")
+    echo "[would link]    $HOME/.claude/agents/$name.md -> $AGENT_BUILD_ROOT/claude/agents/$name.md"
+  done
+else
+  for f in "$AGENT_BUILD_ROOT"/claude/agents/*.md; do
+    [ -e "$f" ] || continue
+    link "$f" "$HOME/.claude/agents/$(basename "$f")"
+  done
+fi
 
 # Skills: one symlink per skill directory.
 for d in "$REPO_ROOT"/claude/skills/*/; do
@@ -119,10 +138,18 @@ done
 link "$REPO_ROOT/codex/hooks.json"  "$HOME/.codex/hooks.json"
 
 # Agents: generated from the same shared sources as Claude agents.
-for f in "$REPO_ROOT"/codex/agents/*.toml; do
-  [ -e "$f" ] || continue
-  link "$f" "$HOME/.codex/agents/$(basename "$f")"
-done
+if [ "$DRY_RUN" -eq 1 ]; then
+  for d in "$REPO_ROOT"/agents/*/; do
+    [ -d "$d" ] || continue
+    name=$(basename "${d%/}")
+    echo "[would link]    $HOME/.codex/agents/$name.toml -> $AGENT_BUILD_ROOT/codex/agents/$name.toml"
+  done
+else
+  for f in "$AGENT_BUILD_ROOT"/codex/agents/*.toml; do
+    [ -e "$f" ] || continue
+    link "$f" "$HOME/.codex/agents/$(basename "$f")"
+  done
+fi
 
 for d in "$REPO_ROOT"/codex/skills/*/; do
   [ -d "$d" ] || continue

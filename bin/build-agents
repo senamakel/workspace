@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # build-agents — render shared agent definitions for Claude and Codex.
 #
-# Usage: build-agents [--check] [agent-name]
+# Usage: build-agents --output-root <directory> [agent-name]
+#        build-agents --check [agent-name]
 #
 # Shared sources live in agents/<name>/{agent.json,instructions.md}.
-# Generated outputs are written to claude/agents/<name>.md and
-# codex/agents/<name>.toml. --check verifies outputs without changing them.
+# --output-root writes native files beneath <directory>/{claude,codex}/agents/.
+# --check validates and renders temporarily without leaving generated files.
 set -euo pipefail
 
 fail() {
@@ -18,26 +19,40 @@ require() {
 }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-MODE="write"
+MODE=""
 FILTER=""
+OUTPUT_ROOT=""
 
-for arg in "$@"; do
-  case "$arg" in
-    --check) MODE="check" ;;
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check)
+      [ -z "$MODE" ] || { fail "choose either --check or --output-root"; exit 1; }
+      MODE="check"
+      shift
+      ;;
+    --output-root)
+      [ -z "$MODE" ] || { fail "choose either --check or --output-root"; exit 1; }
+      [ $# -ge 2 ] || { fail "--output-root requires a directory"; exit 1; }
+      MODE="write"
+      OUTPUT_ROOT="$2"
+      shift 2
+      ;;
     -h|--help)
-      sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     -*)
-      fail "unknown argument: $arg"
+      fail "unknown argument: $1"
       exit 1
       ;;
     *)
       [ -z "$FILTER" ] || { fail "only one agent name may be supplied"; exit 1; }
-      FILTER="$arg"
+      FILTER="$1"
+      shift
       ;;
   esac
 done
+[ -n "$MODE" ] || { fail "--check or --output-root is required"; exit 1; }
 
 require jq
 require rg
@@ -119,18 +134,6 @@ validate_source() {
     || { fail "agent name '$name' must match directory $(basename "$dir")"; exit 1; }
 }
 
-check_output() {
-  local expected="$1" actual="$2"
-  if [ ! -f "$actual" ]; then
-    fail "missing generated output: $actual"
-    return 1
-  fi
-  if ! cmp -s "$expected" "$actual"; then
-    fail "stale generated output: $actual"
-    return 1
-  fi
-}
-
 SOURCE_DIRS=()
 if [ -n "$FILTER" ]; then
   [ -d "$ROOT/agents/$FILTER" ] || { fail "unknown agent: $FILTER"; exit 1; }
@@ -142,30 +145,20 @@ else
 fi
 [ "${#SOURCE_DIRS[@]}" -gt 0 ] || { fail "no shared agents found"; exit 1; }
 
-CHECK_ROOT=""
 if [ "$MODE" = "check" ]; then
-  CHECK_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/build-agents.XXXXXX")
-  trap 'rm -rf "$CHECK_ROOT"' EXIT
+  OUTPUT_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/build-agents.XXXXXX")
+  trap 'rm -rf "$OUTPUT_ROOT"' EXIT
 fi
 
-FAILED=0
 for dir in "${SOURCE_DIRS[@]}"; do
   validate_source "$dir"
   name=$(basename "$dir")
   metadata="$dir/agent.json"
   instructions="$dir/instructions.md"
 
-  if [ "$MODE" = "check" ]; then
-    render_claude "$metadata" "$instructions" "$CHECK_ROOT/claude/$name.md"
-    render_codex "$metadata" "$instructions" "$CHECK_ROOT/codex/$name.toml"
-    check_output "$CHECK_ROOT/claude/$name.md" "$ROOT/claude/agents/$name.md" || FAILED=1
-    check_output "$CHECK_ROOT/codex/$name.toml" "$ROOT/codex/agents/$name.toml" || FAILED=1
-  else
-    render_claude "$metadata" "$instructions" "$ROOT/claude/agents/$name.md"
-    render_codex "$metadata" "$instructions" "$ROOT/codex/agents/$name.toml"
-    printf '[BUILD] %s\n' "$name"
-  fi
+  render_claude "$metadata" "$instructions" "$OUTPUT_ROOT/claude/agents/$name.md"
+  render_codex "$metadata" "$instructions" "$OUTPUT_ROOT/codex/agents/$name.toml"
+  [ "$MODE" = "check" ] || printf '[BUILD] %s\n' "$name"
 done
 
-[ "$FAILED" -eq 0 ] || exit 1
-[ "$MODE" = "write" ] || printf '[PASS] generated agents are current\n'
+[ "$MODE" = "write" ] || printf '[PASS] shared agent sources render successfully\n'
