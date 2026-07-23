@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # pr-fix — check out a PR into a worktree, merge main, and hand it to a harness.
 #
-# Usage: pr-fix <pr-number> [extra prompt text...] [claude|codex|opencode|deepcode]
+# Usage: pr-fix <pr-number> [extra prompt text...] [claude|codex|opencode|deepcode|deepcode-flash]
 #
 #   pr-fix 123                          fix PR 123 with claude (default)
 #   pr-fix 123 codex                    same, with codex
 #   pr-fix 123 opencode                 same, with opencode
 #   pr-fix 123 deepcode                 same, with deepcode (Claude Code on DeepSeek)
+#   pr-fix 123 deepcode-flash           same, DeepSeek V4 Flash everywhere
 #   pr-fix 123 "focus on the API tests" codex
 #
 # Run from anywhere inside the target repo. Prefers the `upstream` remote
@@ -34,7 +35,7 @@ warn()  { printf '%s[WARN]%s %s\n' "$_Y" "$_0" "$*" >&2; }
 info()  { printf '%s[INFO]%s %s\n' "$_B" "$_0" "$*"; }
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
   exit 1
 }
 
@@ -61,7 +62,7 @@ resolve_repo() {
 # name to HARNESSES and add a branch to harness_launch(). The name must
 # also be the binary that `require` checks for. macOS ships bash 3.2, so
 # this stays with case statements rather than associative arrays.
-HARNESSES="claude codex opencode deepcode"
+HARNESSES="claude codex opencode deepcode deepcode-flash"
 
 is_harness() {
   case " $HARNESSES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
@@ -79,6 +80,9 @@ harness_launch() {
     deepcode)
       if [ "$mode" = safe ]; then deepcode "$prompt"
       else deepcode --dangerously-skip-permissions "$prompt"; fi ;;
+    deepcode-flash)
+      if [ "$mode" = safe ]; then deepcode-flash "$prompt"
+      else deepcode-flash --dangerously-skip-permissions "$prompt"; fi ;;
     codex)
       if [ "$mode" = safe ]; then codex "$prompt"
       else codex --dangerously-bypass-approvals-and-sandbox "$prompt"; fi ;;

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# deepcode-flash — deepcode, but DeepSeek V4 Flash on every tier.
+#
+# Usage: deepcode-flash [claude args...]   (same interface as deepcode)
+#
+# A thin wrapper over `deepcode` that points the heavy/main tier at the
+# flash model too, so every Claude tier maps onto deepseek-v4-flash. Handy
+# for cheap/fast runs where you don't want the pro model anywhere.
+#
+# Overridable:
+#   DEEPCODE_FLASH_MODEL  the flash model used everywhere
+#                         (default: deepseek/deepseek-v4-flash)
+set -euo pipefail
+
+flash="${DEEPCODE_FLASH_MODEL:-deepseek/deepseek-v4-flash}"
+
+here="$(cd "$(dirname "$0")" && pwd)"
+
+# Force both the heavy and fast tiers onto flash, then hand off to deepcode,
+# which wires up the OpenRouter endpoint + tier->model mappings.
+export DEEPCODE_MODEL="$flash"
+export DEEPCODE_FAST_MODEL="$flash"
+
+exec "$here/deepcode" "$@"
