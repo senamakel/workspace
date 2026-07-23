@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# sentry-release — release helpers: agent-friendly reports + sentry-cli wrappers.
+#
+# Usage: sentry-release <command> [args]
+#
+#   list [--limit N] [--json] [--org O] [--project P]   recent releases (report)
+#   latest [--json] [--org O] [--project P]              most recent release version
+#   new <version> [--org O] [--project P]                wraps `sentry-cli releases new`
+#   finalize <version> [--org O] [--project P]           wraps `sentry-cli releases finalize`
+#
+# `list`/`latest` read the Sentry API for structured output; `new`/`finalize`
+# wrap `sentry-cli` (which must be installed). All use the shared config:
+# SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT / SENTRY_URL.
+set -euo pipefail
+# shellcheck source=bin/sentry-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sentry-lib.sh"
+
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+
+[ $# -ge 1 ] || { usage; sentry_fail "a command is required (list|latest|new|finalize)"; }
+CMD="$1"; shift
+
+FORMAT="text"
+ORG=""
+PROJECT=""
+LIMIT=10
+VERSION=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)     FORMAT="json"; shift ;;
+    --limit)    [ $# -ge 2 ] || { usage; sentry_fail "--limit needs a value"; }
+                LIMIT="$2"; shift 2 ;;
+    --org)      [ $# -ge 2 ] || { usage; sentry_fail "--org needs a value"; }
+                ORG="$2"; shift 2 ;;
+    --project)  [ $# -ge 2 ] || { usage; sentry_fail "--project needs a value"; }
+                PROJECT="$2"; shift 2 ;;
+    -h|--help)  usage; exit 0 ;;
+    -*)         usage; sentry_fail "unknown option: $1" ;;
+    *)          [ -z "$VERSION" ] || { usage; sentry_fail "unexpected argument: $1"; }
+                VERSION="$1"; shift ;;
+  esac
+done
+case "$LIMIT" in ''|*[!0-9]*|0) sentry_fail "--limit must be a positive integer" ;; esac
+
+fetch_releases() {
+  sentry_require curl jq
+  sentry_config "$ORG" "$PROJECT"
+  sentry_need_project
+  sentry_api GET "/projects/$SENTRY_ORG_R/$SENTRY_PROJECT_R/releases/?per_page=$LIMIT"
+}
+
+case "$CMD" in
+  list)
+    RAW="$(fetch_releases)"
+    REPORT="$(jq --arg org "$SENTRY_ORG_R" --arg project "$SENTRY_PROJECT_R" '
+      {
+        org: $org, project: $project, count: length,
+        releases: [ .[] | {
+          version,
+          shortVersion: (.shortVersion // .version),
+          dateCreated,
+          dateReleased,
+          newGroups: (.newGroups // 0),
+          commitCount: (.commitCount // 0),
+          deployCount: (.deployCount // 0)
+        } ]
+      }' <<<"$RAW")"
+    if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+    jq -r '
+      "Sentry releases: \(.org)/\(.project) — \(.count)",
+      (.releases[] |
+        "",
+        "\(.shortVersion)",
+        "  created: \(.dateCreated)   released: \(.dateReleased // "unreleased")",
+        "  new issues: \(.newGroups)   commits: \(.commitCount)   deploys: \(.deployCount)"
+      )' <<<"$REPORT"
+    ;;
+  latest)
+    LIMIT=1
+    RAW="$(fetch_releases)"
+    VER="$(jq -r '.[0].version // empty' <<<"$RAW")"
+    [ -n "$VER" ] || sentry_fail "no releases found for $SENTRY_ORG_R/$SENTRY_PROJECT_R"
+    if [ "$FORMAT" = "json" ]; then
+      jq -n --argjson r "$(jq '.[0]' <<<"$RAW")" '$r'
+    else
+      printf '%s\n' "$VER"
+    fi
+    ;;
+  new|finalize)
+    [ -n "$VERSION" ] || { usage; sentry_fail "$CMD requires a <version>"; }
+    sentry_require sentry-cli
+    args=(releases)
+    [ -z "$ORG" ] || args+=(--org "$ORG")
+    [ -z "$PROJECT" ] || args+=(--project "$PROJECT")
+    args+=("$CMD" "$VERSION")
+    exec sentry-cli "${args[@]}"
+    ;;
+  *)
+    usage; sentry_fail "unknown command: $CMD" ;;
+esac
