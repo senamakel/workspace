@@ -75,7 +75,6 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 - `gh-issue-triager` investigates duplicates and relevance, then either closes
   a high-confidence dropped issue with evidence or enriches an escalated issue
   with a managed, code-grounded implementation plan.
-- `ai-engineer` handles production AI/ML implementation and review work.
 
 ## Tools
 
