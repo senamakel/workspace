@@ -155,8 +155,10 @@ is the map that ties the whole arc together.
 Creates branch `<slug>` from the current `HEAD` and checks it out at
 `<repo>/worktrees/<slug>`. If the matching branch and registered worktree
 already exist, the command safely reuses them. It then runs recursive submodule
-initialization and returns a stable `WORKTREE_READY` report with the path,
-branch, commit, submodule count, and next `cd` command.
+initialization — cloning GitHub submodules over **SSH** (`git@github.com`)
+regardless of the HTTPS URLs in `.gitmodules` (set `WORKTREE_HTTPS=1` to keep
+HTTPS) — and returns a stable `WORKTREE_READY` report with the path, branch,
+commit, submodule count, and next `cd` command.
 
 ```sh
 worktree fix-auth-timeout
