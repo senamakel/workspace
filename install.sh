@@ -73,6 +73,17 @@ link "$REPO_ROOT/claude/statusline-command.sh"  "$HOME/.claude/statusline-comman
 
 # Agents: generated from agents/ by bin/build-agents. Keep one symlink per file
 # so Claude Code can still drop local files into ~/.claude/agents.
+LEGACY_AI_AGENT="$HOME/.claude/agents/engineering-ai-engineer.md"
+LEGACY_AI_SOURCE="$REPO_ROOT/claude/agents/engineering-ai-engineer.md"
+if [ -L "$LEGACY_AI_AGENT" ] && [ "$(readlink "$LEGACY_AI_AGENT")" = "$LEGACY_AI_SOURCE" ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "[would remove] legacy agent link $LEGACY_AI_AGENT"
+  else
+    rm "$LEGACY_AI_AGENT"
+    echo "[unlink] legacy agent $LEGACY_AI_AGENT"
+  fi
+fi
+
 for f in "$REPO_ROOT"/claude/agents/*.md; do
   [ -e "$f" ] || continue
   link "$f" "$HOME/.claude/agents/$(basename "$f")"
