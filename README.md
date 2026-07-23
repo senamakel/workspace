@@ -294,12 +294,13 @@ sentry-link MYAPP-9F https://github.com/org/repo/issues/128
 Runs the Claude Code CLI but backed by DeepSeek models through OpenRouter's
 Anthropic-compatible endpoint (`https://openrouter.ai/api`). It sets the
 `ANTHROPIC_*` routing/model env vars in the wrapper process only and `exec`s
-`claude`, so your normal `claude` (pointed at Anthropic) is unaffected. Heavy
-tiers (opus/sonnet) map to `deepseek/deepseek-v4-pro`, fast/subagent tiers to
-`deepseek/deepseek-v4-flash`; override with `DEEPCODE_MODEL` /
-`DEEPCODE_FAST_MODEL`. Requires `OPENROUTER_API_KEY` in the environment (set
-it in your `~/.zshrc`, not this repo). All arguments pass straight through to
-`claude`.
+`claude`, so your normal `claude` (pointed at Anthropic) is unaffected. The Opus
+tier maps to `deepseek/deepseek-v4-pro` (heavy — coding/deep review); the Sonnet,
+Haiku, and subagent tiers map to `deepseek/deepseek-v4-flash`, matching the agent
+model tiering so a Sonnet-tier agent stays cheap here too. Override with
+`DEEPCODE_MODEL` / `DEEPCODE_FAST_MODEL` (or use `deepcode-flash` to force every
+tier onto flash). Requires `OPENROUTER_API_KEY` in the environment (set it in your
+`~/.zshrc`, not this repo). All arguments pass straight through to `claude`.
 
 ### `workflow-update [--no-commit]`
 

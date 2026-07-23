@@ -37,11 +37,14 @@ export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
 export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
 export ANTHROPIC_API_KEY=""   # blank so the SDK uses the auth token above
 
-# Map every Claude tier onto DeepSeek: heavy tiers -> pro, fast/sub -> flash.
+# Map Claude tiers onto DeepSeek: Opus -> pro (heavy, for coding/deep review);
+# Sonnet + Haiku -> flash (the token-saving tiers). This matches the agent model
+# tiering, so a Sonnet-tier agent is cheap under deepcode as well as Anthropic.
 export ANTHROPIC_DEFAULT_OPUS_MODEL="$pro"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="$pro"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$flash"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="$flash"
 export ANTHROPIC_SMALL_FAST_MODEL="$flash"   # legacy name, still honored
-export CLAUDE_CODE_SUBAGENT_MODEL="$flash"
+# No CLAUDE_CODE_SUBAGENT_MODEL override: subagents follow their own model tier,
+# so Opus-tier coding/review agents stay on pro while Sonnet/Haiku land on flash.
 
 exec claude "$@"
