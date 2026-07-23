@@ -68,6 +68,36 @@ else
   "$REPO_ROOT/bin/build-agents" --output-root "$AGENT_BUILD_ROOT"
 fi
 
+# Remove retired shared agents from the generated cache and harness directories.
+# Destination files are removed only when they are our exact generated symlinks.
+remove_retired_agent() {
+  local name="$1" harness="$2" extension="$3"
+  local generated="$AGENT_BUILD_ROOT/$harness/agents/$name.$extension"
+  local installed="$HOME/.$harness/agents/$name.$extension"
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    if [ -e "$generated" ] || [ -L "$generated" ]; then
+      echo "[would remove] retired generated agent $generated"
+    fi
+    if [ -L "$installed" ] && [ "$(readlink "$installed")" = "$generated" ]; then
+      echo "[would remove] retired agent link $installed"
+    fi
+    return
+  fi
+
+  if [ -L "$installed" ] && [ "$(readlink "$installed")" = "$generated" ]; then
+    rm "$installed"
+    echo "[unlink] retired agent $installed"
+  fi
+  if [ -e "$generated" ] || [ -L "$generated" ]; then
+    rm "$generated"
+    echo "[remove] retired generated agent $generated"
+  fi
+}
+
+remove_retired_agent "ai-engineer" "claude" "md"
+remove_retired_agent "ai-engineer" "codex" "toml"
+
 # --- Shared agent rules -------------------------------------------------------
 # One canonical RULES.md is symlinked into every agent's instructions file so
 # claude, codex, and opencode always share the same Local Workflow Preferences.
