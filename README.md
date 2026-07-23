@@ -64,6 +64,30 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 
 ## Tools
 
+### `worktree <slug> [--json]`
+
+Creates branch `<slug>` from the current `HEAD` and checks it out at
+`<repo>/worktree/<slug>`. If the matching branch and registered worktree
+already exist, the command safely reuses them. It then runs recursive submodule
+initialization and returns a stable `WORKTREE_READY` report with the path,
+branch, commit, submodule count, and next `cd` command.
+
+```sh
+worktree fix-auth-timeout
+worktree dependency-audit --json
+```
+
+### `atomic-commit [--json] "<scoped message>" -- <path>...`
+
+Creates a commit from an explicit file list. It rejects directories, unchanged
+paths, traversal, and implicit catch-all pathspecs; unstages unrelated work
+without discarding it; and stages and commits only the named files.
+
+```sh
+atomic-commit "bin: add worktree helper" -- bin/worktree .gitignore
+atomic-commit --json "docs: explain setup" -- README.md
+```
+
 ### `pr-list [--json] [--limit <count>] [-R|--repo <owner/name>]`
 
 Lists open pull requests for the current repository, preferring its
@@ -139,4 +163,5 @@ them as "Update submodule pointers". `--no-commit` stages only.
 - The `humanizer` and `solana-dev` skills were originally managed by the
   `~/.agents` skill manager (see its `.skill-lock.json`); they are vendored
   here as plain copies, so update them by re-copying from upstream.
-- `worktrees/` is gitignored — feature branches live there as git worktrees.
+- `worktree/` and `worktrees/` are gitignored — feature branches may live in
+  either convention without polluting repository status.
