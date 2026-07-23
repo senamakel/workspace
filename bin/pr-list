@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # pr-list — summarize open pull requests for the current GitHub repository.
 #
-# Usage: pr-list [--json] [--limit <count>] [-R|--repo <owner/name>]
+# Usage: pr-list [--json] [--limit <count>] [--include-drafts] [-R|--repo <owner/name>]
 #
 # Reports each PR's title, shortened body, review state, checks, and
 # mergeability. Human-readable output is the default; --json emits a stable
-# document for agents and scripts. The current repository's upstream remote
+# document for agents and scripts. Draft PRs are excluded by default; pass
+# --include-drafts to list them too. The current repository's upstream remote
 # is preferred over origin. PR_LIST_REPO can also override repository lookup.
 set -euo pipefail
 
@@ -42,12 +43,17 @@ FORMAT="text"
 # gh requires a numeric ceiling; use a deliberately high default so normal
 # invocations represent all open PRs while --limit can bound large responses.
 LIMIT=10000
+INCLUDE_DRAFTS=0
 REPO="${PR_LIST_REPO:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --json)
       FORMAT="json"
+      shift
+      ;;
+    --include-drafts)
+      INCLUDE_DRAFTS=1
       shift
       ;;
     --limit)
@@ -90,6 +96,12 @@ fetch_prs() {
 }
 
 RAW=$(fetch_prs) || { fail "could not list pull requests for $REPO"; exit 1; }
+
+# Draft PRs are excluded by default; --include-drafts keeps them. Filtering here
+# also spares the mergeability resolution loop below any work on drafts.
+if [ "$INCLUDE_DRAFTS" -eq 0 ]; then
+  RAW=$(jq '[.[] | select(.isDraft | not)]' <<<"$RAW")
+fi
 
 # GitHub may return UNKNOWN while it computes mergeability. A second list query
 # usually resolves it; fall back to targeted PR queries for anything still
