@@ -13,10 +13,9 @@ the source of truth, so source changes appear in `git diff`.
 | `claude/settings.json` | `~/.claude/settings.json` (hooks, statusline, plugins) |
 | `claude/mcp.json` | `~/.claude/mcp.json` |
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
-| `claude/skills/<name>/` | `~/.claude/skills/<name>` (one link per skill dir) |
+| `skills/<name>/` | `~/.claude/skills/<name>`, `~/.codex/skills/<name>` (one canonical source) |
 | `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
-| `codex/skills/<name>/` | `~/.codex/skills/<name>` (one link per skill dir) |
 | `zshrc` | sourced from `~/.zshrc` via an appended loader line |
 
 `RULES.md` is the single source of truth for agent instructions: it is
@@ -28,6 +27,11 @@ share the same rules. Edit `RULES.md` and the change is live for every agent
 `agents/` is the single source of truth for reusable subagents. Do not edit the
 generated cache or installed harness files; edit `agent.json` or
 `instructions.md`, then re-run `install.sh`.
+
+`skills/` is the single source of truth for reusable skills. Each
+`skills/<name>/` contains a `SKILL.md` and any optional `scripts/`,
+`references/`, `assets/`, or `agents/openai.yaml` resources. The same directory
+is linked into Claude and Codex.
 
 `zshrc` holds only custom functions and aliases. `~/.zshrc` and `~/.zshenv`
 remain local machine-specific files (oh-my-zsh setup, PATH exports, tool
@@ -57,8 +61,8 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
   `agents/<agent-name>/`, then run `./install.sh`. It builds native files into
   `~/.config/workspace/generated-agents/` and links them into both harnesses.
   Use `bin/build-agents --check` to validate sources without installing them.
-- New skill: add a directory with a `SKILL.md` under `claude/skills/`,
-  re-run `./install.sh`.
+- New skill: add `skills/<skill-name>/SKILL.md`, keep bundled resources inside
+  that directory, run `bin/check-skills`, then re-run `./install.sh`.
 - New slash command: create `claude/commands/`, add it to `install.sh` the
   same way agents are handled, and re-run.
 
@@ -177,8 +181,8 @@ them as "Update submodule pointers". `--no-commit` stages only.
 
 ## Notes
 
-- The `humanizer` and `solana-dev` skills were originally managed by the
-  `~/.agents` skill manager (see its `.skill-lock.json`); they are vendored
-  here as plain copies, so update them by re-copying from upstream.
+- The `humanizer` skill was originally managed by the `~/.agents` skill
+  manager (see its `.skill-lock.json`). It is vendored here as a plain copy,
+  so update it by re-copying from upstream and rerunning `bin/check-skills`.
 - `worktree/` and `worktrees/` are gitignored — feature branches may live in
   either convention without polluting repository status.
