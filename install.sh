@@ -71,8 +71,8 @@ link "$REPO_ROOT/claude/settings.json"          "$HOME/.claude/settings.json"
 link "$REPO_ROOT/claude/mcp.json"               "$HOME/.claude/mcp.json"
 link "$REPO_ROOT/claude/statusline-command.sh"  "$HOME/.claude/statusline-command.sh"
 
-# Agents: one symlink per .md file so Claude Code can still drop new files
-# into ~/.claude/agents without touching the repo.
+# Agents: generated from agents/ by bin/build-agents. Keep one symlink per file
+# so Claude Code can still drop local files into ~/.claude/agents.
 for f in "$REPO_ROOT"/claude/agents/*.md; do
   [ -e "$f" ] || continue
   link "$f" "$HOME/.claude/agents/$(basename "$f")"
@@ -106,6 +106,12 @@ done
 # config.toml is deliberately NOT synced: it mixes machine state (project
 # trust list, marketplace caches) with at least one embedded API key.
 link "$REPO_ROOT/codex/hooks.json"  "$HOME/.codex/hooks.json"
+
+# Agents: generated from the same shared sources as Claude agents.
+for f in "$REPO_ROOT"/codex/agents/*.toml; do
+  [ -e "$f" ] || continue
+  link "$f" "$HOME/.codex/agents/$(basename "$f")"
+done
 
 for d in "$REPO_ROOT"/codex/skills/*/; do
   [ -d "$d" ] || continue
