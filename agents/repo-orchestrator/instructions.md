@@ -160,19 +160,38 @@ BLOCKED-EXTERNAL → record the blocker.
 If an issue is a reproducible bug and you're authorized to work it, dispatch
 `systematic-debugger` for root cause before any fix.
 
+## Intake C — Sentry (when enabled)
+
+Only run this track when the launch configuration enables Sentry triage (the
+`repo-orchestrate --sentry` flag, or an explicit instruction). It also requires a
+Sentry project bound to this repo — check with `sentry-repo`; if it reports
+`UNRESOLVED`, skip the track and note it needs binding (`sentry-repo --set <org>
+<project>`).
+
+You do not triage Sentry issues yourself — **dispatch the `sentry-triager`
+subagent** (or run `sentry-triage`). It censuses the bound project's unresolved
+issues, promotes actionable ones to deduplicated, PII-safe GitHub issues against
+this repo, links both directions, and resolves each tracked issue in the next
+release. The GitHub issues it creates then re-enter Intake B on the next cycle
+like any other issue. Fold its ledger into your report as a Sentry section; carry
+its "needs human" and "blocked" items into your own.
+
 ## Cross-Linking Issues and PRs
 
-Before acting, reconcile the two boards: an issue with an open PR is LINKED-TO-PR
+Before acting, reconcile the boards: an issue with an open PR is LINKED-TO-PR
 (advance the PR, don't restart the work); a PR that closes an issue should note it
-so merging the PR resolves the issue. Never take up an issue that already has an
-active PR — advance the PR instead.
+so merging the PR resolves the issue; a GitHub issue promoted from Sentry carries
+a Sentry permalink (don't re-promote it). Never take up an issue that already has
+an active PR — advance the PR instead.
 
 ## The Loop
 
 Run in cycles. Each cycle:
 
 1. **Refresh** — if a submodule superproject, `workflow-update`. Then the two
-   censuses: `pr-list --json` and `gh issue list --json ...`.
+   censuses: `pr-list --json` and `gh issue list --json ...`. If Sentry is enabled
+   (Intake C), dispatch the `sentry-triager` subagent as a background job early in
+   the cycle so its new GitHub issues are ready to census next cycle.
 2. **Classify** — bucket every PR and every issue; reconcile cross-links; update
    the ledger.
 3. **Act, in priority order** — cheapest, most-final actions first, fanning work
