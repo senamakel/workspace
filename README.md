@@ -62,6 +62,18 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 - New slash command: create `claude/commands/`, add it to `install.sh` the
   same way agents are handled, and re-run.
 
+## Shared Agents
+
+- `pr-contribution-triager` decides whether a PR is a genuine, repo-aligned
+  contribution or applies `needs-manual-review`.
+- `pr-approval-reviewer` performs final technical review. It approves only a
+  fully inspected, green, stable revision; otherwise it leaves one actionable
+  non-blocking review comment.
+- `gh-issue-triager` investigates duplicates and relevance, then either closes
+  a high-confidence dropped issue with evidence or enriches an escalated issue
+  with a managed, code-grounded implementation plan.
+- `ai-engineer` handles production AI/ML implementation and review work.
+
 ## Tools
 
 ### `worktree <slug> [--json]`
