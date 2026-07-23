@@ -39,7 +39,9 @@ resolve_repo() {
 }
 
 FORMAT="text"
-LIMIT=100
+# gh requires a numeric ceiling; use a deliberately high default so normal
+# invocations represent all open PRs while --limit can bound large responses.
+LIMIT=10000
 REPO="${PR_LIST_REPO:-}"
 
 while [ $# -gt 0 ]; do
