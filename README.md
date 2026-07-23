@@ -8,19 +8,22 @@ as symlinks by `install.sh`, so this repo is the source of truth and
 
 | Repo path | Installed to |
 |---|---|
-| `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` (global Claude Code instructions) |
+| `rules.md` | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.codex/CODEX.md`, `~/.config/opencode/AGENTS.md` (one shared rules file, linked into every agent) |
 | `claude/settings.json` | `~/.claude/settings.json` (hooks, statusline, plugins) |
 | `claude/mcp.json` | `~/.claude/mcp.json` |
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `claude/agents/*.md` | `~/.claude/agents/<name>.md` (one link per file) |
 | `claude/skills/<name>/` | `~/.claude/skills/<name>` (one link per skill dir) |
 | `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
-| `codex/AGENTS.md` | `~/.codex/AGENTS.md` |
-| `codex/CODEX.md` | `~/.codex/CODEX.md` |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
 | `codex/skills/<name>/` | `~/.codex/skills/<name>` (one link per skill dir) |
-| `opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` (global opencode instructions) |
 | `zshrc` | sourced from `~/.zshrc` via an appended loader line |
+
+`rules.md` is the single source of truth for agent instructions: it is
+symlinked into each agent's own instructions file (Claude's `CLAUDE.md`,
+Codex's `AGENTS.md`/`CODEX.md`, opencode's `AGENTS.md`), so all three always
+share the same rules. Edit `rules.md` and the change is live for every agent
+(re-run `install.sh` only if a link is missing).
 
 `zshrc` holds only custom functions and aliases. `~/.zshrc` and `~/.zshenv`
 remain local machine-specific files (oh-my-zsh setup, PATH exports, tool

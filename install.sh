@@ -57,8 +57,16 @@ link() {
   echo "[link] $dest -> $src"
 }
 
+# --- Shared agent rules -------------------------------------------------------
+# One canonical rules.md is symlinked into every agent's instructions file so
+# claude, codex, and opencode always share the same Local Workflow Preferences.
+# Edit rules.md and re-run to update all of them at once.
+link "$REPO_ROOT/rules.md"  "$HOME/.claude/CLAUDE.md"
+link "$REPO_ROOT/rules.md"  "$HOME/.codex/AGENTS.md"
+link "$REPO_ROOT/rules.md"  "$HOME/.codex/CODEX.md"
+link "$REPO_ROOT/rules.md"  "$HOME/.config/opencode/AGENTS.md"
+
 # --- Claude Code global config ------------------------------------------------
-link "$REPO_ROOT/claude/CLAUDE.md"              "$HOME/.claude/CLAUDE.md"
 link "$REPO_ROOT/claude/settings.json"          "$HOME/.claude/settings.json"
 link "$REPO_ROOT/claude/mcp.json"               "$HOME/.claude/mcp.json"
 link "$REPO_ROOT/claude/statusline-command.sh"  "$HOME/.claude/statusline-command.sh"
@@ -94,10 +102,9 @@ for f in "$REPO_ROOT"/bin/*; do
 done
 
 # --- Codex global config ------------------------------------------------------
+# AGENTS.md / CODEX.md are linked from the shared rules block above.
 # config.toml is deliberately NOT synced: it mixes machine state (project
 # trust list, marketplace caches) with at least one embedded API key.
-link "$REPO_ROOT/codex/AGENTS.md"   "$HOME/.codex/AGENTS.md"
-link "$REPO_ROOT/codex/CODEX.md"    "$HOME/.codex/CODEX.md"
 link "$REPO_ROOT/codex/hooks.json"  "$HOME/.codex/hooks.json"
 
 for d in "$REPO_ROOT"/codex/skills/*/; do
@@ -107,10 +114,9 @@ for d in "$REPO_ROOT"/codex/skills/*/; do
 done
 
 # --- opencode global config ---------------------------------------------------
-# opencode reads global custom instructions from ~/.config/opencode/AGENTS.md.
+# AGENTS.md is linked from the shared rules block above.
 # opencode.jsonc and the node_modules/package.json alongside it are local,
 # gitignored machine state and are deliberately NOT synced.
-link "$REPO_ROOT/opencode/AGENTS.md"  "$HOME/.config/opencode/AGENTS.md"
 
 # --- zsh ----------------------------------------------------------------------
 # zshrc holds only our custom functions/aliases. ~/.zshrc stays a local,
