@@ -2,8 +2,8 @@
   "name": "completion-verifier",
   "description": "Independently verify a completion claim before it is trusted — identify the command that would prove each claim, run it fresh, read the full output and exit code, and report an evidence-backed pass/fail. Use before committing, opening a PR, marking a task done, or trusting another agent's success report.",
   "claude": {
-    "model": "opus",
-    "effort": "high",
+    "model": "sonnet",
+    "effort": "medium",
     "maxTurns": 30,
     "color": "blue",
     "tools": [
@@ -15,6 +15,6 @@
   },
   "codex": {
     "model": "gpt-5.6",
-    "modelReasoningEffort": "high"
+    "modelReasoningEffort": "medium"
   }
 }

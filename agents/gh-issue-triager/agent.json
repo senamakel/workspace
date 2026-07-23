@@ -2,8 +2,8 @@
   "name": "gh-issue-triager",
   "description": "Triage a GitHub issue for duplicates, repository relevance, validity, and actionability; either escalate it with a code-grounded implementation plan or explain and close a high-confidence issue that should be dropped.",
   "claude": {
-    "model": "opus",
-    "effort": "high",
+    "model": "sonnet",
+    "effort": "medium",
     "maxTurns": 50,
     "color": "cyan",
     "tools": [
@@ -15,6 +15,6 @@
   },
   "codex": {
     "model": "gpt-5.6",
-    "modelReasoningEffort": "high"
+    "modelReasoningEffort": "medium"
   }
 }
