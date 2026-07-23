@@ -257,16 +257,27 @@ repo-orchestrate -R tinyhumansai/openhuman --limit 30
 For continuous operation, wrap it in the `/loop` skill or a scheduled run — each
 tick is one triage cycle.
 
-### Sentry helpers (`sentry-issues`, `sentry-issue`, `sentry-resolve`, `sentry-link`, `sentry-release`)
+### Sentry helpers (`sentry-issues`, `sentry-issue`, `sentry-resolve`, `sentry-link`, `sentry-release`, `sentry-repo`)
 
 A small toolkit that turns Sentry into agent-friendly reports and actions,
-backing the `sentry-triager` agent. All share `bin/sentry-lib.sh` and read the
-same config `sentry-cli` reads: `SENTRY_AUTH_TOKEN` (required), `SENTRY_ORG`,
-`SENTRY_PROJECT`, `SENTRY_URL` (default `https://sentry.io`; set for
-self-hosted). The report/issue/resolve/link tools call the Sentry Web API for
-structured JSON (`sentry-cli` does not expose issue data in an agent-friendly
-form); `sentry-release`'s `new`/`finalize` wrap `sentry-cli` directly.
+backing the `sentry-triager` agent. Install the CLI on a new box with
+`install-sentry-cli` (official installer, sudo-safe). All share
+`bin/sentry-lib.sh` and read the same config `sentry-cli` reads:
+`SENTRY_AUTH_TOKEN` (required), `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`
+(default `https://sentry.io`; set for self-hosted). The report/issue/resolve/link
+tools call the Sentry Web API for structured JSON (`sentry-cli` does not expose
+issue data in an agent-friendly form); `sentry-release`'s `new`/`finalize` wrap
+`sentry-cli` directly.
 
+**Repo-aware:** the helpers resolve `org`/`project` for the current git repo
+automatically, so from inside a bound repo you can drop `--org`/`--project`.
+Precedence: flags/env → repo `.sentryclirc` → repo→project map
+(`~/.config/sentry/repos.tsv`, override `SENTRY_REPO_MAP`) → `~/.sentryclirc`.
+Bind and inspect the current repo with `sentry-repo`.
+
+- `sentry-repo` — show the Sentry context resolved for the current repo;
+  `--set <org> <project>` binds it (user map, never touches the repo), `--list`,
+  `--unset`, `--write-rc` (write a repo-local `.sentryclirc`), `--json`.
 - `sentry-issues [--json] [--status ...] [--query ...] [--limit N] [--stats-period ...]`
   — a project's issues (default unresolved, most frequent first): shortId,
   level, culprit, event/user counts, first/last seen, assignee, permalink.
@@ -283,7 +294,9 @@ form); `sentry-release`'s `new`/`finalize` wrap `sentry-cli` directly.
   (`list`/`latest` via API) and `sentry-cli` wrappers (`new`/`finalize`).
 
 ```sh
-sentry-issues --json
+sentry-repo --set acme web-app     # bind this repo -> Sentry acme/web-app
+sentry-repo                         # show what this repo listens to
+sentry-issues --json               # no --org/--project needed once bound
 sentry-issue MYAPP-9F --json
 sentry-resolve MYAPP-9F --in-next-release
 sentry-link MYAPP-9F https://github.com/org/repo/issues/128
