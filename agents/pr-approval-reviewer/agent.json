@@ -1,0 +1,20 @@
+{
+  "name": "pr-approval-reviewer",
+  "description": "Perform a final evidence-based GitHub pull request review and either approve a safe, correct, fully green PR or leave one actionable review comment explaining why it cannot be approved.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 50,
+    "color": "purple",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
