@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# deepcode — Claude Code, but driven by DeepSeek models via OpenRouter.
+#
+# Usage: deepcode [claude args...]
+#
+#   deepcode                        interactive session on DeepSeek V4
+#   deepcode -p "explain this repo"  one-shot print mode
+#   deepcode --yolo                 pass any flag straight through to claude
+#
+# This is a thin wrapper: it sets the Anthropic-compatible OpenRouter
+# endpoint and DeepSeek model mappings in this process only, then exec's
+# `claude`. Your normal `claude` (pointed at Anthropic) is untouched.
+#
+# Requires OPENROUTER_API_KEY in the environment (kept out of this repo;
+# set it in your ~/.zshrc). Model IDs can be overridden:
+#
+#   DEEPCODE_MODEL       main/heavy model   (default: deepseek/deepseek-v4-pro)
+#   DEEPCODE_FAST_MODEL  fast/background     (default: deepseek/deepseek-v4-flash)
+set -euo pipefail
+
+if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+  echo "deepcode: OPENROUTER_API_KEY is not set." >&2
+  echo "  Add it to your ~/.zshrc: export OPENROUTER_API_KEY=sk-or-..." >&2
+  exit 1
+fi
+
+if ! command -v claude >/dev/null 2>&1; then
+  echo "deepcode: 'claude' CLI not found on PATH." >&2
+  exit 1
+fi
+
+pro="${DEEPCODE_MODEL:-deepseek/deepseek-v4-pro}"
+flash="${DEEPCODE_FAST_MODEL:-deepseek/deepseek-v4-flash}"
+
+# Route through OpenRouter's Anthropic-compatible endpoint.
+export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
+export ANTHROPIC_API_KEY=""   # blank so the SDK uses the auth token above
+
+# Map every Claude tier onto DeepSeek: heavy tiers -> pro, fast/sub -> flash.
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$pro"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$pro"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$flash"
+export ANTHROPIC_SMALL_FAST_MODEL="$flash"   # legacy name, still honored
+export CLAUDE_CODE_SUBAGENT_MODEL="$flash"
+
+exec claude "$@"
