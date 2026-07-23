@@ -163,10 +163,11 @@ atomic-commit "bin: add worktree helper" -- bin/worktree .gitignore
 atomic-commit --json "docs: explain setup" -- README.md
 ```
 
-### `pr-list [--json] [--limit <count>] [-R|--repo <owner/name>]`
+### `pr-list [--json] [--limit <count>] [--include-drafts] [-R|--repo <owner/name>]`
 
 Lists open pull requests for the current repository, preferring its
-`upstream` remote over `origin`. The concise default report includes each
+`upstream` remote over `origin`. **Draft PRs are excluded by default**; pass
+`--include-drafts` to list them too. The concise default report includes each
 PR's title, shortened body, review state, CI summary, branches, and
 mergeability (`can_merge`, `has_conflicts`, `blocked`, `behind_base`, or
 `unstable`). Use `--json` for stable, structured agent input, or `--repo` to
@@ -175,6 +176,7 @@ inspect another repository from any directory.
 ```sh
 pr-list
 pr-list --json
+pr-list --include-drafts
 pr-list --repo tinyhumansai/openhuman --limit 20
 ```
 
@@ -204,6 +206,7 @@ remote, i.e. the canonical `tinyhumansai/*` repo), merges the base branch in
 to the contributor's fork so `git push` updates the PR, then launches the
 chosen harness (default `claude`) with a fix-the-PR prompt plus any extra
 text. When the harness exits you're asked whether to delete the worktree.
+Draft PRs are refused by default; set `PR_FIX_ALLOW_DRAFT=1` to work one anyway.
 `PR_FIX_SAFE=1` disables the yolo/bypass flags; `PR_FIX_REPO` overrides repo
 resolution. Conventions follow `tinyhumansai/openhuman/scripts/shortcuts`.
 

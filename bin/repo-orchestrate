@@ -161,7 +161,7 @@ read it if available and follow it exactly.
 
 Your job: triage ALL open work — every open issue AND every open pull request —
 and loop until the board is in a known state. Each cycle:
-  - Census: \`pr-list --json\` for PRs and \`gh issue list --json number,title,labels,assignees,updatedAt,comments\` for issues.
+  - Census: \`pr-list --json\` for PRs (draft PRs are excluded by default — ignore drafts entirely) and \`gh issue list --json number,title,labels,assignees,updatedAt,comments\` for issues.
   - Classify every PR and issue into exactly one bucket, and reconcile issue<->PR
     cross-links (never take up an issue that already has an active PR).
   - Route each item:
