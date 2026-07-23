@@ -1,0 +1,22 @@
+{
+  "name": "systematic-debugger",
+  "description": "Investigate a bug, test failure, or unexpected behavior to its root cause using a strict four-phase method before proposing any fix, then optionally implement the minimal root-cause fix behind a failing regression test. Use for any technical issue where guessing would waste time.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 50,
+    "color": "red",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Edit",
+      "Write"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "tdd-implementer",
+  "description": "Implement one well-specified feature, task, or bugfix using strict red-green-refactor test-driven development, commit the work in scoped commits, self-review, and report status (DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT). Use as the per-task implementer in plan execution or for any isolated implementation with a clear spec.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 60,
+    "color": "green",
+    "tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
