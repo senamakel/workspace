@@ -3,7 +3,7 @@
 #
 # Usage: worktree <slug> [--json]
 #
-# Creates or reuses branch <slug> at <repo>/worktree/<slug>. New branches start
+# Creates or reuses branch <slug> at <repo>/worktrees/<slug>. New branches start
 # at the current HEAD. Submodules are initialized recursively in the resulting
 # worktree. The final report is stable and suitable for agent orchestration.
 set -euo pipefail
@@ -63,7 +63,7 @@ git check-ref-format --branch "$SLUG" >/dev/null 2>&1 \
 
 TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null) \
   || { fail "not inside a Git repository"; exit 1; }
-WT_PARENT="$TOPLEVEL/worktree"
+WT_PARENT="$TOPLEVEL/worktrees"
 WT_DIR="$WT_PARENT/$SLUG"
 CREATED=true
 

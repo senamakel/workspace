@@ -1,6 +1,6 @@
 # Local Workflow Preferences
 
-- For any new implementation or audit work, run `worktree <slug>` before editing and work inside the reported `./worktree/<slug>` path. The command creates or reuses the matching feature branch and initializes recursive submodules. Do not do new work directly on `main`.
+- For any new implementation or audit work, run `worktree <slug>` before editing and work inside the reported `./worktrees/<slug>` path. The command creates or reuses the matching feature branch and initializes recursive submodules. Do not do new work directly on `main`.
 
 - Make a lot of small, focused commits along the way. Prefer committing coherent checkpoints after each meaningful slice is implemented and validated instead of saving everything for one large final commit.
 
