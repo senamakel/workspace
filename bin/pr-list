@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# pr-list — summarize open pull requests for the current GitHub repository.
+#
+# Usage: pr-list [--json] [--limit <count>] [-R|--repo <owner/name>]
+#
+# Reports each PR's title, shortened body, review state, checks, and
+# mergeability. Human-readable output is the default; --json emits a stable
+# document for agents and scripts. The current repository's upstream remote
+# is preferred over origin. PR_LIST_REPO can also override repository lookup.
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+require() {
+  local bin
+  for bin in "$@"; do
+    command -v "$bin" >/dev/null 2>&1 \
+      || { fail "missing required tool: $bin"; exit 1; }
+  done
+}
+
+resolve_repo() {
+  if [ -n "$REPO" ]; then
+    printf '%s\n' "$REPO"
+    return
+  fi
+
+  local url
+  url=$(git remote get-url upstream 2>/dev/null || git remote get-url origin 2>/dev/null) \
+    || { fail "no upstream or origin remote found"; exit 1; }
+  printf '%s\n' "$url" \
+    | sed -E 's#^git@github\.com:##; s#^https?://github\.com/##; s#\.git$##'
+}
+
+FORMAT="text"
+LIMIT=100
+REPO="${PR_LIST_REPO:-}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)
+      FORMAT="json"
+      shift
+      ;;
+    --limit)
+      [ $# -ge 2 ] || { fail "--limit requires a value"; usage; exit 1; }
+      LIMIT="$2"
+      shift 2
+      ;;
+    -R|--repo)
+      [ $# -ge 2 ] || { fail "$1 requires an owner/name value"; usage; exit 1; }
+      REPO="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+case "$LIMIT" in
+  ''|*[!0-9]*|0) fail "--limit must be a positive integer"; exit 1 ;;
+esac
+
+require gh jq
+if [ -z "$REPO" ]; then
+  require git
+  git rev-parse --git-dir >/dev/null 2>&1 \
+    || { fail "not inside a git repository; pass --repo owner/name"; exit 1; }
+fi
+REPO=$(resolve_repo)
+
+fetch_prs() {
+  gh pr list -R "$REPO" --state open --limit "$LIMIT" \
+    --json number,title,body,url,author,isDraft,baseRefName,headRefName,updatedAt,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup
+}
+
+RAW=$(fetch_prs) || { fail "could not list pull requests for $REPO"; exit 1; }
+
+# GitHub may return UNKNOWN while it computes mergeability. A second list query
+# usually resolves it; fall back to targeted PR queries for anything still
+# unknown so conflict reporting remains useful.
+if jq -e 'any(.[]; .mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN")' \
+  >/dev/null <<<"$RAW"; then
+  RAW=$(fetch_prs) || { fail "could not refresh mergeability for $REPO"; exit 1; }
+fi
+while IFS= read -r pr_number; do
+  [ -n "$pr_number" ] || continue
+  merge_details=$(gh pr view "$pr_number" -R "$REPO" --json mergeable,mergeStateStatus) \
+    || { fail "could not resolve mergeability for PR #$pr_number"; exit 1; }
+  RAW=$(jq --argjson number "$pr_number" --argjson details "$merge_details" '
+    map(if .number == $number then . + $details else . end)
+  ' <<<"$RAW")
+done < <(jq -r '.[] | select(.mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN") | .number' <<<"$RAW")
+
+REPORT=$(jq --arg repository "$REPO" '
+  def compact_text:
+    gsub("[[:space:]]+"; " ") | sub("^ "; "") | sub(" $"; "");
+  def body_summary:
+    (. // "" | compact_text) as $body
+    | if ($body | length) == 0 then "(no description)"
+      elif ($body | length) <= 240 then $body
+      else $body[0:239] + "…"
+      end;
+  def check_state:
+    (.conclusion // .state // .status // "UNKNOWN") | ascii_upcase;
+  def normalized_checks:
+    [.[] | {
+      name: (.name // .context // "unnamed check"),
+      state: check_state,
+      url: (.detailsUrl // .targetUrl // null)
+    }];
+  def check_summary:
+    normalized_checks as $checks
+    | {
+        overall:
+          (if ($checks | length) == 0 then "no_checks"
+           elif any($checks[]; (.state == "FAILURE" or .state == "ERROR" or
+             .state == "CANCELLED" or .state == "TIMED_OUT" or
+             .state == "ACTION_REQUIRED" or .state == "STARTUP_FAILURE" or
+             .state == "STALE")) then "failing"
+           elif any($checks[]; (.state != "SUCCESS" and .state != "NEUTRAL" and
+             .state != "SKIPPED")) then "pending"
+           else "passing"
+           end),
+        passing: [$checks[] | select(.state == "SUCCESS" or .state == "NEUTRAL" or .state == "SKIPPED")] | length,
+        pending: [$checks[] | select(.state != "SUCCESS" and .state != "NEUTRAL" and
+          .state != "SKIPPED" and .state != "FAILURE" and .state != "ERROR" and
+          .state != "CANCELLED" and .state != "TIMED_OUT" and
+          .state != "ACTION_REQUIRED" and .state != "STARTUP_FAILURE" and
+          .state != "STALE")] | length,
+        failing: [$checks[] | select(.state == "FAILURE" or .state == "ERROR" or
+          .state == "CANCELLED" or .state == "TIMED_OUT" or
+          .state == "ACTION_REQUIRED" or .state == "STARTUP_FAILURE" or
+          .state == "STALE")] | length,
+        items: $checks
+      };
+  def merge_status:
+    if .mergeable == "CONFLICTING" or .mergeStateStatus == "DIRTY" then "has_conflicts"
+    elif .mergeable == "UNKNOWN" then "unknown"
+    elif .mergeStateStatus == "BLOCKED" then "blocked"
+    elif .mergeStateStatus == "BEHIND" then "behind_base"
+    elif .mergeStateStatus == "UNSTABLE" then "unstable"
+    elif .mergeable == "MERGEABLE" then "can_merge"
+    else "unknown"
+    end;
+
+  {
+    repository: $repository,
+    openPullRequests: length,
+    pullRequests: [
+      .[] | {
+        number,
+        title,
+        bodySummary: (.body | body_summary),
+        url,
+        author: (.author.login // null),
+        status: (if .isDraft then "draft" else "open" end),
+        reviewDecision: (if (.reviewDecision // "") == "" then "NONE" else .reviewDecision end),
+        branches: {base: .baseRefName, head: .headRefName},
+        mergeability: {
+          status: merge_status,
+          mergeable: .mergeable,
+          mergeStateStatus: .mergeStateStatus
+        },
+        checks: (.statusCheckRollup | check_summary),
+        updatedAt
+      }
+    ]
+  }
+' <<<"$RAW")
+
+if [ "$FORMAT" = "json" ]; then
+  jq . <<<"$REPORT"
+  exit 0
+fi
+
+jq -r '
+  "Repository: \(.repository)",
+  "Open pull requests: \(.openPullRequests)",
+  (.pullRequests[] |
+    "",
+    "#\(.number) \(.title)",
+    "  URL: \(.url)",
+    "  Body: \(.bodySummary)",
+    "  Status: \(.status); review: \(.reviewDecision)",
+    "  Merge: \(.mergeability.status) (\(.mergeability.mergeStateStatus))",
+    "  Checks: \(.checks.overall) (\(.checks.passing) passing, \(.checks.pending) pending, \(.checks.failing) failing)",
+    "  Branches: \(.branches.head) -> \(.branches.base)",
+    (if .checks.failing > 0 then
+      "  Failing: \([.checks.items[] | select(.state == "FAILURE" or .state == "ERROR" or
+        .state == "CANCELLED" or .state == "TIMED_OUT" or .state == "ACTION_REQUIRED" or
+        .state == "STARTUP_FAILURE" or .state == "STALE") | .name] | unique | join(", "))"
+     else empty end)
+  )
+' <<<"$REPORT"
