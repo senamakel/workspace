@@ -1,0 +1,21 @@
+{
+  "name": "plan-writer",
+  "description": "Turn an approved spec or set of requirements into a comprehensive, bite-sized, TDD-structured implementation plan document — exact file paths, complete code per step, interfaces between tasks, no placeholders — saved to docs/plans/. Use after a design is agreed and before any implementation begins.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 40,
+    "color": "cyan",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Write"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
