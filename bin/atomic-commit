@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# atomic-commit — commit only an explicit list of files.
+#
+# Usage: atomic-commit [--json] "<scoped message>" -- <path> [<path>...]
+#
+# Unstages the repository first without discarding working-tree changes, then
+# stages and commits only the named repo-relative files. Directories, unchanged
+# paths, path traversal, and implicit catch-all pathspecs are rejected.
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+require() {
+  local bin
+  for bin in "$@"; do
+    command -v "$bin" >/dev/null 2>&1 \
+      || { fail "missing required tool: $bin"; exit 1; }
+  done
+}
+
+FORMAT="text"
+MESSAGE=""
+SAW_SEPARATOR=0
+PATHS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)
+      [ "$SAW_SEPARATOR" -eq 0 ] \
+        || { fail "--json must appear before the commit message"; usage; exit 1; }
+      FORMAT="json"
+      shift
+      ;;
+    --)
+      [ -n "$MESSAGE" ] || { fail "a commit message is required before --"; usage; exit 1; }
+      SAW_SEPARATOR=1
+      shift
+      while [ $# -gt 0 ]; do
+        PATHS+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      fail "unknown option: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      [ -z "$MESSAGE" ] || { fail "paths must follow an explicit -- separator"; usage; exit 1; }
+      MESSAGE="$1"
+      shift
+      ;;
+  esac
+done
+
+[ -n "$MESSAGE" ] || { fail "a non-empty scoped commit message is required"; usage; exit 1; }
+[ "$SAW_SEPARATOR" -eq 1 ] || { fail "use -- before the explicit file list"; usage; exit 1; }
+[ "${#PATHS[@]}" -gt 0 ] || { fail "at least one explicit file path is required"; exit 1; }
+
+require git jq
+TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null) \
+  || { fail "not inside a Git repository"; exit 1; }
+PREFIX=$(git rev-parse --show-prefix)
+cd "$TOPLEVEL"
+
+NORMALIZED_PATHS=()
+for supplied_path in "${PATHS[@]}"; do
+  case "$supplied_path" in
+    ''|.|..|/|:/*|/*|../*|*/../*|*/..)
+      fail "path must name one repo-relative file without traversal: $supplied_path"
+      exit 1
+      ;;
+  esac
+
+  normalized_path="${PREFIX}${supplied_path#./}"
+  case "$normalized_path" in
+    ''|.|..|../*|*/../*|*/..)
+      fail "path resolves outside the repository: $supplied_path"
+      exit 1
+      ;;
+  esac
+
+  if [ -d "$normalized_path" ]; then
+    fail "directories are not allowed; list each file explicitly: $supplied_path"
+    exit 1
+  fi
+  if [ ! -e "$normalized_path" ] && [ ! -L "$normalized_path" ] &&
+    ! git ls-files --error-unmatch -- "$normalized_path" >/dev/null 2>&1; then
+    fail "path does not exist and is not a tracked deletion: $supplied_path"
+    exit 1
+  fi
+  if [ -z "$(git status --porcelain=v1 --untracked-files=all -- "$normalized_path")" ]; then
+    fail "path has no changes to commit: $supplied_path"
+    exit 1
+  fi
+
+  if [ "${#NORMALIZED_PATHS[@]}" -gt 0 ]; then
+    for existing_path in "${NORMALIZED_PATHS[@]}"; do
+      [ "$existing_path" != "$normalized_path" ] \
+        || { fail "path was supplied more than once: $supplied_path"; exit 1; }
+    done
+  fi
+  NORMALIZED_PATHS+=("$normalized_path")
+done
+
+UNRELATED_STAGED=0
+while IFS= read -r staged_path; do
+  [ -n "$staged_path" ] || continue
+  is_explicit=0
+  for normalized_path in "${NORMALIZED_PATHS[@]}"; do
+    [ "$staged_path" != "$normalized_path" ] || is_explicit=1
+  done
+  [ "$is_explicit" -eq 1 ] || UNRELATED_STAGED=$((UNRELATED_STAGED + 1))
+done < <(git diff --cached --name-only)
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  git restore --staged :/
+else
+  git rm --cached -r --ignore-unmatch :/ >/dev/null
+fi
+
+git add -- "${NORMALIZED_PATHS[@]}"
+if git diff --cached --quiet -- "${NORMALIZED_PATHS[@]}"; then
+  fail "explicit paths produced no staged changes"
+  exit 1
+fi
+git diff --cached --check -- "${NORMALIZED_PATHS[@]}"
+
+if ! COMMIT_OUTPUT=$(git commit -m "$MESSAGE" -- "${NORMALIZED_PATHS[@]}" 2>&1); then
+  fail "git commit failed"
+  printf '%s\n' "$COMMIT_OUTPUT" >&2
+  exit 1
+fi
+
+COMMIT_SHA=$(git rev-parse HEAD)
+COMMIT_SHORT=$(git rev-parse --short HEAD)
+COMMITTED_PATHS=$(git diff-tree --root --no-commit-id --name-only -r HEAD | jq -R -s 'split("\n") | map(select(length > 0))')
+
+REPORT=$(jq -n \
+  --arg repository "$TOPLEVEL" \
+  --arg commit "$COMMIT_SHA" \
+  --arg commitShort "$COMMIT_SHORT" \
+  --arg message "$MESSAGE" \
+  --argjson files "$COMMITTED_PATHS" \
+  --argjson unrelatedStaged "$UNRELATED_STAGED" '
+  {
+    status: "committed",
+    repository: $repository,
+    commit: $commit,
+    commitShort: $commitShort,
+    message: $message,
+    files: $files,
+    unrelatedStagedPathsPreserved: $unrelatedStaged
+  }
+')
+
+if [ "$FORMAT" = "json" ]; then
+  jq . <<<"$REPORT"
+else
+  jq -r '
+    "[PASS] ATOMIC_COMMIT_CREATED",
+    "  commit: \(.commitShort)",
+    "  message: \(.message)",
+    "  files: \(.files | join(", "))",
+    "  unrelated staged paths preserved and unstaged: \(.unrelatedStagedPathsPreserved)"
+  ' <<<"$REPORT"
+fi

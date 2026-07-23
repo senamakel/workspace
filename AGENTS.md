@@ -27,4 +27,4 @@ For installer changes, exercise both dry-run behavior and idempotency; a second 
 
 ## Commit & Pull Request Guidelines
 
-Recent history favors short, scoped, imperative subjects such as `bin: add deepcode wrapper` and `readme: document the deepcode tool`. Keep commits atomic and explicitly name touched paths when committing. Use a feature branch in `worktrees/`, describe behavior and validation in the PR, and link relevant issues. Screenshots are only needed for user-visible terminal or status-line changes. Open PRs against the canonical upstream repository, not a personal fork.
+Recent history favors short, scoped, imperative subjects such as `bin: add deepcode wrapper` and `readme: document the deepcode tool`. Commit with `atomic-commit "<scoped message>" -- <explicit files...>` so unrelated changes remain uncommitted. Use a feature branch in `worktrees/`, describe behavior and validation in the PR, and link relevant issues. Screenshots are only needed for user-visible terminal or status-line changes. Open PRs against the canonical upstream repository, not a personal fork.
