@@ -106,6 +106,12 @@ for d in "$REPO_ROOT"/codex/skills/*/; do
   link "$d" "$HOME/.codex/skills/$(basename "$d")"
 done
 
+# --- opencode global config ---------------------------------------------------
+# opencode reads global custom instructions from ~/.config/opencode/AGENTS.md.
+# opencode.jsonc and the node_modules/package.json alongside it are local,
+# gitignored machine state and are deliberately NOT synced.
+link "$REPO_ROOT/opencode/AGENTS.md"  "$HOME/.config/opencode/AGENTS.md"
+
 # --- zsh ----------------------------------------------------------------------
 # zshrc holds only our custom functions/aliases. ~/.zshrc stays a local,
 # machine-specific file (oh-my-zsh, PATH exports, installer snippets) that

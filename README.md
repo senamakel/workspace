@@ -19,6 +19,7 @@ as symlinks by `install.sh`, so this repo is the source of truth and
 | `codex/CODEX.md` | `~/.codex/CODEX.md` |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
 | `codex/skills/<name>/` | `~/.codex/skills/<name>` (one link per skill dir) |
+| `opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` (global opencode instructions) |
 | `zshrc` | sourced from `~/.zshrc` via an appended loader line |
 
 `zshrc` holds only custom functions and aliases. `~/.zshrc` and `~/.zshenv`
@@ -28,7 +29,9 @@ installer snippets); `install.sh` keeps a marker-guarded `source` line in
 
 `~/.codex/config.toml` is deliberately not synced: it mixes machine state
 (project trust list, marketplace caches, desktop theme) with at least one
-embedded API key, which must not be committed.
+embedded API key, which must not be committed. Likewise
+`~/.config/opencode/opencode.jsonc` (and the `node_modules`/`package.json`
+opencode keeps beside it) stays local — only `AGENTS.md` is synced.
 
 ## Install
 
