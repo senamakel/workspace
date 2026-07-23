@@ -1,0 +1,20 @@
+{
+  "name": "sentry-triager",
+  "description": "Triage a Sentry project's unresolved issues, promote actionable ones to linked GitHub issues (deduplicated and PII-safe), annotate each Sentry issue with its tracking link, and resolve tracked issues in the next release. Uses the sentry-* helpers and gh, targets the upstream canonical repo, and never leaks user PII or secrets into GitHub.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 60,
+    "color": "purple",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
