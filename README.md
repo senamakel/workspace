@@ -242,7 +242,9 @@ opts into bypass flags, but that defeats the point and is not recommended.)
 By default it is authorized to merge gate-passing PRs and to take up ready work;
 narrow that per launch: `--triage-only` (triage/prepare/surface only, no
 irreversible action), `--no-merge` (everything but merging), `--no-take-up`
-(everything but starting net-new work). `-R owner/name` targets another repo,
+(everything but starting net-new work). Add `--sentry` to also run the Sentry
+intake (dispatches `sentry-triager` for the repo's bound Sentry project).
+`-R owner/name` targets another repo,
 `--limit N` hints the PR census; `REPO_ORCH_REPO` overrides repo resolution. Every
 merge still passes `pr-merge --dry-run`; drafts are always skipped. Shares the
 harness registry shape with `pr-fix`.
@@ -292,6 +294,13 @@ Bind and inspect the current repo with `sentry-repo`.
   tracking URL (comments→notes fallback for self-hosted).
 - `sentry-release list|latest|new|finalize [<version>] [--json]` — release report
   (`list`/`latest` via API) and `sentry-cli` wrappers (`new`/`finalize`).
+
+Spin up the triager itself with `sentry-triage [harness] [--no-resolve]
+[--ignore-noise] [-R owner/repo] [--org O --project P]` — the launcher analogue of
+`repo-orchestrate`: it runs the `sentry-triager` agent in the chosen harness,
+within permissions (no bypass), creating linked GitHub issues and resolving them
+in the next release by default. Or fold Sentry into a full repo sweep with
+`repo-orchestrate --sentry`.
 
 ```sh
 sentry-repo --set acme web-app     # bind this repo -> Sentry acme/web-app
