@@ -1,6 +1,6 @@
 {
   "name": "pr-babysitter",
-  "description": "Maintain a pull request through review and CI: verify unit-test evidence and human or bot feedback, implement confirmed fixes, push atomic commits, resolve addressed threads, and report when the PR is ready for independent approval.",
+  "description": "Babysit a pull request until it is green and clean, no matter what: loop over CI and CodeRabbit/human feedback, fix failures at the root (never skip hooks or disable tests), push atomic commits, reply-in-thread and resolve threads, and keep going across CI cycles until every required check passes and no actionable feedback remains. Paces with ScheduleWakeup when run as a main loop (see the pr-babysit launcher). Reports READY_FOR_APPROVAL, WAITING_ON_CI, or a genuine hard blocker.",
   "claude": {
     "model": "haiku",
     "effort": "medium",

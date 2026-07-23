@@ -76,9 +76,12 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 - `pr-unit-test-reviewer` maps changed behavior to truthful regression
   assertions, identifies misleading or missing tests, and evaluates
   compatibility and independent verifiability without mutating the PR.
-- `pr-babysitter` verifies human and bot feedback, fixes confirmed issues in a
-  prepared PR worktree, pushes atomic commits, resolves addressed threads, and
-  monitors CI before handing the stable PR to the independent approval agent.
+- `pr-babysitter` babysits a PR until it is green and clean, no matter what:
+  loops over CI and CodeRabbit/human feedback, fixes failures at the root (never
+  skipping hooks or disabling tests), pushes atomic commits, replies-in-thread and
+  resolves threads, and keeps going across CI cycles. Run it as a paced main loop
+  with `pr-babysit` (below) so it can actually loop; a dispatched subagent returns
+  `WAITING_ON_CI` when CI outlasts its session.
 - `gh-issue-triager` investigates duplicates and relevance, then either closes
   a high-confidence dropped issue with evidence or enriches an escalated issue
   with a managed, code-grounded implementation plan.
@@ -223,6 +226,26 @@ Harnesses live in a small registry near the top of `bin/pr-fix`
 launch branch. Bypass flags per harness: `claude
 --dangerously-skip-permissions`, `codex
 --dangerously-bypass-approvals-and-sandbox`, `opencode --auto`.
+
+### `pr-babysit [<PR#>] [claude|codex|opencode|deepcode|deepcode-flash] [-R owner/name]`
+
+Babysits a PR until it is **green and clean, no matter what** — the paced,
+main-loop counterpart to the `pr-babysitter` agent. Run it from the PR's checkout
+(e.g. after `pr-fix`) on the PR's branch; it resolves the PR from the current
+branch when `<PR#>` is omitted, embeds the single-source `pr-babysitter` playbook,
+and launches the chosen harness (default `claude`) as a **main loop** that paces
+with `ScheduleWakeup` (~270s/tick) across CI runs — fixing failures at the root,
+handling CodeRabbit/human feedback, pushing, and re-checking until every required
+check passes and no actionable threads remain. Runs within the permission system
+(no bypass; `PR_BABYSIT_YOLO=1` opts in). This is the launcher to use when a
+dispatched subagent "doesn't loop" — subagents can't wait across long CI or use
+`ScheduleWakeup`; this main-loop session can.
+
+```sh
+pr-babysit               # babysit the current branch's open PR until green
+pr-babysit 123 codex
+pr-babysit -R tinyhumansai/openhuman 123
+```
 
 ### `repo-orchestrate [claude|codex|opencode|deepcode|deepcode-flash] [options] [extra prompt...]`
 
