@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# install-sentry-cli — install the Sentry CLI via the official installer.
+#
+# Usage: install-sentry-cli [--force]
+#
+# Idempotent: does nothing if `sentry-cli` is already on PATH (unless --force).
+# Picks a writable install dir so it never hangs on an interactive sudo prompt:
+# /usr/local/bin when writable, else via passwordless sudo, else ~/.local/bin.
+# Repeatable across machines — this is the bootstrap to run on a fresh box.
+set -euo pipefail
+
+FORCE=0
+[ "${1:-}" = "--force" ] && FORCE=1
+
+if command -v sentry-cli >/dev/null 2>&1 && [ "$FORCE" -eq 0 ]; then
+  printf '[skip] sentry-cli already installed: %s (%s)\n' \
+    "$(command -v sentry-cli)" "$(sentry-cli --version 2>/dev/null)"
+  exit 0
+fi
+
+command -v curl >/dev/null 2>&1 || { printf '[FAIL] curl is required\n' >&2; exit 1; }
+
+if [ -w /usr/local/bin ]; then
+  DIR=/usr/local/bin
+elif sudo -n true 2>/dev/null; then
+  DIR=/usr/local/bin   # not writable, but the installer can sudo non-interactively
+else
+  DIR="$HOME/.local/bin"
+  mkdir -p "$DIR"
+fi
+
+printf '[info] installing sentry-cli into %s\n' "$DIR"
+curl -sL https://sentry.io/get-cli/ | INSTALL_DIR="$DIR" bash
+
+if command -v sentry-cli >/dev/null 2>&1; then
+  printf '[PASS] %s (%s)\n' "$(command -v sentry-cli)" "$(sentry-cli --version)"
+else
+  printf '[WARN] installed to %s/sentry-cli but it is not on PATH.\n' "$DIR" >&2
+  printf '       add to your shell rc:  export PATH="%s:$PATH"\n' "$DIR" >&2
+  exit 1
+fi
