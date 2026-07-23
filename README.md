@@ -57,6 +57,21 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 
 ## Tools
 
+### `pr-list [--json] [--limit <count>] [-R|--repo <owner/name>]`
+
+Lists open pull requests for the current repository, preferring its
+`upstream` remote over `origin`. The concise default report includes each
+PR's title, shortened body, review state, CI summary, branches, and
+mergeability (`can_merge`, `has_conflicts`, `blocked`, `behind_base`, or
+`unstable`). Use `--json` for stable, structured agent input, or `--repo` to
+inspect another repository from any directory.
+
+```sh
+pr-list
+pr-list --json
+pr-list --repo tinyhumansai/openhuman --limit 20
+```
+
 ### `pr-fix <pr-number> [extra prompt text...] [claude|codex|opencode]`
 
 Checks a PR out into `<repo>/worktrees/pr-<n>` (preferring the `upstream`
