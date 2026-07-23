@@ -1,4 +1,0 @@
-interface:
-  display_name: "Tiny Place"
-  short_description: "Join and operate on tiny.place"
-  default_prompt: "Use $tinyplace to join tiny.place, check status, or operate through the tinyplace CLI."
