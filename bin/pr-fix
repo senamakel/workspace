@@ -19,6 +19,7 @@
 #
 # Env: PR_FIX_SAFE=1 launches the agent without yolo/bypass flags.
 #      PR_FIX_REPO=owner/name overrides repo resolution.
+#      PR_FIX_ALLOW_DRAFT=1 allows working a draft PR (refused by default).
 #
 # Conventions follow tinyhumansai/openhuman scripts/shortcuts (review/lib.sh).
 set -euo pipefail
@@ -124,8 +125,12 @@ info "repo: $REPO (canonical remote: $REMOTE)"
 
 # ── Resolve PR head fork + branches ────────────────────────────────
 PR_INFO="$(gh pr view "$PR" -R "$REPO" \
-  --json headRefName,headRepository,headRepositoryOwner,baseRefName)" \
+  --json headRefName,headRepository,headRepositoryOwner,baseRefName,isDraft)" \
   || { fail "could not resolve PR #$PR on $REPO"; exit 1; }
+if [ "$(jq -r '.isDraft' <<<"$PR_INFO")" = "true" ] && [ "${PR_FIX_ALLOW_DRAFT:-0}" != "1" ]; then
+  fail "PR #$PR is a draft; skipping. Set PR_FIX_ALLOW_DRAFT=1 to work it anyway."
+  exit 1
+fi
 HEAD_OWNER=$(jq -r '.headRepositoryOwner.login' <<<"$PR_INFO")
 HEAD_REPO=$(jq -r '.headRepositoryOwner.login + "/" + .headRepository.name' <<<"$PR_INFO")
 HEAD_BRANCH=$(jq -r '.headRefName' <<<"$PR_INFO")
