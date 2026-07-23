@@ -113,6 +113,14 @@ until the board is in a known state. It merges PRs and starts net-new work only
 when explicitly authorized. Spin it up in any harness with `repo-orchestrate`
 (see Tools).
 
+`sentry-triager` triages a Sentry project's unresolved issues and routes the
+actionable ones into tracked GitHub issues: it dedups against existing issues,
+promotes real errors to PII-safe GitHub issues against the upstream repo, links
+the two directions (`sentry-link` back-annotates the Sentry issue; the GitHub
+body carries the Sentry permalink), and resolves each tracked issue in the next
+release. It drives the `sentry-*` helpers (see Tools) and never copies user PII
+or secrets into GitHub.
+
 ## Shared Skills
 
 Skills live in `skills/<name>/` and are linked into both Claude and Codex.
@@ -248,6 +256,38 @@ repo-orchestrate -R tinyhumansai/openhuman --limit 30
 
 For continuous operation, wrap it in the `/loop` skill or a scheduled run — each
 tick is one triage cycle.
+
+### Sentry helpers (`sentry-issues`, `sentry-issue`, `sentry-resolve`, `sentry-link`, `sentry-release`)
+
+A small toolkit that turns Sentry into agent-friendly reports and actions,
+backing the `sentry-triager` agent. All share `bin/sentry-lib.sh` and read the
+same config `sentry-cli` reads: `SENTRY_AUTH_TOKEN` (required), `SENTRY_ORG`,
+`SENTRY_PROJECT`, `SENTRY_URL` (default `https://sentry.io`; set for
+self-hosted). The report/issue/resolve/link tools call the Sentry Web API for
+structured JSON (`sentry-cli` does not expose issue data in an agent-friendly
+form); `sentry-release`'s `new`/`finalize` wrap `sentry-cli` directly.
+
+- `sentry-issues [--json] [--status ...] [--query ...] [--limit N] [--stats-period ...]`
+  — a project's issues (default unresolved, most frequent first): shortId,
+  level, culprit, event/user counts, first/last seen, assignee, permalink.
+- `sentry-issue <id|SHORT-ID> [--json] [--frames N]` — one issue's detail:
+  exception type/value, culprit, top **in-app** stack frames, and key tags
+  (release, environment, handled). User/request context is deliberately omitted
+  (possible PII).
+- `sentry-resolve <id|SHORT-ID>... [--in-next-release | --in-release <v> | --ignore | --unresolve] [--json]`
+  — change issue status; `--in-next-release` is the standard "fix is coming"
+  resolution.
+- `sentry-link <id|SHORT-ID> <url> [--note ...]` — annotate a Sentry issue with a
+  tracking URL (comments→notes fallback for self-hosted).
+- `sentry-release list|latest|new|finalize [<version>] [--json]` — release report
+  (`list`/`latest` via API) and `sentry-cli` wrappers (`new`/`finalize`).
+
+```sh
+sentry-issues --json
+sentry-issue MYAPP-9F --json
+sentry-resolve MYAPP-9F --in-next-release
+sentry-link MYAPP-9F https://github.com/org/repo/issues/128
+```
 
 ### `deepcode [claude args...]`
 
