@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# sentry-link — annotate a Sentry issue with a tracking URL (e.g. a GitHub issue).
+#
+# Usage: sentry-link <issue-id|SHORT-ID> <url> [--note <text>] [--json] [--org <slug>]
+#
+#   sentry-link MYPROJ-1A2 https://github.com/org/repo/issues/42
+#   sentry-link 456 https://github.com/org/repo/issues/42 --note "tracked; fix in progress"
+#
+# Posts a comment on the Sentry issue so the GitHub issue is discoverable from
+# Sentry (the reverse link — the Sentry permalink — belongs in the GitHub issue
+# body). Tries the /comments/ endpoint, falling back to /notes/ for older or
+# self-hosted Sentry. Config: SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_URL.
+set -euo pipefail
+# shellcheck source=bin/sentry-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sentry-lib.sh"
+
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"
+ORG=""
+NOTE=""
+REF=""
+URL=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)     FORMAT="json"; shift ;;
+    --note)     [ $# -ge 2 ] || { usage; sentry_fail "--note needs a value"; }
+                NOTE="$2"; shift 2 ;;
+    --org)      [ $# -ge 2 ] || { usage; sentry_fail "--org needs a value"; }
+                ORG="$2"; shift 2 ;;
+    -h|--help)  usage; exit 0 ;;
+    -*)         usage; sentry_fail "unknown option: $1" ;;
+    *)          if [ -z "$REF" ]; then REF="$1"
+                elif [ -z "$URL" ]; then URL="$1"
+                else usage; sentry_fail "unexpected argument: $1"; fi
+                shift ;;
+  esac
+done
+[ -n "$REF" ] || { usage; sentry_fail "an issue id or SHORT-ID is required"; }
+[ -n "$URL" ] || { usage; sentry_fail "a tracking URL is required"; }
+
+sentry_require curl jq
+sentry_config "$ORG" ""
+ID="$(sentry_issue_id "$REF")"
+
+TEXT="Tracked in ${URL}${NOTE:+ — ${NOTE}}"
+BODY="$(jq -cn --arg t "$TEXT" '{text: $t}')"
+
+# Prefer /comments/; fall back to /notes/ for older/self-hosted Sentry.
+OUT="$(sentry_api POST "/issues/$ID/comments/" "$BODY" 2>/dev/null || true)"
+[ -n "$OUT" ] || OUT="$(sentry_api POST "/issues/$ID/notes/" "$BODY")"
+
+if [ "$FORMAT" = "json" ]; then
+  jq -n --arg id "$ID" --arg url "$URL" --argjson comment "$OUT" \
+    '{issueId: $id, url: $url, comment: $comment}'
+else
+  printf '[PASS] linked issue %s -> %s\n' "$ID" "$URL"
+fi
