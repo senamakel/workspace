@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# check-skills — validate canonical shared skill directories.
+#
+# Usage: check-skills [skill-name]
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+  exit 1
+}
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+FILTER="${1:-}"
+
+[ $# -le 1 ] || fail "usage: check-skills [skill-name]"
+[ -d "$ROOT/skills" ] || fail "missing canonical skills directory: $ROOT/skills"
+
+SKILL_DIRS=()
+if [ -n "$FILTER" ]; then
+  [ -d "$ROOT/skills/$FILTER" ] || fail "unknown skill: $FILTER"
+  SKILL_DIRS=("$ROOT/skills/$FILTER")
+else
+  while IFS= read -r dir; do
+    SKILL_DIRS+=("$dir")
+  done < <(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d | sort)
+fi
+[ "${#SKILL_DIRS[@]}" -gt 0 ] || fail "no shared skills found"
+
+for dir in "${SKILL_DIRS[@]}"; do
+  folder="$(basename "$dir")"
+  skill_file="$dir/SKILL.md"
+
+  [[ "$folder" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] \
+    || fail "invalid skill directory name: $folder"
+  [ "${#folder}" -le 64 ] || fail "skill name exceeds 64 characters: $folder"
+  [ -f "$skill_file" ] || fail "missing $skill_file"
+  [ "$(sed -n '1p' "$skill_file")" = "---" ] \
+    || fail "$skill_file must begin with YAML frontmatter"
+
+  frontmatter_end="$(awk 'NR > 1 && /^---[[:space:]]*$/ { print NR; exit }' "$skill_file")"
+  [ -n "$frontmatter_end" ] || fail "$skill_file has no closing frontmatter delimiter"
+
+  name="$(awk '
+    NR > 1 && /^---[[:space:]]*$/ { exit }
+    /^name:[[:space:]]*/ {
+      sub(/^name:[[:space:]]*/, "")
+      gsub(/^["'\'']|["'\'']$/, "")
+      print
+      exit
+    }
+  ' "$skill_file")"
+  [ "$name" = "$folder" ] \
+    || fail "skill name '$name' must match directory '$folder'"
+
+  description="$(awk '
+    NR > 1 && /^---[[:space:]]*$/ { exit }
+    /^description:[[:space:]]*/ {
+      sub(/^description:[[:space:]]*/, "")
+      print
+      exit
+    }
+  ' "$skill_file")"
+  [ -n "$description" ] || fail "$skill_file requires a description"
+done
+
+printf '[PASS] %s shared skill(s) are valid\n' "${#SKILL_DIRS[@]}"

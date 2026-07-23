@@ -67,6 +67,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 else
   "$REPO_ROOT/bin/build-agents" --output-root "$AGENT_BUILD_ROOT"
 fi
+"$REPO_ROOT/bin/check-skills"
 
 # Remove retired shared agents from the generated cache and harness directories.
 # Destination files are removed only when they are our exact generated symlinks.
@@ -112,6 +113,27 @@ link "$REPO_ROOT/claude/settings.json"          "$HOME/.claude/settings.json"
 link "$REPO_ROOT/claude/mcp.json"               "$HOME/.claude/mcp.json"
 link "$REPO_ROOT/claude/statusline-command.sh"  "$HOME/.claude/statusline-command.sh"
 
+remove_legacy_skill_link() {
+  local harness="$1" name="$2"
+  local installed="$HOME/.$harness/skills/$name"
+  local legacy_source="$REPO_ROOT/$harness/skills/$name"
+
+  if [ -L "$installed" ] && [ "$(readlink "$installed")" = "$legacy_source" ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "[would remove] legacy skill link $installed"
+    else
+      rm "$installed"
+      echo "[unlink] legacy skill $installed"
+    fi
+  fi
+}
+
+remove_legacy_skill_link "claude" "humanizer"
+remove_legacy_skill_link "claude" "solana-dev"
+remove_legacy_skill_link "claude" "tiny-place-—-the-social-economy-for-ai-agents"
+remove_legacy_skill_link "claude" "tinyplace"
+remove_legacy_skill_link "codex" "tinyplace"
+
 # Keep one symlink per generated file so Claude Code can still drop local files
 # into ~/.claude/agents.
 LEGACY_AI_AGENT="$HOME/.claude/agents/engineering-ai-engineer.md"
@@ -138,8 +160,8 @@ else
   done
 fi
 
-# Skills: one symlink per skill directory.
-for d in "$REPO_ROOT"/claude/skills/*/; do
+# Skills: one canonical directory linked into both supported harnesses.
+for d in "$REPO_ROOT"/skills/*/; do
   [ -d "$d" ] || continue
   d="${d%/}"
   link "$d" "$HOME/.claude/skills/$(basename "$d")"
@@ -181,7 +203,7 @@ else
   done
 fi
 
-for d in "$REPO_ROOT"/codex/skills/*/; do
+for d in "$REPO_ROOT"/skills/*/; do
   [ -d "$d" ] || continue
   d="${d%/}"
   link "$d" "$HOME/.codex/skills/$(basename "$d")"
