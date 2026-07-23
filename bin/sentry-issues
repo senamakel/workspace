@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# sentry-issues — agent-friendly report of a Sentry project's issues.
+#
+# Usage: sentry-issues [--json] [--status <unresolved|resolved|ignored|all>]
+#                      [--query <q>] [--limit <N>] [--stats-period <24h|14d|...>]
+#                      [--org <slug>] [--project <slug>]
+#
+#   sentry-issues                        unresolved issues, most frequent first
+#   sentry-issues --json                 stable JSON for agents
+#   sentry-issues --query "is:unresolved is:unassigned"
+#   sentry-issues --status all --limit 50
+#
+# Config comes from SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT / SENTRY_URL
+# (the same variables sentry-cli reads). --status is a convenience that sets the
+# `is:` filter; --query overrides it entirely.
+set -euo pipefail
+# shellcheck source=bin/sentry-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sentry-lib.sh"
+
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"
+STATUS="unresolved"
+QUERY=""
+LIMIT=25
+PERIOD="14d"
+ORG=""
+PROJECT=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)          FORMAT="json"; shift ;;
+    --status)        [ $# -ge 2 ] || { usage; sentry_fail "--status needs a value"; }
+                     STATUS="$2"; shift 2 ;;
+    --query)         [ $# -ge 2 ] || { usage; sentry_fail "--query needs a value"; }
+                     QUERY="$2"; shift 2 ;;
+    --limit)         [ $# -ge 2 ] || { usage; sentry_fail "--limit needs a value"; }
+                     LIMIT="$2"; shift 2 ;;
+    --stats-period)  [ $# -ge 2 ] || { usage; sentry_fail "--stats-period needs a value"; }
+                     PERIOD="$2"; shift 2 ;;
+    --org)           [ $# -ge 2 ] || { usage; sentry_fail "--org needs a value"; }
+                     ORG="$2"; shift 2 ;;
+    --project)       [ $# -ge 2 ] || { usage; sentry_fail "--project needs a value"; }
+                     PROJECT="$2"; shift 2 ;;
+    -h|--help)       usage; exit 0 ;;
+    *)               usage; sentry_fail "unknown argument: $1" ;;
+  esac
+done
+case "$LIMIT" in ''|*[!0-9]*|0) sentry_fail "--limit must be a positive integer" ;; esac
+
+sentry_require curl jq
+sentry_config "$ORG" "$PROJECT"
+sentry_need_project
+
+if [ -z "$QUERY" ]; then
+  case "$STATUS" in
+    all)                         QUERY="" ;;
+    unresolved|resolved|ignored) QUERY="is:$STATUS" ;;
+    *)                           sentry_fail "unknown --status: $STATUS (use unresolved|resolved|ignored|all)" ;;
+  esac
+fi
+
+PATHQ="/projects/$SENTRY_ORG_R/$SENTRY_PROJECT_R/issues/?limit=$LIMIT&statsPeriod=$PERIOD&sort=freq"
+[ -z "$QUERY" ] || PATHQ="$PATHQ&query=$(sentry_urlencode "$QUERY")"
+RAW="$(sentry_api GET "$PATHQ")"
+
+REPORT="$(jq --arg org "$SENTRY_ORG_R" --arg project "$SENTRY_PROJECT_R" \
+             --arg query "${QUERY:-（all）}" '
+  {
+    org: $org,
+    project: $project,
+    query: $query,
+    count: length,
+    issues: [ .[] | {
+      shortId,
+      id,
+      title,
+      culprit,
+      level: (.level // "error"),
+      status,
+      events: (.count // "0"),
+      users: (.userCount // 0),
+      firstSeen,
+      lastSeen,
+      isUnhandled: (.isUnhandled // null),
+      assignedTo: (.assignedTo.name // .assignedTo.email // null),
+      type: (.metadata.type // null),
+      value: (.metadata.value // null),
+      permalink
+    } ]
+  }' <<<"$RAW")"
+
+if [ "$FORMAT" = "json" ]; then
+  jq . <<<"$REPORT"
+  exit 0
+fi
+
+jq -r '
+  "Sentry: \(.org)/\(.project) — \(.count) issue(s)  [query: \(.query)]",
+  (.issues[] |
+    "",
+    "\(.shortId)  [\(.level)\(if .isUnhandled == true then "/unhandled" else "" end)]  \(.title)",
+    (if .culprit and .culprit != "" then "  culprit: \(.culprit)" else empty end),
+    "  events: \(.events)  users: \(.users)  status: \(.status)  assignee: \(.assignedTo // "unassigned")",
+    "  seen: first \(.firstSeen) · last \(.lastSeen)",
+    "  link: \(.permalink)"
+  )
+' <<<"$REPORT"

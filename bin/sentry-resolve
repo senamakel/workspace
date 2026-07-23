@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# sentry-resolve — resolve (or ignore/unresolve) one or more Sentry issues.
+#
+# Usage: sentry-resolve <issue-id|SHORT-ID>... [mode] [--json] [--org <slug>]
+#
+#   Modes (default: resolve now):
+#     --in-next-release     resolve, auto-reopen if seen in a later release
+#     --in-release <ver>    resolve as fixed in a specific release
+#     --ignore              ignore (mute) the issue
+#     --unresolve           reopen the issue
+#
+#   sentry-resolve MYPROJ-1A2 --in-next-release
+#   sentry-resolve 4567890123 4567890124 --json
+#
+# Config: SENTRY_AUTH_TOKEN / SENTRY_ORG / SENTRY_PROJECT / SENTRY_URL (same as
+# sentry-cli). Resolving "in next release" is the standard way to close a Sentry
+# issue once its fix is merged and will ship in the upcoming release.
+set -euo pipefail
+# shellcheck source=bin/sentry-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sentry-lib.sh"
+
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"
+ORG=""
+MODE="resolve"
+RELEASE=""
+REFS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)             FORMAT="json"; shift ;;
+    --in-next-release)  MODE="next"; shift ;;
+    --in-release)       [ $# -ge 2 ] || { usage; sentry_fail "--in-release needs a version"; }
+                        MODE="release"; RELEASE="$2"; shift 2 ;;
+    --ignore)           MODE="ignore"; shift ;;
+    --unresolve)        MODE="unresolve"; shift ;;
+    --org)              [ $# -ge 2 ] || { usage; sentry_fail "--org needs a value"; }
+                        ORG="$2"; shift 2 ;;
+    -h|--help)          usage; exit 0 ;;
+    -*)                 usage; sentry_fail "unknown option: $1" ;;
+    *)                  REFS+=("$1"); shift ;;
+  esac
+done
+[ "${#REFS[@]}" -gt 0 ] || { usage; sentry_fail "at least one issue id or SHORT-ID is required"; }
+
+case "$MODE" in
+  resolve)   BODY='{"status":"resolved"}' ;;
+  next)      BODY='{"status":"resolved","statusDetails":{"inNextRelease":true}}' ;;
+  release)   BODY="$(jq -cn --arg v "$RELEASE" '{status:"resolved",statusDetails:{inRelease:$v}}')" ;;
+  ignore)    BODY='{"status":"ignored"}' ;;
+  unresolve) BODY='{"status":"unresolved"}' ;;
+esac
+
+sentry_require curl jq
+sentry_config "$ORG" ""
+
+RESULTS="[]"
+for ref in "${REFS[@]}"; do
+  id="$(sentry_issue_id "$ref")"
+  out="$(sentry_api PUT "/issues/$id/" "$BODY")"
+  RESULTS="$(jq --argjson r "$out" --arg ref "$ref" --arg mode "$MODE" \
+    '. + [{ ref: $ref, shortId: ($r.shortId // $ref), id: ($r.id // null), status: ($r.status // null), mode: $mode }]' \
+    <<<"$RESULTS")"
+done
+
+if [ "$FORMAT" = "json" ]; then
+  jq -n --argjson results "$RESULTS" '{ applied: ($results | length), results: $results }'
+  exit 0
+fi
+
+jq -r '.[] | "[PASS] \(.shortId): \(.status) (\(.mode))"' <<<"$RESULTS"
