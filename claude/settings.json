@@ -48,10 +48,10 @@
   "extraKnownMarketplaces": {},
   "effortLevel": "medium",
   "agent": "tinyhumansai",
+  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "theme": "auto",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true,
-  "tui": "fullscreen"
+  "voiceEnabled": true
 }
