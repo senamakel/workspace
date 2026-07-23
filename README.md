@@ -74,6 +74,18 @@ launch branch. Bypass flags per harness: `claude
 --dangerously-skip-permissions`, `codex
 --dangerously-bypass-approvals-and-sandbox`, `opencode --auto`.
 
+### `deepcode [claude args...]`
+
+Runs the Claude Code CLI but backed by DeepSeek models through OpenRouter's
+Anthropic-compatible endpoint (`https://openrouter.ai/api`). It sets the
+`ANTHROPIC_*` routing/model env vars in the wrapper process only and `exec`s
+`claude`, so your normal `claude` (pointed at Anthropic) is unaffected. Heavy
+tiers (opus/sonnet) map to `deepseek/deepseek-v4-pro`, fast/subagent tiers to
+`deepseek/deepseek-v4-flash`; override with `DEEPCODE_MODEL` /
+`DEEPCODE_FAST_MODEL`. Requires `OPENROUTER_API_KEY` in the environment (set
+it in your `~/.zshrc`, not this repo). All arguments pass straight through to
+`claude`.
+
 ### `workflow-update [--no-commit]`
 
 For workflow superprojects (repos with submodules). Fetches the canonical
