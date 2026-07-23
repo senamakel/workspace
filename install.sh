@@ -69,13 +69,13 @@ else
 fi
 
 # --- Shared agent rules -------------------------------------------------------
-# One canonical rules.md is symlinked into every agent's instructions file so
+# One canonical RULES.md is symlinked into every agent's instructions file so
 # claude, codex, and opencode always share the same Local Workflow Preferences.
-# Edit rules.md and re-run to update all of them at once.
-link "$REPO_ROOT/rules.md"  "$HOME/.claude/CLAUDE.md"
-link "$REPO_ROOT/rules.md"  "$HOME/.codex/AGENTS.md"
-link "$REPO_ROOT/rules.md"  "$HOME/.codex/CODEX.md"
-link "$REPO_ROOT/rules.md"  "$HOME/.config/opencode/AGENTS.md"
+# Edit RULES.md and re-run to update all of them at once.
+link "$REPO_ROOT/RULES.md"  "$HOME/.claude/CLAUDE.md"
+link "$REPO_ROOT/RULES.md"  "$HOME/.codex/AGENTS.md"
+link "$REPO_ROOT/RULES.md"  "$HOME/.codex/CODEX.md"
+link "$REPO_ROOT/RULES.md"  "$HOME/.config/opencode/AGENTS.md"
 
 # --- Claude Code global config ------------------------------------------------
 link "$REPO_ROOT/claude/settings.json"          "$HOME/.claude/settings.json"

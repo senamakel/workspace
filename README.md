@@ -8,7 +8,7 @@ the source of truth, so source changes appear in `git diff`.
 
 | Repo path | Installed to |
 |---|---|
-| `rules.md` | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.codex/CODEX.md`, `~/.config/opencode/AGENTS.md` (one shared rules file, linked into every agent) |
+| `RULES.md` | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.codex/CODEX.md`, `~/.config/opencode/AGENTS.md` (one shared rules file, linked into every agent) |
 | `agents/<name>/` | Canonical agent metadata and instructions; `install.sh` builds both harness formats |
 | `claude/settings.json` | `~/.claude/settings.json` (hooks, statusline, plugins) |
 | `claude/mcp.json` | `~/.claude/mcp.json` |
@@ -19,10 +19,10 @@ the source of truth, so source changes appear in `git diff`.
 | `codex/skills/<name>/` | `~/.codex/skills/<name>` (one link per skill dir) |
 | `zshrc` | sourced from `~/.zshrc` via an appended loader line |
 
-`rules.md` is the single source of truth for agent instructions: it is
+`RULES.md` is the single source of truth for agent instructions: it is
 symlinked into each agent's own instructions file (Claude's `CLAUDE.md`,
 Codex's `AGENTS.md`/`CODEX.md`, opencode's `AGENTS.md`), so all three always
-share the same rules. Edit `rules.md` and the change is live for every agent
+share the same rules. Edit `RULES.md` and the change is live for every agent
 (re-run `install.sh` only if a link is missing).
 
 `agents/` is the single source of truth for reusable subagents. Do not edit the

@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is the source of truth for personal shell and coding-agent configuration. `install.sh` links managed files into the user’s home directory. Shared workflow rules live in `rules.md`; shared agent sources live in `agents/<name>/` and `install.sh` renders them into a user-level generated cache for Claude and Codex. Other harness-specific configuration is under `claude/`, `codex/`, and `opencode/`. Executable helpers belong in `bin/`, while custom shell aliases and functions live in `zshrc`. Keep each skill self-contained in `<agent>/skills/<skill-name>/`, with `SKILL.md` as its entry point.
+This repository is the source of truth for personal shell and coding-agent configuration. `install.sh` links managed files into the user’s home directory. Shared workflow rules live in `RULES.md`; shared agent sources live in `agents/<name>/` and `install.sh` renders them into a user-level generated cache for Claude and Codex. Other harness-specific configuration is under `claude/`, `codex/`, and `opencode/`. Executable helpers belong in `bin/`, while custom shell aliases and functions live in `zshrc`. Keep each skill self-contained in `<agent>/skills/<skill-name>/`, with `SKILL.md` as its entry point.
 
 Do not commit machine-local credentials or generated state. In particular, `~/.codex/config.toml` and the local OpenCode package/config files are intentionally excluded.
 
