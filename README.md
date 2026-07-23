@@ -72,6 +72,24 @@ pr-list --json
 pr-list --repo tinyhumansai/openhuman --limit 20
 ```
 
+### `pr-merge <number> [--dry-run] [--json] [-R|--repo <owner/name>]`
+
+Merges a PR only after a strict preflight: it must be open, out of draft,
+approved, conflict-free, `CLEAN`, finished with no failing or pending checks,
+and free of active unresolved review threads. The command pins the inspected
+head SHA to prevent a concurrent push from slipping past validation. It
+squashes by default; use `--merge` or `--rebase` to select another strategy.
+
+```sh
+pr-merge 123 --dry-run
+pr-merge 123 --repo tinyhumansai/openhuman
+pr-merge 123 --json --merge
+```
+
+Use `--dry-run` to inspect every gate without changing GitHub. A blocked PR
+exits with status 2 and reports every blocker, making the command suitable for
+agent decision loops. `--delete-branch` is opt-in.
+
 ### `pr-fix <pr-number> [extra prompt text...] [claude|codex|opencode]`
 
 Checks a PR out into `<repo>/worktrees/pr-<n>` (preferring the `upstream`
