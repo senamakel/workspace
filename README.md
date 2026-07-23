@@ -1,23 +1,21 @@
 # workspace
 
-Personal dotfiles / agent config. Everything here is installed into `$HOME`
-as symlinks by `install.sh`, so this repo is the source of truth and
-`git diff` shows config drift.
+Personal dotfiles / agent config. `install.sh` symlinks most files into `$HOME`
+and builds shared agent sources into native harness formats. This repo remains
+the source of truth, so source changes appear in `git diff`.
 
 ## Layout
 
 | Repo path | Installed to |
 |---|---|
 | `rules.md` | `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.codex/CODEX.md`, `~/.config/opencode/AGENTS.md` (one shared rules file, linked into every agent) |
-| `agents/<name>/` | Canonical agent metadata and instructions used by `bin/build-agents` |
+| `agents/<name>/` | Canonical agent metadata and instructions; `install.sh` builds both harness formats |
 | `claude/settings.json` | `~/.claude/settings.json` (hooks, statusline, plugins) |
 | `claude/mcp.json` | `~/.claude/mcp.json` |
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
-| `claude/agents/*.md` | `~/.claude/agents/<name>.md` (generated; one link per file) |
 | `claude/skills/<name>/` | `~/.claude/skills/<name>` (one link per skill dir) |
 | `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
-| `codex/agents/*.toml` | `~/.codex/agents/<name>.toml` (generated; one link per file) |
 | `codex/skills/<name>/` | `~/.codex/skills/<name>` (one link per skill dir) |
 | `zshrc` | sourced from `~/.zshrc` via an appended loader line |
 
@@ -26,6 +24,10 @@ symlinked into each agent's own instructions file (Claude's `CLAUDE.md`,
 Codex's `AGENTS.md`/`CODEX.md`, opencode's `AGENTS.md`), so all three always
 share the same rules. Edit `rules.md` and the change is live for every agent
 (re-run `install.sh` only if a link is missing).
+
+`agents/` is the single source of truth for reusable subagents. Do not edit the
+generated cache or installed harness files; edit `agent.json` or
+`instructions.md`, then re-run `install.sh`.
 
 `zshrc` holds only custom functions and aliases. `~/.zshrc` and `~/.zshenv`
 remain local machine-specific files (oh-my-zsh setup, PATH exports, tool
@@ -52,8 +54,9 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 ## Adding things
 
 - New agent: add `agent.json` and `instructions.md` under
-  `agents/<agent-name>/`, run `bin/build-agents`, then re-run `./install.sh`.
-  Use `bin/build-agents --check` in validation or CI to detect stale outputs.
+  `agents/<agent-name>/`, then run `./install.sh`. It builds native files into
+  `~/.config/workspace/generated-agents/` and links them into both harnesses.
+  Use `bin/build-agents --check` to validate sources without installing them.
 - New skill: add a directory with a `SKILL.md` under `claude/skills/`,
   re-run `./install.sh`.
 - New slash command: create `claude/commands/`, add it to `install.sh` the
