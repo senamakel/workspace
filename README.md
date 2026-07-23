@@ -88,7 +88,7 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 ### `worktree <slug> [--json]`
 
 Creates branch `<slug>` from the current `HEAD` and checks it out at
-`<repo>/worktree/<slug>`. If the matching branch and registered worktree
+`<repo>/worktrees/<slug>`. If the matching branch and registered worktree
 already exist, the command safely reuses them. It then runs recursive submodule
 initialization and returns a stable `WORKTREE_READY` report with the path,
 branch, commit, submodule count, and next `cd` command.

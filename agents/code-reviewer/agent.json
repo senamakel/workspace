@@ -1,0 +1,20 @@
+{
+  "name": "code-reviewer",
+  "description": "Review a completed code change or branch diff against its plan/requirements and code-quality standards; return calibrated Critical/Important/Minor findings with file:line evidence and a clear merge verdict, without mutating the working tree. Use after a task, before a merge, or when a fresh perspective is needed.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 40,
+    "color": "yellow",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
