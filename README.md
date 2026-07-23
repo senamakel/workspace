@@ -69,6 +69,9 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 - `pr-approval-reviewer` performs final technical review. It approves only a
   fully inspected, green, stable revision; otherwise it leaves one actionable
   non-blocking review comment.
+- `pr-unit-test-reviewer` maps changed behavior to truthful regression
+  assertions, identifies misleading or missing tests, and evaluates
+  compatibility and independent verifiability without mutating the PR.
 - `gh-issue-triager` investigates duplicates and relevance, then either closes
   a high-confidence dropped issue with evidence or enriches an escalated issue
   with a managed, code-grounded implementation plan.
