@@ -2,8 +2,8 @@
   "name": "pr-contribution-triager",
   "description": "Evaluate whether a GitHub pull request appears to be a genuine, repository-aligned contribution. Use before technical review to identify spam, unrelated or deceptive changes, suspicious payloads, and contributions that need human judgment.",
   "claude": {
-    "model": "sonnet",
-    "effort": "high",
+    "model": "haiku",
+    "effort": "low",
     "maxTurns": 30,
     "color": "orange",
     "tools": [
@@ -15,6 +15,6 @@
   },
   "codex": {
     "model": "gpt-5.6",
-    "modelReasoningEffort": "high"
+    "modelReasoningEffort": "low"
   }
 }
