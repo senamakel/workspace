@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# pr-fix — check out a PR into a worktree, merge main, and hand it to an agent.
+# pr-fix — check out a PR into a worktree, merge main, and hand it to a harness.
 #
-# Usage: pr-fix <pr-number> [extra prompt text...] [claude|codex]
+# Usage: pr-fix <pr-number> [extra prompt text...] [claude|codex|opencode]
 #
 #   pr-fix 123                          fix PR 123 with claude (default)
 #   pr-fix 123 codex                    same, with codex
+#   pr-fix 123 opencode                 same, with opencode
 #   pr-fix 123 "focus on the API tests" codex
 #
 # Run from anywhere inside the target repo. Prefers the `upstream` remote
@@ -32,7 +33,7 @@ warn()  { printf '%s[WARN]%s %s\n' "$_Y" "$_0" "$*" >&2; }
 info()  { printf '%s[INFO]%s %s\n' "$_B" "$_0" "$*"; }
 
 usage() {
-  sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
   exit 1
 }
 
@@ -54,7 +55,38 @@ resolve_repo() {
     | sed -E 's#^git@github\.com:##; s#^https?://github\.com/##; s#\.git$##'
 }
 
-# ── Args: <pr> [extra text...] [claude|codex] ──────────────────────
+# ── Harness registry ───────────────────────────────────────────────
+# Everything harness-specific lives here. To add a harness: append its
+# name to HARNESSES and add a branch to harness_launch(). The name must
+# also be the binary that `require` checks for. macOS ships bash 3.2, so
+# this stays with case statements rather than associative arrays.
+HARNESSES="claude codex opencode"
+
+is_harness() {
+  case " $HARNESSES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+# harness_launch <name> <prompt> <mode>
+# Launch the harness interactively, seeded with the prompt. mode is
+# "yolo" (permission-bypass flags on) or "safe" (bare, no bypass).
+harness_launch() {
+  local name="$1" prompt="$2" mode="$3"
+  case "$name" in
+    claude)
+      if [ "$mode" = safe ]; then claude "$prompt"
+      else claude --dangerously-skip-permissions "$prompt"; fi ;;
+    codex)
+      if [ "$mode" = safe ]; then codex "$prompt"
+      else codex --dangerously-bypass-approvals-and-sandbox "$prompt"; fi ;;
+    opencode)
+      if [ "$mode" = safe ]; then opencode --prompt "$prompt"
+      else opencode --prompt "$prompt" --auto; fi ;;
+    *)
+      fail "unknown harness: $name"; exit 1 ;;
+  esac
+}
+
+# ── Args: <pr> [extra text...] [claude|codex|opencode] ─────────────
 [ $# -ge 1 ] || usage
 PR="$1"; shift
 case "$PR" in ''|*[!0-9]*) fail "pr-number must be numeric, got: $PR"; usage;; esac
@@ -63,7 +95,7 @@ AGENT="claude"
 EXTRA=""
 if [ $# -ge 1 ]; then
   last="${!#}"
-  if [ "$last" = "claude" ] || [ "$last" = "codex" ]; then
+  if is_harness "$last"; then
     AGENT="$last"
     [ $# -ge 2 ] && EXTRA="${*:1:$#-1}"
   else
@@ -179,12 +211,9 @@ Additional instructions: $EXTRA"
 info "launching $AGENT in $WT_DIR"
 set +e
 if [ "${PR_FIX_SAFE:-0}" = "1" ]; then
-  "$AGENT" "$PROMPT"
+  harness_launch "$AGENT" "$PROMPT" safe
 else
-  case "$AGENT" in
-    claude) claude --dangerously-skip-permissions "$PROMPT" ;;
-    codex)  codex --dangerously-bypass-approvals-and-sandbox "$PROMPT" ;;
-  esac
+  harness_launch "$AGENT" "$PROMPT" yolo
 fi
 AGENT_STATUS=$?
 set -e

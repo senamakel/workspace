@@ -51,17 +51,22 @@ checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
 
 ## Tools
 
-### `pr-fix <pr-number> [extra prompt text...] [claude|codex]`
+### `pr-fix <pr-number> [extra prompt text...] [claude|codex|opencode]`
 
 Checks a PR out into `<repo>/worktrees/pr-<n>` (preferring the `upstream`
 remote, i.e. the canonical `tinyhumansai/*` repo), merges the base branch in
 (conflicts are left for the agent), wires upstream tracking + `pushRemote`
 to the contributor's fork so `git push` updates the PR, then launches the
-chosen agent (default `claude`) with a fix-the-PR prompt plus any extra text.
-When the agent exits you're asked whether to delete the worktree.
-`PR_FIX_SAFE=1` disables the yolo/bypass agent flags; `PR_FIX_REPO`
-overrides repo resolution. Conventions follow
-`tinyhumansai/openhuman/scripts/shortcuts`.
+chosen harness (default `claude`) with a fix-the-PR prompt plus any extra
+text. When the harness exits you're asked whether to delete the worktree.
+`PR_FIX_SAFE=1` disables the yolo/bypass flags; `PR_FIX_REPO` overrides repo
+resolution. Conventions follow `tinyhumansai/openhuman/scripts/shortcuts`.
+
+Harnesses live in a small registry near the top of `bin/pr-fix`
+(`HARNESSES` + `harness_launch`); adding another is a one-line name plus a
+launch branch. Bypass flags per harness: `claude
+--dangerously-skip-permissions`, `codex
+--dangerously-bypass-approvals-and-sandbox`, `opencode --auto`.
 
 ### `workflow-update [--no-commit]`
 
