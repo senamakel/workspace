@@ -1,0 +1,20 @@
+{
+  "name": "pr-unit-test-reviewer",
+  "description": "Review a pull request through its unit tests, verify that assertions truthfully exercise the claimed behavior, identify missing cases and breaking-change risks, and determine whether the PR is independently verifiable.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 50,
+    "color": "yellow",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
