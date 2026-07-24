@@ -98,6 +98,11 @@ isolated-context subagents:
 - `tdd-implementer` implements one well-specified task via strict
   red-green-refactor, commits in scoped slices, self-reviews, and reports
   `DONE` / `DONE_WITH_CONCERNS` / `BLOCKED` / `NEEDS_CONTEXT`.
+- `doc-writer` (Sonnet tier) documents changed source — in-code doc comments on
+  public APIs and folder/module overviews — matching the repo's conventions and
+  changing docs only, never behavior. Wired into the coding pipeline
+  (`subagent-driven-development`), the `pr-babysitter` loop, and the orchestrator's
+  build flow.
 - `code-reviewer` reviews a completed diff or branch against its plan and
   quality standards, returning calibrated Critical/Important/Minor findings and
   a merge verdict without mutating the tree.
