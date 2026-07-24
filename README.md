@@ -349,11 +349,13 @@ tier onto flash). Requires `OPENROUTER_API_KEY` in the environment (set it in yo
 
 ### `workflow-update [--no-commit]`
 
-For workflow superprojects (repos with submodules). Fetches the canonical
-remote (`upstream` preferred, else `origin`) and merges its default branch,
-then bumps each first-level submodule (no recursion) to the tip of its own
-canonical remote's default branch, stages the moved pointers, and commits
-them as "Update submodule pointers". `--no-commit` stages only.
+Synchronizes only first-level submodules (no recursion), selecting
+`upstream/main` when available and falling back to `origin/main`. Each submodule
+is forced onto local `main` at the selected commit, discarding divergent local
+commits and tracked changes while leaving untracked files untouched. The
+superproject itself is not fetched, merged, switched, or reset. Changed
+submodule pointers are staged and committed as "Update submodule pointers";
+`--no-commit` stages them without committing.
 
 ## Notes
 
