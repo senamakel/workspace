@@ -445,6 +445,56 @@ test_rejects_unrelated_repository_at_submodule_path() {
     "unrelated repository obstruction preserves the staged gitlink"
 }
 
+test_rejects_unrelated_repository_with_stale_registration() {
+  local origin unrelated_origin super preserved_checkout unrelated_head unrelated_branch
+  local unrelated_remote unrelated_content super_head super_gitlink output status
+  origin="$(make_remote stale-registration-origin)"
+  unrelated_origin="$(make_remote stale-registration-unrelated-origin)"
+  super="$(make_superproject_with_submodule stale-registration-super "$origin")"
+  preserved_checkout="$TEST_ROOT/stale-registration-original-checkout"
+
+  mv "$super/modules/alpha" "$preserved_checkout"
+  git init -q "$super/modules/alpha"
+  configure_identity "$super/modules/alpha"
+  git -C "$super/modules/alpha" remote add origin "$unrelated_origin"
+  printf 'valuable standalone content\n' > "$super/modules/alpha/valuable.txt"
+  git -C "$super/modules/alpha" add valuable.txt
+  git -C "$super/modules/alpha" commit -qm "Valuable standalone commit"
+  git -C "$super/modules/alpha" branch -M valuable-work
+
+  unrelated_head="$(git -C "$super/modules/alpha" rev-parse HEAD)"
+  unrelated_branch="$(git -C "$super/modules/alpha" branch --show-current)"
+  unrelated_remote="$(git -C "$super/modules/alpha" remote get-url origin)"
+  unrelated_content="$(cat "$super/modules/alpha/valuable.txt")"
+  super_head="$(git -C "$super" rev-parse HEAD)"
+  super_gitlink="$(git -C "$super" rev-parse :modules/alpha)"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] \
+    || fail_test "unrelated repository with stale registration must fail"
+  assert_contains "$output" \
+    "modules/alpha: unrelated Git repository obstructs submodule path" \
+    "failure identifies the stale-registration obstruction"
+  assert_eq "$unrelated_remote" \
+    "$(git -C "$super/modules/alpha" remote get-url origin)" \
+    "stale registration does not rewrite the unrelated remote"
+  assert_eq "$unrelated_head" "$(git -C "$super/modules/alpha" rev-parse HEAD)" \
+    "stale registration preserves unrelated repository HEAD"
+  assert_eq "$unrelated_branch" \
+    "$(git -C "$super/modules/alpha" branch --show-current)" \
+    "stale registration preserves unrelated repository branch"
+  assert_eq "$unrelated_content" "$(cat "$super/modules/alpha/valuable.txt")" \
+    "stale registration preserves unrelated tracked content"
+  assert_eq "$super_head" "$(git -C "$super" rev-parse HEAD)" \
+    "stale registration preserves superproject HEAD"
+  assert_eq "$super_gitlink" "$(git -C "$super" rev-parse :modules/alpha)" \
+    "stale registration preserves the staged gitlink"
+}
+
 test_does_not_initialize_nested_submodules() {
   local nested parent super output
   nested="$(make_remote nested-child)"
@@ -477,5 +527,6 @@ run_test "initializes an uninitialized direct submodule" test_initializes_uninit
 run_test "supports an old-form direct submodule" test_supports_old_form_direct_submodule
 run_test "supports spaced submodule names and paths" test_supports_spaced_submodule_names_and_paths
 run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path
+run_test "rejects stale-registered unrelated repository" test_rejects_unrelated_repository_with_stale_registration
 run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
 printf '1..%s\n' "$PASS_COUNT"

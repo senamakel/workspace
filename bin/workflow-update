@@ -55,11 +55,36 @@ TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null)" \
 cd "$TOPLEVEL"
 TOPLEVEL_PHYSICAL="$(pwd -P)"
 [ -f .gitmodules ] || { fail "no .gitmodules here — not a workflow superproject"; exit 1; }
-
-git submodule sync
+SUPER_GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
+if [[ "$SUPER_GIT_COMMON_DIR" != /* ]]; then
+  SUPER_GIT_COMMON_DIR="$TOPLEVEL/$SUPER_GIT_COMMON_DIR"
+fi
+SUPER_GIT_COMMON_DIR_PHYSICAL="$(cd "$SUPER_GIT_COMMON_DIR" && pwd -P)"
 
 verify_submodule_ownership() {
-  local dir="$1" name="$2" reported_superproject resolved_superproject
+  local dir="$1" name="$2" recorded="$3"
+  local actual_git_dir expected_git_dir reported_superproject resolved_superproject
+
+  if [ -f "$dir/.git" ]; then
+    actual_git_dir="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null || true)"
+    actual_git_dir="$(
+      [ -n "$actual_git_dir" ] \
+        && cd "$actual_git_dir" 2>/dev/null \
+        && pwd -P \
+        || true
+    )"
+    expected_git_dir="$(
+      cd "$SUPER_GIT_COMMON_DIR_PHYSICAL/modules/$name" 2>/dev/null \
+        && pwd -P \
+        || true
+    )"
+    if [ -z "$actual_git_dir" ] || [ "$actual_git_dir" != "$expected_git_dir" ]; then
+      fail "$dir: unrelated Git repository obstructs submodule path"
+      return 1
+    fi
+    return 0
+  fi
+
   reported_superproject="$(
     git -C "$dir" rev-parse --show-superproject-working-tree 2>/dev/null || true
   )"
@@ -70,7 +95,8 @@ verify_submodule_ownership() {
       || true
   )"
   if [ "$resolved_superproject" != "$TOPLEVEL_PHYSICAL" ] \
-    || ! git config --get "submodule.$name.url" >/dev/null 2>&1; then
+    || ! git config --get "submodule.$name.url" >/dev/null 2>&1 \
+    || ! git -C "$dir" cat-file -e "$recorded^{commit}" 2>/dev/null; then
     fail "$dir: unrelated Git repository obstructs submodule path"
     return 1
   fi
@@ -136,15 +162,17 @@ while IFS= read -r -d '' SM_CONFIG_ENTRY; do
   [ -n "$SM_PATH" ] || continue
   SM_NAME="${SM_KEY#submodule.}"
   SM_NAME="${SM_NAME%.path}"
+  RECORDED="$(git rev-parse "HEAD:$SM_PATH")"
   if [ ! -d "$SM_PATH/.git" ] && [ ! -f "$SM_PATH/.git" ]; then
+    git submodule sync -- "$SM_PATH"
     git submodule update --init -- "$SM_PATH"
   fi
   [ -d "$SM_PATH/.git" ] || [ -f "$SM_PATH/.git" ] \
     || { fail "$SM_PATH: submodule was not initialized"; exit 1; }
-  verify_submodule_ownership "$SM_PATH" "$SM_NAME"
+  verify_submodule_ownership "$SM_PATH" "$SM_NAME" "$RECORDED"
+  git submodule sync -- "$SM_PATH"
 
   select_main "$SM_PATH"
-  RECORDED="$(git rev-parse "HEAD:$SM_PATH")"
   force_local_main "$SM_PATH" "$SELECTED_COMMIT"
   info "$SM_PATH: selected $SELECTED_REMOTE/$SELECTED_COMMIT"
 
