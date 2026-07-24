@@ -157,7 +157,11 @@ test_existing_destinations_are_opaque() {
   no_git_home="$(new_home no-git-needed)"
   no_git_bin="$no_git_home/path"
   mkdir -p "$no_git_home/work" "$no_git_home/bin" "$no_git_bin"
-  ln -s /bin/bash "$no_git_bin/bash"
+  cat > "$no_git_bin/git" <<'EOF'
+#!/usr/bin/env bash
+exit 99
+EOF
+  chmod +x "$no_git_bin/git"
   for repository_name in \
     workflow-openhuman \
     workflow-medulla \
@@ -167,7 +171,7 @@ test_existing_destinations_are_opaque() {
   do
     mkdir "$no_git_home/work/$repository_name"
   done
-  HOME="$no_git_home" PATH="$no_git_bin" "$INIT" >/dev/null \
+  HOME="$no_git_home" PATH="$no_git_bin:/usr/bin:/bin" "$INIT" >/dev/null \
     || fail_test "Git is not required when every destination exists"
 }
 
