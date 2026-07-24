@@ -410,6 +410,12 @@ test_shared_layout_primitives() {
   assert_line_count 1 "new-session -d -x 240 -y 80 -s workspace -n grid -c $home/one" "$log" \
     "first remote window creates a generous detached session"
   assert_line_count 8 "split-window" "$log" "grid and mixed layouts create eight additional panes"
+  assert_line_count 1 "split-window -h -p 66" "$log" \
+    "grid first creates space for the middle and right columns"
+  assert_line_count 1 "split-window -h -p 50" "$log" \
+    "grid divides the remaining width into middle and right columns"
+  assert_line_count 3 "split-window -v -p 50" "$log" \
+    "grid divides each of its three columns into two rows"
   assert_line_count 2 "select-layout" "$log" "each layout is normalized"
   assert_contains "$(cat "$log")" "select-pane -t @1 -T four" "mixed panes use directory titles"
 }
@@ -458,15 +464,20 @@ tmux_make_quad_window() {
 }
 tmux_make_grid_window() {
   local command="$1" server="$2" session="$3" name="$4" directory="$5"
-  local tl tr ml mr bl br pane title
-  tl="$(tmux_create_window "$command" "$server" "$session" "$name" "$directory")"
-  tr="$(tmux_call "$command" "$server" split-window -h -t "$tl" -c "$directory" -P -F '#{pane_id}')"
-  ml="$(tmux_call "$command" "$server" split-window -v -t "$tl" -c "$directory" -P -F '#{pane_id}')"
-  mr="$(tmux_call "$command" "$server" split-window -v -t "$tr" -c "$directory" -P -F '#{pane_id}')"
-  bl="$(tmux_call "$command" "$server" split-window -v -t "$ml" -c "$directory" -P -F '#{pane_id}')"
-  br="$(tmux_call "$command" "$server" split-window -v -t "$mr" -c "$directory" -P -F '#{pane_id}')"
+  local left middle right bottom_left bottom_middle bottom_right pane title
+  left="$(tmux_create_window "$command" "$server" "$session" "$name" "$directory")"
+  middle="$(tmux_call "$command" "$server" split-window -h -p 66 -t "$left" \
+    -c "$directory" -P -F '#{pane_id}')"
+  right="$(tmux_call "$command" "$server" split-window -h -p 50 -t "$middle" \
+    -c "$directory" -P -F '#{pane_id}')"
+  bottom_left="$(tmux_call "$command" "$server" split-window -v -p 50 -t "$left" \
+    -c "$directory" -P -F '#{pane_id}')"
+  bottom_middle="$(tmux_call "$command" "$server" split-window -v -p 50 -t "$middle" \
+    -c "$directory" -P -F '#{pane_id}')"
+  bottom_right="$(tmux_call "$command" "$server" split-window -v -p 50 -t "$right" \
+    -c "$directory" -P -F '#{pane_id}')"
   title="${directory##*/}"
-  for pane in "$tl" "$tr" "$ml" "$mr" "$bl" "$br"; do
+  for pane in "$left" "$middle" "$right" "$bottom_left" "$bottom_middle" "$bottom_right"; do
     tmux_call "$command" "$server" select-pane -t "$pane" -T "$title"
   done
   tmux_call "$command" "$server" select-layout -t "$session:$name" tiled >/dev/null
@@ -704,6 +715,14 @@ test_super_review_layout_dependencies_and_help() {
     "$ROOT/bin/super-review" --help)"
   assert_contains "$output" "deliberately kills and replaces" "help warns about destructive recreation"
   assert_eq "" "$(cat "$log")" "help does not call tmux"
+  set +e
+  output="$(HOME="$home" PATH="$fake_bin:/usr/bin:/bin" \
+    FAKE_TMUX_LOG="$log" FAKE_TMUX_STATE="$home/tmux.state" \
+    "$ROOT/bin/super-review" --help extra 2>&1)"
+  status=$?
+  set -e
+  assert_eq 1 "$status" "help with an extra argument fails"
+  assert_eq "" "$(cat "$log")" "invalid arguments do not call tmux"
   HOME="$home" PATH="$fake_bin:/usr/bin:/bin" \
     FAKE_TMUX_LOG="$log" FAKE_TMUX_STATE="$home/tmux.state" \
     "$ROOT/bin/super-review"
@@ -738,6 +757,18 @@ test_super_review_layout_dependencies_and_help() {
   assert_eq 1 "$status" "missing mosh fails"
   assert_contains "$output" "required command not found: mosh" "missing mosh is clear"
   assert_eq "" "$(cat "$log")" "dependency failure does not kill the session"
+  make_fake_command "$fake_bin" mosh
+  rm -rf "$home/work/tinyhumansai/workflow-dashboard"
+  : > "$log"
+  set +e
+  output="$(HOME="$home" PATH="$fake_bin:/usr/bin:/bin" \
+    FAKE_TMUX_LOG="$log" FAKE_TMUX_STATE="$home/tmux.state" \
+    "$ROOT/bin/super-review" 2>&1)"
+  status=$?
+  set -e
+  assert_eq 1 "$status" "missing workspace directory fails"
+  assert_contains "$output" "missing workspace directory:" "missing directory is clear"
+  assert_eq "" "$(cat "$log")" "directory preflight failure does not kill the session"
 }
 run_test "preserves the local super-review dashboard" test_super_review_layout_dependencies_and_help
 ```
@@ -757,12 +788,16 @@ Recreate and attach the local super-review tmux dashboard.
 WARNING: this deliberately kills and replaces any existing super-review session.
 EOF
 }
+if [ "$#" -gt 1 ]; then
+  printf 'super-review: too many arguments\n' >&2
+  usage >&2
+  exit 1
+fi
 case "${1:-}" in
   -h|--help) usage; exit 0 ;;
   "") ;;
   *) printf 'super-review: unknown argument: %s\n' "$1" >&2; usage >&2; exit 1 ;;
 esac
-[ "$#" -le 1 ] || { usage >&2; exit 1; }
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # shellcheck source=tmux-layouts.sh
 source "$ROOT/bin/tmux-layouts.sh"
@@ -775,6 +810,21 @@ for pair in "tmux|$TMUX_COMMAND" "btop|$BTOP_COMMAND" "mosh|$MOSH_COMMAND"; do
   name="${pair%%|*}"
   path="${pair#*|}"
   [ -n "$path" ] || { printf 'super-review: required command not found: %s\n' "$name" >&2; exit 1; }
+done
+for directory in \
+  "$WORKSPACE/workflow-openhuman" \
+  "$WORKSPACE/workflow-medulla" \
+  "$WORKSPACE/workflow-tinyplace" \
+  "$WORKSPACE/workflow-dashboard" \
+  "$WORKSPACE/workflow-opencompany" \
+  "$WORKSPACE/tinycortex" \
+  "$WORKSPACE/tinyagents" \
+  "$WORKSPACE/tinychannels" \
+  "$WORKSPACE/tinyjuice"; do
+  [ -d "$directory" ] || {
+    printf 'super-review: missing workspace directory: %s\n' "$directory" >&2
+    exit 1
+  }
 done
 tmux_call "$TMUX_COMMAND" "" kill-session -t "$SESSION" 2>/dev/null || true
 tmux_make_quad_window "$TMUX_COMMAND" "" "$SESSION" openhuman "$WORKSPACE/workflow-openhuman"
