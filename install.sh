@@ -134,6 +134,27 @@ remove_legacy_skill_link "claude" "tiny-place-—-the-social-economy-for-ai-agen
 remove_legacy_skill_link "claude" "tinyplace"
 remove_legacy_skill_link "codex" "tinyplace"
 
+# Remove a shared skill link (skills/<name>) that has been deleted from the repo.
+# The shared-skill loops below only create links; they never prune a skill whose
+# canonical source is gone, so retired skills are cleaned up explicitly here.
+remove_shared_skill_link() {
+  local harness="$1" name="$2"
+  local installed="$HOME/.$harness/skills/$name"
+  local shared_source="$REPO_ROOT/skills/$name"
+
+  if [ -L "$installed" ] && [ "$(readlink "$installed")" = "$shared_source" ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "[would remove] retired skill link $installed"
+    else
+      rm "$installed"
+      echo "[unlink] retired skill $installed"
+    fi
+  fi
+}
+
+remove_shared_skill_link "claude" "using-superpowers"
+remove_shared_skill_link "codex" "using-superpowers"
+
 # Keep one symlink per generated file so Claude Code can still drop local files
 # into ~/.claude/agents.
 LEGACY_AI_AGENT="$HOME/.claude/agents/engineering-ai-engineer.md"

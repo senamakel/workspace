@@ -172,11 +172,8 @@ or secrets into GitHub.
 Skills live in `skills/<name>/` and are linked into both Claude and Codex.
 Alongside `humanizer`, the following workflow skills are adapted from
 [superpowers](https://github.com/obra/superpowers) — guidance you follow in the
-main loop, several of which dispatch the workflow agents above. `using-superpowers`
-is the map that ties the whole arc together.
+main loop, several of which dispatch the workflow agents above.
 
-- `using-superpowers` — the workflow map: which agent or skill to reach for, and
-  the `brainstorming → plan-writer → execute → finish` arc.
 - `brainstorming` — turn an idea into an approved design/spec before any code;
   hands off to the `plan-writer` agent.
 - `subagent-driven-development` — execute a plan by dispatching a fresh
