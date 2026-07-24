@@ -400,6 +400,49 @@ test_supports_old_form_direct_submodule() {
     "status identifies the selected old-form direct-submodule commit"
 }
 
+test_supports_lagging_old_form_direct_submodule() {
+  local origin super submodule git_dir selected before_head output status staged_paths
+  origin="$(make_remote lagging-old-form-origin)"
+  super="$(make_superproject_with_submodule lagging-old-form-super "$origin")"
+  submodule="$super/modules/alpha"
+  git_dir="$(git -C "$submodule" rev-parse --absolute-git-dir)"
+
+  git -C "$submodule" config --unset core.worktree
+  rm "$submodule/.git"
+  mv "$git_dir" "$submodule/.git"
+  git -C "$submodule" remote set-url origin "../../../lagging-old-form-origin.git"
+  selected="$(advance_remote lagging-old-form-origin "lagging old form tip")"
+  git -C "$super" update-index --cacheinfo "160000,$selected,modules/alpha"
+  git -C "$super" commit -qm "Advance alpha gitlink"
+  before_head="$(git -C "$super" rev-parse HEAD)"
+
+  if git -C "$submodule" cat-file -e "$selected^{commit}" 2>/dev/null; then
+    fail_test "lagging old-form checkout must not contain the recorded commit before update"
+  fi
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+  status=$?
+  set -e
+
+  assert_eq "0" "$status" "lagging old-form direct-submodule update succeeds: $output"
+  assert_eq "main" "$(git -C "$submodule" branch --show-current)" \
+    "lagging old-form submodule ends on local main"
+  assert_eq "$selected" "$(git -C "$submodule" rev-parse HEAD)" \
+    "lagging old-form submodule reaches selected origin main"
+  assert_eq "$selected" "$(git -C "$submodule" rev-parse refs/heads/main)" \
+    "lagging old-form local main is forced to the selected commit"
+  assert_eq "$before_head" "$(git -C "$super" rev-parse HEAD)" \
+    "lagging old-form update does not create a spurious commit"
+  staged_paths="$(git -C "$super" diff --cached --name-only)"
+  assert_eq "" "$staged_paths" \
+    "lagging old-form update leaves the recorded gitlink unchanged"
+  assert_eq "$selected" "$(git -C "$super" rev-parse :modules/alpha)" \
+    "lagging old-form update preserves the correct gitlink"
+  assert_contains "$output" "all submodule pointers already up to date" \
+    "lagging old-form update reports no pointer change"
+}
+
 test_supports_spaced_submodule_names_and_paths() {
   local origin super selected output staged_paths status
   origin="$(make_remote spaced-path-origin)"
@@ -557,6 +600,7 @@ run_test "supports no-commit and already-current modes" test_no_commit_and_alrea
 run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
 run_test "updates a direct submodule from a linked worktree" test_updates_direct_submodule_from_linked_worktree
 run_test "supports an old-form direct submodule" test_supports_old_form_direct_submodule
+run_test "supports a lagging old-form direct submodule" test_supports_lagging_old_form_direct_submodule
 run_test "supports spaced submodule names and paths" test_supports_spaced_submodule_names_and_paths
 run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path
 run_test "rejects stale-registered unrelated repository" test_rejects_unrelated_repository_with_stale_registration
