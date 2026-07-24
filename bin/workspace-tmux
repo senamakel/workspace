@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_path() {
+  local path="${BASH_SOURCE[0]}" directory target
+
+  while [ -L "$path" ]; do
+    directory="$(cd "$(dirname "$path")" && pwd -P)"
+    target="$(readlink "$path")"
+    case "$target" in
+      /*) path="$target" ;;
+      *) path="$directory/$target" ;;
+    esac
+  done
+  printf '%s/%s\n' \
+    "$(cd "$(dirname "$path")" && pwd -P)" \
+    "$(basename "$path")"
+}
+
+usage() {
+  cat <<'EOF'
+workspace-tmux
+
+Create or attach the persistent six-pane TinyHumans workspace on a dedicated
+tmux server. Override names with MOSH_TMUX_SERVER and MOSH_TMUX_SESSION.
+EOF
+}
+
+if [ "$#" -gt 1 ]; then
+  printf 'workspace-tmux: too many arguments\n' >&2
+  usage >&2
+  exit 1
+fi
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    printf 'workspace-tmux: unknown argument: %s\n' "$1" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
+
+if [ -n "${TMUX:-}" ]; then
+  printf 'workspace-tmux: refusing to attach from inside tmux\n' >&2
+  exit 1
+fi
+
+SCRIPT_PATH="$(resolve_script_path)"
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
+# shellcheck disable=SC1091
+source "$ROOT/bin/tmux-layouts.sh"
+
+SERVER="${MOSH_TMUX_SERVER:-mosh}"
+SESSION="${MOSH_TMUX_SESSION:-workspace}"
+WORKSPACE="$HOME/work"
+TMUX_COMMAND="$(command -v tmux || true)"
+
+[ -n "$TMUX_COMMAND" ] || {
+  printf 'workspace-tmux: required command not found: tmux\n' >&2
+  exit 1
+}
+
+if ! tmux_call "$TMUX_COMMAND" "$SERVER" \
+  has-session -t "=$SESSION" 2>/dev/null
+then
+  for name in openhuman medulla tinyplace dashboard opencompany; do
+    directory="$WORKSPACE/workflow-$name"
+    [ -d "$directory" ] || {
+      printf 'workspace-tmux: missing workflow directory: %s\n' \
+        "$directory" >&2
+      exit 1
+    }
+  done
+
+  BTOP_COMMAND="$(command -v btop || true)"
+  [ -n "$BTOP_COMMAND" ] || {
+    printf 'workspace-tmux: required command not found: btop\n' >&2
+    exit 1
+  }
+
+  tmux_make_grid_window \
+    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
+    openhuman "$WORKSPACE/workflow-openhuman"
+  tmux_make_grid_window \
+    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
+    medulla "$WORKSPACE/workflow-medulla"
+  tmux_make_grid_window \
+    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
+    tinyplace "$WORKSPACE/workflow-tinyplace"
+  tmux_make_grid_window \
+    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
+    dashboard "$WORKSPACE/workflow-dashboard"
+  tmux_make_grid_window \
+    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
+    opencompany "$WORKSPACE/workflow-opencompany"
+
+  pane="$(
+    tmux_create_window \
+      "$TMUX_COMMAND" "$SERVER" "$SESSION" btop "$HOME"
+  )"
+  tmux_call "$TMUX_COMMAND" "$SERVER" select-pane -t "$pane" -T btop
+  tmux_call "$TMUX_COMMAND" "$SERVER" \
+    send-keys -t "$pane" "$BTOP_COMMAND" C-m
+
+  pane="$(
+    tmux_create_window \
+      "$TMUX_COMMAND" "$SERVER" "$SESSION" shell "$HOME"
+  )"
+  tmux_call "$TMUX_COMMAND" "$SERVER" select-pane -t "$pane" -T shell
+  tmux_call "$TMUX_COMMAND" "$SERVER" \
+    select-window -t "$SESSION:openhuman"
+  tmux_call "$TMUX_COMMAND" "$SERVER" \
+    select-pane -t "$SESSION:openhuman.0"
+fi
+
+tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
+  status-style 'bg=colour18,fg=white'
+tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
+  pane-border-style 'fg=colour17,bg=colour0'
+tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
+  pane-active-border-style 'fg=colour25,bg=colour0'
+tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
+  message-style 'bg=colour18,fg=white'
+tmux_call "$TMUX_COMMAND" "$SERVER" set-window-option -g \
+  mode-style 'bg=colour18,fg=white'
+tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g mouse on
+tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g allow-passthrough on
+tmux_call "$TMUX_COMMAND" "$SERVER" set-window-option -g \
+  window-active-style bg=terminal
+tmux_call "$TMUX_COMMAND" "$SERVER" set-window-option -g \
+  window-style bg=colour0
+tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g prefix C-z
+tmux_call "$TMUX_COMMAND" "$SERVER" unbind-key C-b
+tmux_call "$TMUX_COMMAND" "$SERVER" bind-key C-z send-prefix
+
+exec "$TMUX_COMMAND" -L "$SERVER" attach-session -t "=$SESSION"
