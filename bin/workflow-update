@@ -110,7 +110,7 @@ force_local_main() {
   git -C "$dir" reset --hard "$commit"
 }
 
-CHANGED=0
+CHANGED_PATHS=()
 while IFS= read -r SM_PATH; do
   [ -n "$SM_PATH" ] || continue
   if [ ! -d "$SM_PATH/.git" ] && [ ! -f "$SM_PATH/.git" ]; then
@@ -129,7 +129,7 @@ while IFS= read -r SM_PATH; do
   else
     git add -- "$SM_PATH"
     pass "$SM_PATH: superproject pointer changed ($RECORDED -> $SELECTED_COMMIT)"
-    CHANGED=1
+    CHANGED_PATHS+=("$SM_PATH")
   fi
 done < <(
   git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null \
@@ -137,10 +137,10 @@ done < <(
 )
 
 # ── 2. Commit the moved pointers ───────────────────────────────────
-if [ "$CHANGED" = "0" ]; then
+if [ "${#CHANGED_PATHS[@]}" -eq 0 ]; then
   pass "all submodule pointers already up to date"
 elif [ "$COMMIT" = "1" ]; then
-  git commit -m "Update submodule pointers" -m "$(git diff --cached --submodule=short --stat)"
+  git commit -m "Update submodule pointers" -- "${CHANGED_PATHS[@]}"
   pass "committed submodule pointer update"
 else
   info "pointer changes staged; commit skipped (--no-commit)"

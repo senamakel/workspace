@@ -252,10 +252,89 @@ test_fails_without_overwriting_untracked_obstruction() {
     "untracked obstruction creates no pointer commit"
 }
 
+test_commits_only_changed_direct_gitlinks() {
+  local origin super selected before output committed_paths staged_paths
+  origin="$(make_remote commit-mode-origin)"
+  super="$(make_superproject_with_submodule commit-mode-super "$origin")"
+  selected="$(advance_remote commit-mode-origin "commit mode tip")"
+  printf 'keep staged\n' > "$super/unrelated.txt"
+  git -C "$super" add unrelated.txt
+  before="$(git -C "$super" rev-parse HEAD)"
+
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" 2>&1)"
+
+  assert_eq "1" "$(git -C "$super" rev-list --count "$before..HEAD")" \
+    "normal mode creates exactly one commit"
+  assert_eq "Update submodule pointers" "$(git -C "$super" log -1 --format=%s)" \
+    "pointer commit has the exact subject"
+  assert_eq "$selected" "$(git -C "$super" rev-parse HEAD:modules/alpha)" \
+    "pointer commit records the selected gitlink"
+  committed_paths="$(git -C "$super" diff-tree --no-commit-id --name-only -r HEAD)"
+  assert_eq "modules/alpha" "$committed_paths" \
+    "pointer commit contains only the changed direct gitlink"
+  staged_paths="$(git -C "$super" diff --cached --name-only)"
+  assert_eq "unrelated.txt" "$staged_paths" \
+    "unrelated pre-staged file remains staged"
+  assert_contains "$output" "committed submodule pointer update" \
+    "normal mode reports the pointer commit"
+}
+
+test_no_commit_and_already_current_modes() {
+  local origin super selected before output staged_paths current
+  origin="$(make_remote no-commit-origin)"
+  super="$(make_superproject_with_submodule no-commit-super "$origin")"
+  selected="$(advance_remote no-commit-origin "no commit tip")"
+  before="$(git -C "$super" rev-parse HEAD)"
+
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+
+  assert_eq "$before" "$(git -C "$super" rev-parse HEAD)" \
+    "--no-commit preserves superproject HEAD"
+  staged_paths="$(git -C "$super" diff --cached --name-only)"
+  assert_eq "modules/alpha" "$staged_paths" \
+    "--no-commit stages the selected direct gitlink"
+  assert_eq "$selected" "$(git -C "$super" rev-parse :modules/alpha)" \
+    "the staged gitlink records the selected commit"
+  assert_contains "$output" "pointer changes staged; commit skipped (--no-commit)" \
+    "--no-commit reports the skipped commit"
+
+  git -C "$super" commit -qm "Record alpha pointer" -- modules/alpha
+  current="$(git -C "$super" rev-parse HEAD)"
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" 2>&1)"
+
+  assert_eq "$current" "$(git -C "$super" rev-parse HEAD)" \
+    "already-current mode creates no commit"
+  assert_contains "$output" "all submodule pointers already up to date" \
+    "already-current mode reports up to date"
+}
+
+test_does_not_initialize_nested_submodules() {
+  local nested parent super output
+  nested="$(make_remote nested-child)"
+  parent="$(make_remote nested-parent)"
+  git -c protocol.file.allow=always -C "$TEST_ROOT/nested-parent-seed" \
+    submodule add -q "$nested" nested/child
+  git -C "$TEST_ROOT/nested-parent-seed" commit -qm "Add nested child submodule"
+  git -C "$TEST_ROOT/nested-parent-seed" push -q origin main
+  super="$(make_superproject_with_submodule nested-super "$parent")"
+
+  assert_file_missing "$super/modules/alpha/nested/child/.git" \
+    "nested submodule starts uninitialized"
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+
+  assert_file_missing "$super/modules/alpha/nested/child/.git" \
+    "workflow update leaves the nested submodule uninitialized"
+  assert_contains "$output" "modules/alpha: selected origin/" \
+    "direct parent submodule is still processed"
+}
+
 run_test "validates the command interface" test_interface_validation
 run_test "does not synchronize the superproject" test_superproject_is_not_synchronized
 run_test "prefers upstream main and forces local main" test_prefers_upstream_and_forces_local_main
 run_test "falls back to origin for every unusable upstream condition" test_origin_fallback_conditions
 run_test "fails when neither remote exposes main" test_fails_without_remote_main
 run_test "fails without overwriting an untracked obstruction" test_fails_without_overwriting_untracked_obstruction
+run_test "commits only changed direct gitlinks" test_commits_only_changed_direct_gitlinks
+run_test "supports no-commit and already-current modes" test_no_commit_and_already_current_modes
+run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
 printf '1..%s\n' "$PASS_COUNT"
