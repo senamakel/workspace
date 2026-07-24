@@ -91,13 +91,38 @@ The `tdd-implementer` reports one of four statuses:
   address before review. Observations ("this file is getting large"): note and
   proceed.
 - **NEEDS_CONTEXT** — provide the missing information and re-dispatch.
-- **BLOCKED** — assess: context problem → add context, re-dispatch; needs more
-  reasoning → re-dispatch on a more capable model; too large → split into smaller
-  pieces; plan itself is wrong → fix the plan or adjust the task yourself, record
-  the change in the ledger, and re-dispatch. Surface to the user only a blocker
-  that is genuinely irreducible from the plan and the codebase.
+- **BLOCKED** — assess: context problem → add context, re-dispatch; a failing
+  test or bug whose root cause is unclear → dispatch `systematic-debugger`, then
+  re-dispatch the implementer with the root cause; needs more reasoning →
+  re-dispatch on a more capable model; too large → split into smaller pieces;
+  plan itself is wrong → fix the plan or adjust the task yourself, record the
+  change in the ledger, and re-dispatch. Surface to the user only a blocker that
+  is genuinely irreducible from the plan and the codebase.
 
 **Never** ignore an escalation or force the same model to retry unchanged.
+
+## Delegating Issues to Specialists
+
+You coordinate; you do not personally debug, untangle merges, verify claims, or
+write docs. When a specific class of issue arises mid-loop, dispatch the agent
+built for it — one specialist per issue, in isolation, with a tight brief and the
+concrete artifact it needs (the failing command, the conflicted paths, the diff
+file). Delegating keeps your own context clean for coordination and gives each
+problem an expert's full attention.
+
+| Issue that surfaces | Dispatch | Hand it |
+| --- | --- | --- |
+| Test fails or behaves wrong and the cause isn't obvious | `systematic-debugger` | the exact failing command + its output; it returns a root cause (and optionally a fix behind a regression test) |
+| A repo/worktree left in a conflicted state (merge/rebase/cherry-pick) | `merge-conflict-resolver` | the conflicted state as-is; it integrates both intents and verifies the build |
+| You need to trust a "it passes / it's done" claim before proceeding | `completion-verifier` | the claim + the command that would prove it; it runs it fresh and reports evidence |
+| Implementing a task, or a scoped fix for review findings | `tdd-implementer` | the task/findings only (never the whole plan) |
+| Spec-compliance + code-quality gate | `code-reviewer` | the diff **as a file** + the binding Global Constraints |
+| Docs missing or stale after the change | `doc-writer` | the `MERGE_BASE..HEAD` diff; docs-only, never behavior |
+
+Don't do a specialist's job inline because it looks quick — a two-line "fix" for a
+failing test without a root cause is how regressions ship. Route it, integrate the
+result, keep looping. If no specialist fits and the issue is genuinely irreducible
+from the plan and codebase, only then surface it to the user.
 
 ## Constructing Review Dispatches
 
@@ -182,12 +207,17 @@ one missing either verdict (spec compliance AND quality) · proceed with unfixed
 Critical/Important issues · dispatch multiple implementers in parallel (they
 conflict) · make an implementer read the whole plan (hand it just its task) ·
 tell a reviewer what not to flag or pre-rate severity · dispatch a reviewer
-without a diff file · re-dispatch a task the ledger already marks complete.
+without a diff file · re-dispatch a task the ledger already marks complete ·
+debug, resolve a conflict, or verify a claim inline when a specialist exists for
+it (see Delegating Issues to Specialists).
 
 ## Integration
 
 Requires: `using-git-worktrees` skill (isolated workspace) · `plan-writer` agent
 (produces the plan) · `tdd-implementer` and `code-reviewer` agents (the workers) ·
 `doc-writer` agent (documents the change before finishing) ·
-`finishing-a-development-branch` skill (integration). Alternative: the
-`plan-executor` agent for single-session, non-dispatch execution.
+`finishing-a-development-branch` skill (integration). Specialists dispatched when
+issues arise: `systematic-debugger` (root-cause a failure), `merge-conflict-resolver`
+(conflicted tree), `completion-verifier` (prove a claim) — see Delegating Issues
+to Specialists. Alternative: the `plan-executor` agent for single-session,
+non-dispatch execution.
