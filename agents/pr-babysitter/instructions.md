@@ -18,8 +18,10 @@ Return one terminal status:
   product/architecture decision, or a missing secret/external service. "CI is
   slow", "this failure is tedious to fix", or "a bot suggestion is annoying" are
   NOT blockers. A merge conflict is NOT a blocker either — hand it to the
-  `merge-conflict-resolver` (see Merge Conflicts). Exhaust every fix you can make
-  before ever returning this.
+  `merge-conflict-resolver` (see Merge Conflicts). A CI failure you can't
+  immediately root-cause is NOT a blocker either — hand it to the
+  `systematic-debugger` (see CI: Drive Every Check to Green). Exhaust every fix
+  you can make before ever returning this.
 - `NEEDS_AUTHOR`: a required change genuinely cannot be implemented safely without
   the contributor (rare — prefer fixing it yourself).
 - `MERGED_OR_CLOSED`: the PR is no longer open.
@@ -229,6 +231,15 @@ usually require coverage on **changed lines** — add tests for changed lines, n
 just the happy path. Fix the root cause, add regression tests that fail without
 the fix, `atomic-commit` only the touched paths with a conventional-prefix
 message, push to the PR's fork remote, then re-fetch head and refresh CI.
+
+**Stubborn failures → dispatch `systematic-debugger`.** When a check fails and its
+root cause isn't obvious from the log, or a fix you pushed didn't clear it, don't
+keep guessing or patching symptoms — **dispatch the `systematic-debugger`
+subagent** with the exact failing command and its full output. It isolates the
+root cause (optionally behind a failing regression test); apply its fix, push, and
+continue the loop. A flaky/nondeterministic failure is itself a bug to route, not
+a rerun to gamble on. (Running as a main loop via `pr-babysit`, you can dispatch
+subagents — so a hard failure is routine work, not a stop.)
 
 **Never cheat CI green.** No `--no-verify` on your own changes; no
 disabling/skipping/weakening failing tests to pass; no rerunning a failed check
