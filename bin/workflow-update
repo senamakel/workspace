@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# workflow-update — sync a workflow superproject and bump its submodule pointers.
-#
-# Usage: workflow-update [--no-commit]
-#
-# Run from anywhere inside a workflow repo (a superproject with submodules).
-# Steps:
-#   1. Fetch the canonical remote (upstream preferred, else origin) and merge
-#      its default branch into the current branch.
-#   2. For each first-level submodule (no recursion): fetch its canonical
-#      remote and check out the tip of its default branch.
-#   3. Stage the moved submodule pointers and commit them
-#      ("Update submodule pointers"). --no-commit stages only.
+# workflow-update — update direct submodules and record their gitlinks.
 set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+workflow-update [--no-commit]
+
+Update each first-level submodule to upstream/main, falling back to origin/main.
+Each submodule is forced onto local main at the selected remote commit, discarding
+divergent local main commits and tracked changes. Nested submodules are untouched.
+The superproject is not fetched, merged, switched, or reset.
+
+Options:
+  --no-commit  stage changed submodule pointers without committing
+  -h, --help   show this help
+EOF
+}
 
 if [ -t 1 ]; then
   _R=$'\033[0;31m' _G=$'\033[0;32m' _Y=$'\033[0;33m' _B=$'\033[1m' _0=$'\033[0m'
@@ -24,12 +28,27 @@ warn()  { printf '%s[WARN]%s %s\n' "$_Y" "$_0" "$*" >&2; }
 info()  { printf '%s[INFO]%s %s\n' "$_B" "$_0" "$*"; }
 
 COMMIT=1
-case "${1:-}" in
-  --no-commit) COMMIT=0 ;;
-  -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-  '') ;;
-  *) fail "unknown argument: $1"; exit 1 ;;
-esac
+if [ "$#" -gt 1 ]; then
+  fail "unknown argument: $2"
+  exit 1
+fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --no-commit)
+      [ "$COMMIT" = "1" ] || { fail "unknown argument: $1"; exit 1; }
+      COMMIT=0
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 # Canonical remote of a repo dir: upstream if present, else origin.
 canonical_remote() {
@@ -53,19 +72,10 @@ TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null)" \
 cd "$TOPLEVEL"
 [ -f .gitmodules ] || { fail "no .gitmodules here — not a workflow superproject"; exit 1; }
 
-# ── 1. Sync the superproject ───────────────────────────────────────
-REMOTE=$(canonical_remote .)
-git fetch "$REMOTE" --prune
-BRANCH=$(default_branch . "$REMOTE")
-info "superproject: merging $REMOTE/$BRANCH into $(git branch --show-current || echo 'detached HEAD')"
-git merge --no-edit "refs/remotes/$REMOTE/$BRANCH"
-
-# Make sure submodules exist and match the (possibly moved) recorded pointers
-# before we bump them; one level only.
 git submodule sync
 git submodule update --init
 
-# ── 2. Bump each first-level submodule to its remote default branch ─
+# ── 1. Bump each first-level submodule to its remote default branch ─
 CHANGED=0
 while IFS= read -r SM_PATH; do
   [ -d "$SM_PATH/.git" ] || [ -f "$SM_PATH/.git" ] || { warn "skipping $SM_PATH (not initialized)"; continue; }
@@ -84,7 +94,7 @@ while IFS= read -r SM_PATH; do
   fi
 done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}')
 
-# ── 3. Commit the moved pointers ───────────────────────────────────
+# ── 2. Commit the moved pointers ───────────────────────────────────
 if [ "$CHANGED" = "0" ]; then
   pass "all submodule pointers already up to date"
 elif [ "$COMMIT" = "1" ]; then
