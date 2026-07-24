@@ -143,7 +143,9 @@ force_local_main() {
 }
 
 CHANGED_PATHS=()
-while read -r SM_KEY SM_PATH; do
+while IFS= read -r -d '' SM_CONFIG_ENTRY; do
+  SM_KEY="${SM_CONFIG_ENTRY%%$'\n'*}"
+  SM_PATH="${SM_CONFIG_ENTRY#*$'\n'}"
   [ -n "$SM_PATH" ] || continue
   SM_NAME="${SM_KEY#submodule.}"
   SM_NAME="${SM_NAME%.path}"
@@ -167,7 +169,7 @@ while read -r SM_KEY SM_PATH; do
     CHANGED_PATHS+=("$SM_PATH")
   fi
 done < <(
-  git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null \
+  git config -z -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null \
 )
 
 # ── 2. Commit the moved pointers ───────────────────────────────────

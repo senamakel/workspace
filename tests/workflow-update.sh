@@ -336,6 +336,39 @@ test_initializes_uninitialized_direct_submodule() {
     "status identifies the selected direct-submodule commit"
 }
 
+test_supports_spaced_submodule_names_and_paths() {
+  local origin super selected output staged_paths status
+  origin="$(make_remote spaced-path-origin)"
+  super="$TEST_ROOT/spaced-path-super"
+
+  git init -q "$super"
+  configure_identity "$super"
+  git -c protocol.file.allow=always -C "$super" \
+    submodule add -q "$origin" "modules/alpha beta"
+  git -C "$super" commit -qm "Add spaced-path submodule"
+  selected="$(advance_remote spaced-path-origin "spaced path tip")"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+  status=$?
+  set -e
+
+  assert_eq "0" "$status" "spaced-path update succeeds: $output"
+  assert_eq "main" "$(git -C "$super/modules/alpha beta" branch --show-current)" \
+    "spaced-path submodule ends on local main"
+  assert_eq "$selected" "$(git -C "$super/modules/alpha beta" rev-parse HEAD)" \
+    "spaced-path submodule reaches selected origin main"
+  assert_eq "$selected" "$(git -C "$super/modules/alpha beta" rev-parse refs/heads/main)" \
+    "spaced-path local main is forced to the selected commit"
+  staged_paths="$(git -C "$super" diff --cached --name-only)"
+  assert_eq "modules/alpha beta" "$staged_paths" \
+    "--no-commit stages the spaced direct gitlink"
+  assert_eq "$selected" "$(git -C "$super" rev-parse ':modules/alpha beta')" \
+    "staged spaced gitlink records the selected commit"
+  assert_contains "$output" "modules/alpha beta: selected origin/$selected" \
+    "status preserves the complete spaced submodule path"
+}
+
 test_rejects_unrelated_repository_at_submodule_path() {
   local origin super unrelated_head unrelated_branch unrelated_content
   local super_head super_gitlink output status
@@ -408,6 +441,7 @@ run_test "fails without overwriting an untracked obstruction" test_fails_without
 run_test "commits only changed direct gitlinks" test_commits_only_changed_direct_gitlinks
 run_test "supports no-commit and already-current modes" test_no_commit_and_already_current_modes
 run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
+run_test "supports spaced submodule names and paths" test_supports_spaced_submodule_names_and_paths
 run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path
 run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
 printf '1..%s\n' "$PASS_COUNT"
