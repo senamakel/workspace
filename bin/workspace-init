@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+CHECKOUT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
 usage() {
   cat <<'EOF'
 workspace-init [--dry-run] [--workspace <path>]
@@ -115,3 +117,36 @@ while IFS='|' read -r name remote; do
 done <<EOF
 $REPOSITORIES
 EOF
+
+install_launcher_link() {
+  local source="$1" destination="$2" backup_dir
+
+  if [ -L "$destination" ] && [ "$(readlink "$destination")" = "$source" ]; then
+    printf '[ok] %s\n' "$destination"
+    return
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    if [ -e "$destination" ] || [ -L "$destination" ]; then
+      printf '[would replace] %s -> %s (backing up old)\n' \
+        "$destination" "$source"
+    else
+      printf '[would link] %s -> %s\n' "$destination" "$source"
+    fi
+    return
+  fi
+
+  if [ -e "$destination" ] || [ -L "$destination" ]; then
+    backup_dir="$HOME/.config-backups/workspace-init-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+    mv "$destination" "$backup_dir/$(basename "$destination")"
+    printf '[backup] %s -> %s/\n' "$destination" "$backup_dir"
+  fi
+
+  ln -s "$source" "$destination"
+  printf '[link] %s -> %s\n' "$destination" "$source"
+}
+
+install_launcher_link \
+  "$CHECKOUT_ROOT/bin/workspace-tmux" \
+  "$HOME/bin/mosh-tmux"
