@@ -145,7 +145,15 @@ After all tasks, write one package for the full branch
 dispatch a `code-reviewer` pass on the most capable model, pointed at the ledger's
 Minor-findings roll-up so it can triage what must be fixed before merge. If it
 returns findings, dispatch ONE fix implementer with the complete list — not one
-fixer per finding. Then use the `finishing-a-development-branch` skill.
+fixer per finding.
+
+## Document the Change
+
+Once the branch is green and reviewed, dispatch the `doc-writer` agent over the
+branch's changed files (the same `MERGE_BASE..HEAD` diff) to add or update
+docs — in-code doc comments on new public surfaces and folder/module overviews —
+matching the repo's conventions. It changes docs only, never behavior, and commits
+a scoped `docs:` commit. Then use the `finishing-a-development-branch` skill.
 
 ## Durable Progress (Ledger)
 
@@ -175,5 +183,6 @@ without a diff file · re-dispatch a task the ledger already marks complete.
 
 Requires: `using-git-worktrees` skill (isolated workspace) · `plan-writer` agent
 (produces the plan) · `tdd-implementer` and `code-reviewer` agents (the workers) ·
+`doc-writer` agent (documents the change before finishing) ·
 `finishing-a-development-branch` skill (integration). Alternative: the
 `plan-executor` agent for single-session, non-dispatch execution.
