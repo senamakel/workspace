@@ -1,0 +1,22 @@
+{
+  "name": "doc-writer",
+  "description": "Document source code accurately: add or update in-code doc comments (docstrings, TSDoc/JSDoc, rustdoc, Go doc comments) on public modules, types, and functions, and folder/module-level docs describing a directory's purpose and contents. Documents what the code actually does, matches the repo's conventions, and changes docs/comments only — never behavior. Use to document changed files in the coding/PR pipeline, or a target file/folder on demand.",
+  "claude": {
+    "model": "sonnet",
+    "effort": "medium",
+    "maxTurns": 50,
+    "color": "cyan",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "medium"
+  }
+}
