@@ -67,9 +67,11 @@ digraph process {
 Before dispatching Task 1, scan the plan once for conflicts: tasks that
 contradict each other or the Global Constraints, and anything the plan mandates
 that the review rubric treats as a defect (a test asserting nothing, verbatim
-duplication). Present everything you find as one batched question — each finding
-beside the plan text that mandates it, asking which governs — before execution
-begins. If the scan is clean, proceed without comment.
+duplication). Resolve each yourself — choose the reading that best satisfies the
+spec and Global Constraints, record the decision and its rationale in the ledger,
+and proceed. Surface a conflict to the user only when both readings carry
+irreversible, materially different consequences you cannot adjudicate from the
+spec. If the scan is clean, proceed without comment.
 
 ## Model Selection
 
@@ -91,7 +93,9 @@ The `tdd-implementer` reports one of four statuses:
 - **NEEDS_CONTEXT** — provide the missing information and re-dispatch.
 - **BLOCKED** — assess: context problem → add context, re-dispatch; needs more
   reasoning → re-dispatch on a more capable model; too large → split into smaller
-  pieces; plan itself is wrong → escalate to the human.
+  pieces; plan itself is wrong → fix the plan or adjust the task yourself, record
+  the change in the ledger, and re-dispatch. Surface to the user only a blocker
+  that is genuinely irreducible from the plan and the codebase.
 
 **Never** ignore an escalation or force the same model to retry unchanged.
 
@@ -130,9 +134,10 @@ triage. Every fix carries the implementer contract: it re-runs the tests coverin
 its change and reports the results — confirm the fix report contains the covering
 tests, the command, and the output before re-dispatching the reviewer.
 
-A finding the plan mandated (or that conflicts with plan text) is the human's
-decision — present the finding and the plan text, ask which governs. Don't
-dispatch a fix that contradicts the plan without asking.
+When a finding conflicts with plan text, adjudicate it yourself: the review
+rubric governs over plan mandates that are outright defects (testless assertions,
+verbatim duplication); otherwise the plan governs. Record the call in the ledger
+and dispatch the fix accordingly — don't stall the loop waiting on the user.
 
 Resolve any ⚠️ "cannot verify from diff" items yourself — you hold the plan and
 cross-task context the reviewer lacks. A confirmed gap is a failed spec review:
