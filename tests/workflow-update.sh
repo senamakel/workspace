@@ -400,6 +400,48 @@ test_supports_old_form_direct_submodule() {
     "status identifies the selected old-form direct-submodule commit"
 }
 
+test_supports_proven_old_form_direct_submodule_with_mirror_remote() {
+  local origin mirror super submodule git_dir recorded selected output status staged_paths
+  origin="$(make_remote old-form-mirror-origin)"
+  mirror="$TEST_ROOT/old-form-mirror.git"
+  super="$(make_superproject_with_submodule old-form-mirror-super "$origin")"
+  submodule="$super/modules/alpha"
+  git_dir="$(git -C "$submodule" rev-parse --absolute-git-dir)"
+  recorded="$(git -C "$super" rev-parse :modules/alpha)"
+
+  git -C "$submodule" config --unset core.worktree
+  rm "$submodule/.git"
+  mv "$git_dir" "$submodule/.git"
+  git clone -q --bare "$origin" "$mirror"
+  git -C "$submodule" remote set-url origin "$mirror"
+  git -C "$submodule" remote add upstream "$mirror"
+  git -C "$TEST_ROOT/old-form-mirror-origin-seed" remote set-url origin "$mirror"
+  selected="$(advance_remote old-form-mirror-origin "old form mirror tip")"
+
+  git -C "$submodule" cat-file -e "$recorded^{commit}" \
+    || fail_test "old-form mirror checkout must contain the recorded gitlink commit"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+  status=$?
+  set -e
+
+  assert_eq "0" "$status" "proven old-form mirror update succeeds: $output"
+  assert_eq "main" "$(git -C "$submodule" branch --show-current)" \
+    "proven old-form mirror submodule ends on local main"
+  assert_eq "$selected" "$(git -C "$submodule" rev-parse HEAD)" \
+    "proven old-form mirror submodule reaches selected upstream main"
+  assert_eq "$selected" "$(git -C "$submodule" rev-parse refs/heads/main)" \
+    "proven old-form mirror local main is forced to the selected commit"
+  staged_paths="$(git -C "$super" diff --cached --name-only)"
+  assert_eq "modules/alpha" "$staged_paths" \
+    "--no-commit stages the proven old-form mirror gitlink"
+  assert_eq "$selected" "$(git -C "$super" rev-parse :modules/alpha)" \
+    "staged proven old-form mirror gitlink records the selected commit"
+  assert_contains "$output" "modules/alpha: selected upstream/$selected" \
+    "status identifies the selected old-form mirror commit"
+}
+
 test_supports_lagging_old_form_direct_submodule() {
   local origin super submodule git_dir selected before_head output status staged_paths
   origin="$(make_remote lagging-old-form-origin)"
@@ -600,6 +642,7 @@ run_test "supports no-commit and already-current modes" test_no_commit_and_alrea
 run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
 run_test "updates a direct submodule from a linked worktree" test_updates_direct_submodule_from_linked_worktree
 run_test "supports an old-form direct submodule" test_supports_old_form_direct_submodule
+run_test "supports a proven old-form direct submodule with a mirror remote" test_supports_proven_old_form_direct_submodule_with_mirror_remote
 run_test "supports a lagging old-form direct submodule" test_supports_lagging_old_form_direct_submodule
 run_test "supports spaced submodule names and paths" test_supports_spaced_submodule_names_and_paths
 run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path

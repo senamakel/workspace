@@ -104,9 +104,9 @@ urls_match() {
 }
 
 verify_submodule_ownership() {
-  local dir="$1" name="$2"
+  local dir="$1" name="$2" recorded="$3"
   local actual_git_dir expected_git_dir reported_superproject resolved_superproject
-  local registered_url candidate candidate_url matching_remote
+  local registered_url candidate candidate_url matching_remote contains_recorded
 
   if [ -f "$dir/.git" ]; then
     actual_git_dir="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null || true)"
@@ -138,6 +138,10 @@ verify_submodule_ownership() {
       || true
   )"
   registered_url="$(git config --get "submodule.$name.url" 2>/dev/null || true)"
+  contains_recorded=""
+  if git -C "$dir" cat-file -e "$recorded^{commit}" 2>/dev/null; then
+    contains_recorded=1
+  fi
   matching_remote=""
   for candidate in upstream origin; do
     candidate_url="$(git -C "$dir" remote get-url "$candidate" 2>/dev/null || true)"
@@ -149,7 +153,7 @@ verify_submodule_ownership() {
   done
   if [ "$resolved_superproject" != "$TOPLEVEL_PHYSICAL" ] \
     || [ -z "$registered_url" ] \
-    || [ -z "$matching_remote" ]; then
+    || { [ -z "$contains_recorded" ] && [ -z "$matching_remote" ]; }; then
     fail "$dir: unrelated Git repository obstructs submodule path"
     return 1
   fi
@@ -222,7 +226,7 @@ while IFS= read -r -d '' SM_CONFIG_ENTRY; do
   fi
   [ -d "$SM_PATH/.git" ] || [ -f "$SM_PATH/.git" ] \
     || { fail "$SM_PATH: submodule was not initialized"; exit 1; }
-  verify_submodule_ownership "$SM_PATH" "$SM_NAME"
+  verify_submodule_ownership "$SM_PATH" "$SM_NAME" "$RECORDED"
   git submodule sync -- "$SM_PATH"
 
   select_main "$SM_PATH"
