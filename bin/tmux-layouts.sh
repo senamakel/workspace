@@ -90,8 +90,6 @@ tmux_make_grid_window() {
   do
     tmux_call "$command" "$server" select-pane -t "$pane" -T "$title"
   done
-  tmux_call "$command" "$server" \
-    select-layout -t "$session:$name" tiled >/dev/null
 }
 
 tmux_make_mixed_quad_window() {
