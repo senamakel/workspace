@@ -33,20 +33,21 @@ someone).
 Every triage / review / audit / fix action maps to exactly one sub-agent. You
 never do these yourself — you dispatch:
 
-| The work                                                     | Dispatch                      |
-| ------------------------------------------------------------ | ----------------------------- |
-| Is this PR genuine / on-topic / not spam?                    | `pr-contribution-triager`     |
-| Are this PR's tests truthful; coverage/breaking-change risk? | `pr-unit-test-reviewer`       |
-| Final approve/hold review of a PR                            | `pr-approval-reviewer`        |
-| Fix CI, address review feedback on a PR                      | `pr-babysitter` (or `pr-fix`) |
-| Resolve merge/rebase conflicts (base merge, `has_conflicts`) | `merge-conflict-resolver`     |
-| Triage an issue's validity / duplicates / relevance / plan   | `gh-issue-triager`            |
-| Triage a Sentry project into GitHub issues                   | `sentry-triager` (Intake C)   |
-| Audit / review a branch or diff for quality                  | `code-reviewer`               |
-| Root-cause a bug before fixing                               | `systematic-debugger`         |
-| Plan an accepted piece of work                               | `plan-writer`                 |
-| Implement a planned task (TDD)                               | `tdd-implementer`             |
-| Document changed source (files, folders, public APIs)        | `doc-writer`                  |
+| The work                                                                 | Dispatch                      |
+| ------------------------------------------------------------------------ | ----------------------------- |
+| Is this PR genuine / on-topic / not spam?                                | `pr-contribution-triager`     |
+| Are this PR's tests truthful; coverage/breaking-change risk?             | `pr-unit-test-reviewer`       |
+| Final approve/hold review of a PR                                        | `pr-approval-reviewer`        |
+| Fix CI, address review feedback on a PR                                  | `pr-babysitter` (or `pr-fix`) |
+| Resolve merge/rebase conflicts (base merge, `has_conflicts`)             | `merge-conflict-resolver`     |
+| Triage an issue's validity / duplicates / relevance / plan               | `gh-issue-triager`            |
+| Triage a Sentry project into GitHub issues                               | `sentry-triager` (Intake C)   |
+| Audit / review a branch or diff for quality                              | `code-reviewer`               |
+| Root-cause a bug before fixing                                           | `systematic-debugger`         |
+| Plan an accepted piece of work                                           | `plan-writer`                 |
+| Implement a planned task (TDD)                                           | `tdd-implementer`             |
+| Document changed source (files, folders, public APIs)                    | `doc-writer`                  |
+| Independently prove an "it's green / it's done" claim before trusting it | `completion-verifier`         |
 
 The only judgments you make unaided are mechanical and tool-backed: bucketing from
 census fields, and merge-gate checks — and even the gate is `pr-merge --dry-run`,
@@ -132,6 +133,9 @@ dispatching-parallel-agents skill), giving each the number and the canonical
 | `tdd-implementer`         | A planned task needs implementing (strict TDD)                                       | DONE/BLOCKED status + commits                                      |
 | `code-reviewer`           | A branch/diff from taken-up work needs review before its PR                          | calibrated findings + verdict                                      |
 | `systematic-debugger`     | An issue is a reproducible bug needing root-cause diagnosis                          | root cause + optional fix                                          |
+| `merge-conflict-resolver` | A PR/worktree is conflicted (base merge, `has_conflicts`, rebase)                    | both intents integrated, build verified, merge completed           |
+| `doc-writer`              | Taken-up work's changed source needs docs before its PR                              | docs-only commit over the changed files                            |
+| `completion-verifier`     | A completion/green claim must be proven before you act on it                         | fresh evidence-backed pass/fail                                    |
 
 If your harness does not permit nested subagent dispatch, fall back to `pr-fix`
 (which launches its own harness) for PR work, and to direct `gh`/`git` inspection
