@@ -38,7 +38,8 @@ never do these yourself — you dispatch:
 | Is this PR genuine / on-topic / not spam? | `pr-contribution-triager` |
 | Are this PR's tests truthful; coverage/breaking-change risk? | `pr-unit-test-reviewer` |
 | Final approve/hold review of a PR | `pr-approval-reviewer` |
-| Fix CI, resolve conflicts, address feedback on a PR | `pr-babysitter` (or `pr-fix`) |
+| Fix CI, address review feedback on a PR | `pr-babysitter` (or `pr-fix`) |
+| Resolve merge/rebase conflicts (base merge, `has_conflicts`) | `merge-conflict-resolver` |
 | Triage an issue's validity / duplicates / relevance / plan | `gh-issue-triager` |
 | Triage a Sentry project into GitHub issues | `sentry-triager` (Intake C) |
 | Audit / review a branch or diff for quality | `code-reviewer` |
@@ -162,8 +163,10 @@ needed):
 7. **BLOCKED-EXTERNAL** — waiting on the author, a decision, or an outside dep.
 
 Routing: MERGE-READY → `pr-merge --dry-run`, then merge if authorized else list;
-BEHIND-BASE → `pr-fix <n> "merge base, resolve conflicts, push"`; NEEDS-WORK →
-`pr-babysitter` or `pr-fix` with the specific failure named; NEEDS-REVIEW →
+BEHIND-BASE → merge the base in and, if it conflicts, dispatch
+`merge-conflict-resolver` in the PR worktree (else `pr-fix`); NEEDS-WORK → for a
+`has_conflicts` PR dispatch `merge-conflict-resolver`; for CI/feedback dispatch
+`pr-babysitter` (or `pr-fix`) with the specific failure named; NEEDS-REVIEW →
 `pr-contribution-triager` (if provenance unclear) then `pr-unit-test-reviewer` /
 `pr-approval-reviewer`; NEEDS-TRIAGE → `pr-contribution-triager`; CAN-BE-TAKEN-UP →
 surface it; BLOCKED-EXTERNAL → record the blocker and party.

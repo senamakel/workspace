@@ -104,6 +104,11 @@ isolated-context subagents:
 - `systematic-debugger` investigates a bug to root cause through a four-phase
   method before proposing any fix, then optionally implements the minimal fix
   behind a failing regression test.
+- `merge-conflict-resolver` (Opus tier) resolves git merge/rebase/cherry-pick
+  conflicts by reconstructing the 3-way picture and integrating both sides'
+  intent — never blindly taking one side — then verifies the result builds and
+  tests pass and completes the operation. The orchestrator routes `has_conflicts`
+  PRs to it.
 - `completion-verifier` independently verifies a completion claim by running the
   proving commands and reporting evidence-backed pass/fail.
 

@@ -1,0 +1,22 @@
+{
+  "name": "merge-conflict-resolver",
+  "description": "Resolve git merge, rebase, or cherry-pick conflicts correctly by understanding what each side changed and why, integrating both intents (never blindly taking one side), then verifying the result builds and tests pass and completing the merge/rebase. Use whenever a repo or worktree is in a conflicted state or a base-branch merge leaves conflicts.",
+  "claude": {
+    "model": "opus",
+    "effort": "high",
+    "maxTurns": 80,
+    "color": "red",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Edit",
+      "Write"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "high"
+  }
+}
