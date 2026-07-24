@@ -65,6 +65,24 @@ TMUX_COMMAND="$(command -v tmux || true)"
   exit 1
 }
 
+case "$(hostname -s)" in
+  dragonfly)
+    STATUS_BACKGROUND=colour53
+    BORDER_FOREGROUND=colour54
+    ACTIVE_BORDER_FOREGROUND=colour135
+    ;;
+  robot1)
+    STATUS_BACKGROUND=colour52
+    BORDER_FOREGROUND=colour88
+    ACTIVE_BORDER_FOREGROUND=colour196
+    ;;
+  *)
+    STATUS_BACKGROUND=colour18
+    BORDER_FOREGROUND=colour17
+    ACTIVE_BORDER_FOREGROUND=colour25
+    ;;
+esac
+
 if ! tmux_call "$TMUX_COMMAND" "$SERVER" \
   has-session -t "=$SESSION" 2>/dev/null
 then
@@ -119,15 +137,15 @@ then
 fi
 
 tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
-  status-style 'bg=colour18,fg=white'
+  status-style "bg=$STATUS_BACKGROUND,fg=white"
 tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
-  pane-border-style 'fg=colour17,bg=colour0'
+  pane-border-style "fg=$BORDER_FOREGROUND,bg=colour0"
 tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
-  pane-active-border-style 'fg=colour25,bg=colour0'
+  pane-active-border-style "fg=$ACTIVE_BORDER_FOREGROUND,bg=colour0"
 tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
-  message-style 'bg=colour18,fg=white'
+  message-style "bg=$STATUS_BACKGROUND,fg=white"
 tmux_call "$TMUX_COMMAND" "$SERVER" set-window-option -g \
-  mode-style 'bg=colour18,fg=white'
+  mode-style "bg=$STATUS_BACKGROUND,fg=white"
 tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g mouse on
 tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g allow-passthrough on
 tmux_call "$TMUX_COMMAND" "$SERVER" set-window-option -g \
