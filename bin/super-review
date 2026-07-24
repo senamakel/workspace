@@ -133,6 +133,14 @@ tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" \
   C-m
 
 pane="$(
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" dragonfly "$HOME"
+)"
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T dragonfly
+tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" \
+  "mosh enamakel@dragonfly -- zsh -lc '~/bin/mosh-tmux'" \
+  C-m
+
+pane="$(
   tmux_create_window "$TMUX_COMMAND" "" "$SESSION" shell "$HOME"
 )"
 tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T shell
