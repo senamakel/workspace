@@ -145,9 +145,14 @@ pane="$(
 )"
 tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T shell
 
-tmux_call "$TMUX_COMMAND" "" set-option -t "=$SESSION" pane-border-status top
-tmux_call "$TMUX_COMMAND" "" set-option -t "=$SESSION" \
-  pane-border-format ' #{pane_title} '
+while IFS= read -r window_id; do
+  tmux_call "$TMUX_COMMAND" "" set-window-option -t "$window_id" \
+    pane-border-status top
+  tmux_call "$TMUX_COMMAND" "" set-window-option -t "$window_id" \
+    pane-border-format ' #{pane_title} '
+done < <(
+  tmux_call "$TMUX_COMMAND" "" list-windows -t "=$SESSION" -F '#{window_id}'
+)
 tmux_call "$TMUX_COMMAND" "" select-window -t "$SESSION:1"
 
 exec "$TMUX_COMMAND" attach-session -t "=$SESSION"
