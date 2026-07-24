@@ -55,11 +55,8 @@ TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null)" \
 cd "$TOPLEVEL"
 TOPLEVEL_PHYSICAL="$(pwd -P)"
 [ -f .gitmodules ] || { fail "no .gitmodules here — not a workflow superproject"; exit 1; }
-SUPER_GIT_COMMON_DIR="$(git rev-parse --git-common-dir)"
-if [[ "$SUPER_GIT_COMMON_DIR" != /* ]]; then
-  SUPER_GIT_COMMON_DIR="$TOPLEVEL/$SUPER_GIT_COMMON_DIR"
-fi
-SUPER_GIT_COMMON_DIR_PHYSICAL="$(cd "$SUPER_GIT_COMMON_DIR" && pwd -P)"
+SUPER_GIT_DIR="$(git rev-parse --absolute-git-dir)"
+SUPER_GIT_DIR_PHYSICAL="$(cd "$SUPER_GIT_DIR" && pwd -P)"
 
 verify_submodule_ownership() {
   local dir="$1" name="$2" recorded="$3"
@@ -74,7 +71,7 @@ verify_submodule_ownership() {
         || true
     )"
     expected_git_dir="$(
-      cd "$SUPER_GIT_COMMON_DIR_PHYSICAL/modules/$name" 2>/dev/null \
+      cd "$SUPER_GIT_DIR_PHYSICAL/modules/$name" 2>/dev/null \
         && pwd -P \
         || true
     )"
