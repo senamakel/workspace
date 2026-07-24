@@ -211,6 +211,9 @@ for d in "$REPO_ROOT"/skills/*/; do
   link "$d" "$HOME/.codex/skills/$(basename "$d")"
 done
 
+# --- tmux --------------------------------------------------------------------
+link "$REPO_ROOT/tmux.conf" "$HOME/.tmux.conf"
+
 # --- opencode global config ---------------------------------------------------
 # AGENTS.md is linked from the shared rules block above.
 # opencode.jsonc and the node_modules/package.json alongside it are local,
