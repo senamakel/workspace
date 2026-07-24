@@ -127,7 +127,7 @@ test_interface_validation() {
 }
 
 test_superproject_is_not_synchronized() {
-  local bare seed super before_head before_branch output
+  local bare seed super before_head before_branch before_remote output
   bare="$TEST_ROOT/super-remote.git"
   seed="$TEST_ROOT/super-seed"
   super="$TEST_ROOT/super"
@@ -150,11 +150,14 @@ test_superproject_is_not_synchronized() {
   git -C "$super" checkout -qb local-work
   before_head="$(git -C "$super" rev-parse HEAD)"
   before_branch="$(git -C "$super" branch --show-current)"
+  before_remote="$(git -C "$super" rev-parse refs/remotes/origin/main)"
+  mkdir -p "$super/nested/directory"
 
-  output="$(cd "$super/.git" && "$COMMAND" --no-commit)"
+  output="$(cd "$super/nested/directory" && "$COMMAND" --no-commit)"
 
   assert_eq "$before_head" "$(git -C "$super" rev-parse HEAD)" "superproject HEAD is unchanged"
   assert_eq "$before_branch" "$(git -C "$super" branch --show-current)" "superproject branch is unchanged"
+  assert_eq "$before_remote" "$(git -C "$super" rev-parse refs/remotes/origin/main)" "superproject remote ref is not fetched"
   assert_file_missing "$super/remote-only.txt" "superproject remote commit was not merged"
   assert_contains "$output" "all submodule pointers already up to date" "empty direct-submodule set succeeds"
 }
