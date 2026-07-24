@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+workspace-init [--dry-run] [--workspace <path>]
+
+Create missing TinyHumans workflow checkouts without changing existing paths.
+  --dry-run          describe actions without writing or contacting GitHub
+  --workspace <path> use a workspace other than $HOME/work
+  -h, --help         show this help
+EOF
+}
+
+fail() {
+  printf 'workspace-init: %s\n' "$1" >&2
+  usage >&2
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || {
+    printf 'workspace-init: required command not found: %s\n' "$1" >&2
+    exit 1
+  }
+}
+
+DRY_RUN=0
+DRY_RUN_SEEN=0
+HELP_SEEN=0
+WORKSPACE="$HOME/work"
+WORKSPACE_SEEN=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dry-run)
+      [ "$DRY_RUN_SEEN" -eq 0 ] || {
+        fail "repeated argument: --dry-run"
+        exit 1
+      }
+      DRY_RUN=1
+      DRY_RUN_SEEN=1
+      ;;
+    --workspace)
+      [ "$WORKSPACE_SEEN" -eq 0 ] || {
+        fail "repeated argument: --workspace"
+        exit 1
+      }
+      [ "$#" -ge 2 ] || {
+        fail "missing value for --workspace"
+        exit 1
+      }
+      case "$2" in
+        ""|-*)
+          fail "missing value for --workspace"
+          exit 1
+          ;;
+      esac
+      WORKSPACE="$2"
+      WORKSPACE_SEEN=1
+      shift
+      ;;
+    -h|--help)
+      [ "$HELP_SEEN" -eq 0 ] || {
+        fail "repeated help argument"
+        exit 1
+      }
+      HELP_SEEN=1
+      ;;
+    *)
+      fail "unknown argument: $1"
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if [ "$HELP_SEEN" -eq 1 ]; then
+  usage
+  exit 0
+fi
+
+ensure_directory() {
+  local directory="$1"
+  [ -d "$directory" ] && return
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '[would create] %s\n' "$directory"
+  else
+    mkdir -p "$directory"
+    printf '[create] %s\n' "$directory"
+  fi
+}
+
+ensure_directory "$WORKSPACE"
+ensure_directory "$HOME/bin"
+
+REPOSITORIES='workflow-openhuman|git@github.com:tinyhumansai/workflow-openhuman.git
+workflow-medulla|git@github.com:tinyhumansai/workflow-medulla.git
+workflow-tinyplace|git@github.com:tinyhumansai/workflow-tinyplace.git
+workflow-opencompany|git@github.com:tinyhumansai/workflow-opencompany.git
+workflow-dashboard|git@github.com:tinyhumansai/workflow-dashboard.git'
+
+while IFS='|' read -r name remote; do
+  destination="$WORKSPACE/$name"
+  if [ -e "$destination" ] || [ -L "$destination" ]; then
+    printf '[skip] existing destination: %s\n' "$destination"
+    continue
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '[would clone] %s -> %s\n' "$remote" "$destination"
+  else
+    require_command git
+    printf '[clone] %s\n' "$name"
+    git clone --recurse-submodules "$remote" "$destination"
+  fi
+done <<EOF
+$REPOSITORIES
+EOF
