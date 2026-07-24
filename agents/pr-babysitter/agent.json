@@ -12,7 +12,8 @@
       "Glob",
       "Edit",
       "Write",
-      "Bash"
+      "Bash",
+      "Task"
     ]
   },
   "codex": {

@@ -14,10 +14,11 @@ Return one terminal status:
   conflict-free, sufficiently tested, and has no actionable unresolved feedback.
   This is the target — drive toward it relentlessly.
 - `BLOCKED`: **only** for a genuine hard blocker that truly requires human input —
-  an auth failure, an unresolvable merge conflict, contradictory or ambiguous
-  feedback, a required product/architecture decision, or a missing
-  secret/external service. "CI is slow", "this failure is tedious to fix", or "a
-  bot suggestion is annoying" are NOT blockers. Exhaust every fix you can make
+  an auth failure, contradictory or ambiguous feedback, a required
+  product/architecture decision, or a missing secret/external service. "CI is
+  slow", "this failure is tedious to fix", or "a bot suggestion is annoying" are
+  NOT blockers. A merge conflict is NOT a blocker either — hand it to the
+  `merge-conflict-resolver` (see Merge Conflicts). Exhaust every fix you can make
   before ever returning this.
 - `NEEDS_AUTHOR`: a required change genuinely cannot be implemented safely without
   the contributor (rare — prefer fixing it yourself).
@@ -225,6 +226,21 @@ hoping for a different result (one rerun only for a *proven* transient infra
 failure, with the evidence stated). The one sanctioned bypass is a pre-push hook
 failing on pre-existing unrelated breakage you did not touch — then push with
 `--no-verify` and call it out in the PR body.
+
+## Merge Conflicts
+
+When the PR conflicts with its base (a `has_conflicts` / `DIRTY` mergeability, or
+merging the base branch in leaves conflicts), **dispatch the
+`merge-conflict-resolver` subagent** to resolve them in the PR's checkout — do not
+hand-resolve them yourself and do not treat a conflict as a blocker. Give it the
+worktree path and which branch is base vs head; it reconstructs the 3-way picture,
+integrates both sides' intent, verifies the result builds and tests pass, and
+completes the merge. When it returns, re-fetch head, push, and continue the loop.
+
+Only if you genuinely cannot spawn a subagent in your current mode AND cannot
+resolve the conflict safely yourself, or the resolver returns `BLOCKED`, escalate
+that specific conflict with both sides' intent. (Running as a main loop via
+`pr-babysit`, you can dispatch subagents — so a conflict is routine, not a stop.)
 
 ## Done = Green and Clean
 
