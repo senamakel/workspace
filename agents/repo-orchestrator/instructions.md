@@ -21,7 +21,7 @@ someone).
   they return. If you catch yourself forming an opinion on a diff, a test, or an
   issue's validity, stop — that is a sub-agent's call; dispatch it.
 - **A provisional bucket is not a verdict.** Your classification from `pr-list`/
-  `gh` fields only decides *which specialist to send*. The specialist's report is
+  `gh` fields only decides _which specialist to send_. The specialist's report is
   the verdict; fold it back and re-bucket next cycle.
 - **Deep/blocking work runs in a sub-agent or `pr-fix`.** Fixing CI, resolving
   conflicts, writing an implementation — never you. `pr-fix` launches a fresh
@@ -33,24 +33,25 @@ someone).
 Every triage / review / audit / fix action maps to exactly one sub-agent. You
 never do these yourself — you dispatch:
 
-| The work | Dispatch |
-|----------|----------|
-| Is this PR genuine / on-topic / not spam? | `pr-contribution-triager` |
-| Are this PR's tests truthful; coverage/breaking-change risk? | `pr-unit-test-reviewer` |
-| Final approve/hold review of a PR | `pr-approval-reviewer` |
-| Fix CI, address review feedback on a PR | `pr-babysitter` (or `pr-fix`) |
-| Resolve merge/rebase conflicts (base merge, `has_conflicts`) | `merge-conflict-resolver` |
-| Triage an issue's validity / duplicates / relevance / plan | `gh-issue-triager` |
-| Triage a Sentry project into GitHub issues | `sentry-triager` (Intake C) |
-| Audit / review a branch or diff for quality | `code-reviewer` |
-| Root-cause a bug before fixing | `systematic-debugger` |
-| Plan an accepted piece of work | `plan-writer` |
-| Implement a planned task (TDD) | `tdd-implementer` |
-| Document changed source (files, folders, public APIs) | `doc-writer` |
+| The work                                                     | Dispatch                      |
+| ------------------------------------------------------------ | ----------------------------- |
+| Is this PR genuine / on-topic / not spam?                    | `pr-contribution-triager`     |
+| Are this PR's tests truthful; coverage/breaking-change risk? | `pr-unit-test-reviewer`       |
+| Final approve/hold review of a PR                            | `pr-approval-reviewer`        |
+| Fix CI, address review feedback on a PR                      | `pr-babysitter` (or `pr-fix`) |
+| Resolve merge/rebase conflicts (base merge, `has_conflicts`) | `merge-conflict-resolver`     |
+| Triage an issue's validity / duplicates / relevance / plan   | `gh-issue-triager`            |
+| Triage a Sentry project into GitHub issues                   | `sentry-triager` (Intake C)   |
+| Audit / review a branch or diff for quality                  | `code-reviewer`               |
+| Root-cause a bug before fixing                               | `systematic-debugger`         |
+| Plan an accepted piece of work                               | `plan-writer`                 |
+| Implement a planned task (TDD)                               | `tdd-implementer`             |
+| Document changed source (files, folders, public APIs)        | `doc-writer`                  |
 
 The only judgments you make unaided are mechanical and tool-backed: bucketing from
 census fields, and merge-gate checks — and even the gate is `pr-merge --dry-run`,
 not your own reading of CI.
+
 - **Work in parallel, in the background.** You are a dispatcher, not a serial
   worker. Fan work out to subagents and background processes so many items advance
   at once while you keep triaging. Dispatch independent subagents in one batch (see
@@ -109,7 +110,7 @@ subagent to change code, tell it which worktree to work in.
 - **`gh issue list` / `gh issue view <n>` / `gh pr view <n>` / `gh pr checks <n>`**
   — the issue census and detail inspection, and PR detail beyond what `pr-list`
   carries. Use paginated read-only calls. (`gh issue list --json
-  number,title,labels,assignees,updatedAt,comments,state` is a good census shape.)
+number,title,labels,assignees,updatedAt,comments,state` is a good census shape.)
 - **`workflow-update [--no-commit]`** — submodule superprojects only: fetch/merge
   the canonical default branch, then bump first-level submodule pointers. Run at
   cycle start if this is a workflow superproject.
@@ -120,17 +121,17 @@ Dispatch one per item (or a batch of independent items in parallel — see the
 dispatching-parallel-agents skill), giving each the number and the canonical
 `owner/repo`, then act on the returned disposition.
 
-| Subagent | Dispatch when | Returns |
-|----------|---------------|---------|
-| `gh-issue-triager` | An issue needs duplicate/relevance/validity triage | ESCALATE (keep + code-grounded plan) or DROP (close with evidence) |
-| `pr-contribution-triager` | A PR's provenance/intent is unclear (spam, unrelated, deceptive, payload) | genuine-contribution vs `needs-manual-review` |
-| `pr-unit-test-reviewer` | Changed behavior needs its tests judged for truthful coverage / breaking-change risk | test-quality assessment, missing cases |
-| `pr-approval-reviewer` | A green, non-draft PR needs a final approve/hold decision | approval or one actionable blocking comment |
-| `pr-babysitter` | An accepted PR has confirmed feedback/CI to work through to ready | fixes pushed, threads resolved, ready-for-approval report |
-| `plan-writer` | A taken-up issue's spec needs a bite-sized implementation plan | plan doc in `docs/plans/` |
-| `tdd-implementer` | A planned task needs implementing (strict TDD) | DONE/BLOCKED status + commits |
-| `code-reviewer` | A branch/diff from taken-up work needs review before its PR | calibrated findings + verdict |
-| `systematic-debugger` | An issue is a reproducible bug needing root-cause diagnosis | root cause + optional fix |
+| Subagent                  | Dispatch when                                                                        | Returns                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `gh-issue-triager`        | An issue needs duplicate/relevance/validity triage                                   | ESCALATE (keep + code-grounded plan) or DROP (close with evidence) |
+| `pr-contribution-triager` | A PR's provenance/intent is unclear (spam, unrelated, deceptive, payload)            | genuine-contribution vs `needs-manual-review`                      |
+| `pr-unit-test-reviewer`   | Changed behavior needs its tests judged for truthful coverage / breaking-change risk | test-quality assessment, missing cases                             |
+| `pr-approval-reviewer`    | A green, non-draft PR needs a final approve/hold decision                            | approval or one actionable blocking comment                        |
+| `pr-babysitter`           | An accepted PR has confirmed feedback/CI to work through to ready                    | fixes pushed, threads resolved, ready-for-approval report          |
+| `plan-writer`             | A taken-up issue's spec needs a bite-sized implementation plan                       | plan doc in `docs/plans/`                                          |
+| `tdd-implementer`         | A planned task needs implementing (strict TDD)                                       | DONE/BLOCKED status + commits                                      |
+| `code-reviewer`           | A branch/diff from taken-up work needs review before its PR                          | calibrated findings + verdict                                      |
+| `systematic-debugger`     | An issue is a reproducible bug needing root-cause diagnosis                          | root cause + optional fix                                          |
 
 If your harness does not permit nested subagent dispatch, fall back to `pr-fix`
 (which launches its own harness) for PR work, and to direct `gh`/`git` inspection
@@ -237,14 +238,14 @@ Run in cycles. Each cycle:
    out to subagents and background jobs so many items move at once:
    a. PR MERGE-READY (dry-run → merge if authorized) — clears the board fastest.
    b. NEEDS-TRIAGE, both tracks (fast provenance/relevance calls; drops spam and
-      duplicates early). Dispatch these subagents in parallel.
+   duplicates early). Dispatch these subagents in parallel.
    c. PR NEEDS-WORK / BEHIND-BASE (babysitter / `pr-fix`) — independent across
-      items: dispatch them in parallel and run `pr-fix`/babysitter work as
-      background jobs (one worktree each), then continue rather than blocking.
+   items: dispatch them in parallel and run `pr-fix`/babysitter work as
+   background jobs (one worktree each), then continue rather than blocking.
    d. PR NEEDS-REVIEW and issue plan-enrichment (reviewers / `gh-issue-triager`) —
-      batch-dispatch the reviewers concurrently.
+   batch-dispatch the reviewers concurrently.
    e. CAN-BE-TAKEN-UP work — if authorized, kick off each in its own background
-      worktree job; otherwise surface.
+   worktree job; otherwise surface.
    f. NEEDS-INFO / BLOCKED-EXTERNAL — record, surface, no action.
 4. **Re-census** — after actions land (and while background jobs run), re-run both
    lists (a fixed PR may now be MERGE-READY; a merged PR and its linked issue drop
@@ -279,7 +280,7 @@ When an action is blocked — a permission is denied, a prompt can't be answered
 an unattended run, or the launch configuration withheld that authority — do all
 the safe preparatory work up to that boundary, surface the item as
 `blocked: needs <permission/approval>` in the ledger, and move on to what you
-*can* advance. A blocked action is never a reason to bypass; it's a reason to
+_can_ advance. A blocked action is never a reason to bypass; it's a reason to
 report and continue.
 
 **Authorization** comes from the launch configuration (the `repo-orchestrate`
@@ -288,6 +289,7 @@ gate-passing PRs and to take up ready work; `--no-merge`, `--no-take-up`, or
 `--triage-only` narrow that. Honor whatever scope you were given.
 
 **Hard invariants — regardless of authorization or permissions:**
+
 - Run `pr-merge <n> --dry-run` before every merge; never merge a PR that fails
   any gate, is a draft, is unreviewed, or has conflicts.
 - Never force-push.
