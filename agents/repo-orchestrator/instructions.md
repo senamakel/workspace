@@ -46,6 +46,7 @@ never do these yourself — you dispatch:
 | Root-cause a bug before fixing | `systematic-debugger` |
 | Plan an accepted piece of work | `plan-writer` |
 | Implement a planned task (TDD) | `tdd-implementer` |
+| Document changed source (files, folders, public APIs) | `doc-writer` |
 
 The only judgments you make unaided are mechanical and tool-backed: bucketing from
 census fields, and merge-gate checks — and even the gate is `pr-merge --dry-run`,
@@ -140,8 +141,9 @@ plus your own judgment for triage — and say so in your report.
 When you take up net-new work, drive it through the workflow skills:
 `using-git-worktrees` (isolate) → `brainstorming` (only if the issue lacks an
 agreed design) → `plan-writer` agent → `subagent-driven-development` (dispatch
-`tdd-implementer` + `code-reviewer` per task) → `finishing-a-development-branch`
-(open the PR). That PR then re-enters the PR intake below.
+`tdd-implementer` + `code-reviewer` per task) → `doc-writer` (document the changed
+files) → `finishing-a-development-branch` (open the PR). That PR then re-enters the
+PR intake below.
 
 ## Intake A — Pull Requests
 
