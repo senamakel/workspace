@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_path() {
+  local path="${BASH_SOURCE[0]}" directory target
+
+  while [ -L "$path" ]; do
+    directory="$(cd "$(dirname "$path")" && pwd -P)"
+    target="$(readlink "$path")"
+    case "$target" in
+      /*) path="$target" ;;
+      *) path="$directory/$target" ;;
+    esac
+  done
+  printf '%s/%s\n' \
+    "$(cd "$(dirname "$path")" && pwd -P)" \
+    "$(basename "$path")"
+}
+
+usage() {
+  cat <<'EOF'
+super-review [--help]
+
+Recreate and attach the local super-review tmux dashboard.
+WARNING: this deliberately kills and replaces any existing super-review session.
+EOF
+}
+
+if [ "$#" -gt 1 ]; then
+  printf 'super-review: too many arguments\n' >&2
+  usage >&2
+  exit 1
+fi
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    printf 'super-review: unknown argument: %s\n' "$1" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
+
+SCRIPT_PATH="$(resolve_script_path)"
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
+# shellcheck disable=SC1091
+source "$ROOT/bin/tmux-layouts.sh"
+
+SESSION="super-review"
+WORKSPACE="${SUPER_REVIEW_WORKSPACE:-$HOME/work/tinyhumansai}"
+TMUX_COMMAND="$(command -v tmux || true)"
+BTOP_COMMAND="$(command -v btop || true)"
+MOSH_COMMAND="$(command -v mosh || true)"
+
+for dependency in \
+  "tmux|$TMUX_COMMAND" \
+  "btop|$BTOP_COMMAND" \
+  "mosh|$MOSH_COMMAND"
+do
+  name="${dependency%%|*}"
+  path="${dependency#*|}"
+  [ -n "$path" ] || {
+    printf 'super-review: required command not found: %s\n' "$name" >&2
+    exit 1
+  }
+done
+
+for directory in \
+  "$WORKSPACE/workflow-openhuman" \
+  "$WORKSPACE/workflow-medulla" \
+  "$WORKSPACE/workflow-tinyplace" \
+  "$WORKSPACE/workflow-dashboard" \
+  "$WORKSPACE/workflow-opencompany" \
+  "$WORKSPACE/tinycortex" \
+  "$WORKSPACE/tinyagents" \
+  "$WORKSPACE/tinychannels" \
+  "$WORKSPACE/tinyjuice"
+do
+  [ -d "$directory" ] || {
+    printf 'super-review: missing workspace directory: %s\n' "$directory" >&2
+    exit 1
+  }
+done
+
+tmux_call "$TMUX_COMMAND" "" kill-session -t "=$SESSION" 2>/dev/null || true
+
+tmux_make_quad_window \
+  "$TMUX_COMMAND" "" "$SESSION" \
+  openhuman "$WORKSPACE/workflow-openhuman"
+tmux_make_quad_window \
+  "$TMUX_COMMAND" "" "$SESSION" \
+  medulla "$WORKSPACE/workflow-medulla"
+tmux_make_quad_window \
+  "$TMUX_COMMAND" "" "$SESSION" \
+  tinyplace "$WORKSPACE/workflow-tinyplace"
+tmux_make_quad_window \
+  "$TMUX_COMMAND" "" "$SESSION" \
+  dashboard "$WORKSPACE/workflow-dashboard"
+tmux_make_quad_window \
+  "$TMUX_COMMAND" "" "$SESSION" \
+  opencompany "$WORKSPACE/workflow-opencompany"
+tmux_make_mixed_quad_window \
+  "$TMUX_COMMAND" "" "$SESSION" libraries \
+  "$WORKSPACE/tinycortex" \
+  "$WORKSPACE/tinyagents" \
+  "$WORKSPACE/tinychannels" \
+  "$WORKSPACE/tinyjuice"
+
+pane="$(
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" btop "$HOME"
+)"
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T btop
+tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" "$BTOP_COMMAND" C-m
+
+pane="$(
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" cloud "$HOME"
+)"
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T 'cloud · robot1'
+tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" \
+  "mosh droid@robot1.digital.ocean -- bash -lc 'tmux attach -t super-review || ~/tmux-cloud.sh'" \
+  C-m
+
+pane="$(
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" macmini "$HOME"
+)"
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T macmini
+tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" \
+  "mosh enamakel@mac-mini -- zsh -lc '~/bin/mosh-tmux'" \
+  C-m
+
+pane="$(
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" shell "$HOME"
+)"
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T shell
+
+tmux_call "$TMUX_COMMAND" "" set-option -t "=$SESSION" pane-border-status top
+tmux_call "$TMUX_COMMAND" "" set-option -t "=$SESSION" \
+  pane-border-format ' #{pane_title} '
+tmux_call "$TMUX_COMMAND" "" select-window -t "$SESSION:1"
+
+exec "$TMUX_COMMAND" attach-session -t "=$SESSION"
