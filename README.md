@@ -15,6 +15,8 @@ the source of truth, so source changes appear in `git diff`.
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `skills/<name>/` | `~/.claude/skills/<name>`, `~/.codex/skills/<name>` (one canonical source) |
 | `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
+| `bin/super-review` | `~/super-review.sh` |
+| `bin/workspace-tmux` | `~/bin/mosh-tmux` (installed by `workspace-init`) |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
 | `zshrc` | sourced from `~/.zshrc` via an appended loader line |
 
@@ -54,6 +56,37 @@ opencode keeps beside it) stays local — only `AGENTS.md` is synced.
 The script is idempotent and non-interactive. Anything it replaces is moved
 to `~/.config-backups/workspace-<timestamp>/` first. Run it from the primary
 checkout (not a `worktrees/` checkout) so links survive worktree cleanup.
+
+## Workspace bootstrap and tmux
+
+Initialize the workflow checkout set on the current Mac:
+
+```sh
+workspace-init --dry-run
+workspace-init
+workspace-init --workspace /another/work
+```
+
+The default root is `~/work`. The command recursively clones missing
+`workflow-openhuman`, `workflow-medulla`, `workflow-tinyplace`,
+`workflow-opencompany`, and `workflow-dashboard` repositories over SSH.
+Existing destinations are skipped without inspection or updates.
+
+The bootstrap also installs `~/bin/mosh-tmux` as a link to
+`bin/workspace-tmux`. A conflicting destination is backed up under
+`~/.config-backups/` first.
+
+On the Mac mini, `~/bin/mosh-tmux` creates or reuses the dedicated `mosh` tmux
+server's `workspace` session. It provides a six-pane 2×3 window for every
+workflow repository, followed by `btop` and `shell`. It reapplies the blue
+remote theme and `C-z` prefix before attaching. Override its server and session
+names with `MOSH_TMUX_SERVER` and `MOSH_TMUX_SESSION`.
+
+The local `~/super-review.sh` link is managed by `install.sh`. It opens the five
+four-pane workflow windows, the mixed `libraries` window, `btop`, Robot1
+`cloud`, Mac mini, and shell windows. **It deliberately kills and recreates any
+existing `super-review` tmux session.** Run `~/super-review.sh --help` to view
+the warning without changing tmux state.
 
 ## Adding things
 

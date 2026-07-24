@@ -170,6 +170,8 @@ done
 # --- CLI tools ----------------------------------------------------------------
 # bin/ is exposed on PATH by the repo zshrc (sourced from ~/.zshrc), not by
 # symlinks. Clean up any ~/.local/bin links from the old scheme.
+link "$REPO_ROOT/bin/super-review" "$HOME/super-review.sh"
+
 for f in "$REPO_ROOT"/bin/*; do
   [ -f "$f" ] || continue
   dest="$HOME/.local/bin/$(basename "$f")"
