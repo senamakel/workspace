@@ -346,8 +346,12 @@ tier maps to `deepseek/deepseek-v4-pro` (heavy — coding/deep review); the Sonn
 Haiku, and subagent tiers map to `deepseek/deepseek-v4-flash`, matching the agent
 model tiering so a Sonnet-tier agent stays cheap here too. Override with
 `DEEPCODE_MODEL` / `DEEPCODE_FAST_MODEL` (or use `deepcode-flash` to force every
-tier onto flash). Requires `OPENROUTER_API_KEY` in the environment (set it in your
-`~/.zshrc`, not this repo). All arguments pass straight through to `claude`.
+tier onto flash). Because DeepSeek V4's 1M window loses accuracy well before it
+fills, the wrapper caps the effective context by setting
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` so sessions auto-compact at ~300k tokens instead
+of the ~967k default; override with `DEEPCODE_CONTEXT_WINDOW` (blank it to keep the
+model's full window). Requires `OPENROUTER_API_KEY` in the environment (set it in
+your `~/.zshrc`, not this repo). All arguments pass straight through to `claude`.
 
 ### `workflow-update [--no-commit]`
 

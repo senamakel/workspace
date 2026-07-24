@@ -14,8 +14,12 @@
 # Requires OPENROUTER_API_KEY in the environment (kept out of this repo;
 # set it in your ~/.zshrc). Model IDs can be overridden:
 #
-#   DEEPCODE_MODEL       main/heavy model   (default: deepseek/deepseek-v4-pro)
-#   DEEPCODE_FAST_MODEL  fast/background     (default: deepseek/deepseek-v4-flash)
+#   DEEPCODE_MODEL           main/heavy model  (default: deepseek/deepseek-v4-pro)
+#   DEEPCODE_FAST_MODEL      fast/background    (default: deepseek/deepseek-v4-flash)
+#   DEEPCODE_CONTEXT_WINDOW  auto-compact threshold in tokens (default: 300000).
+#                            DeepSeek V4 advertises 1M but loses accuracy well
+#                            before it, so we compact by ~300k. Set to a bigger
+#                            number (or empty) to use the model's full window.
 set -euo pipefail
 
 if [ -z "${OPENROUTER_API_KEY:-}" ]; then
@@ -46,5 +50,11 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="$flash"
 export ANTHROPIC_SMALL_FAST_MODEL="$flash"   # legacy name, still honored
 # No CLAUDE_CODE_SUBAGENT_MODEL override: subagents follow their own model tier,
 # so Opus-tier coding/review agents stay on pro while Sonnet/Haiku land on flash.
+
+# Cap the effective context: DeepSeek V4's 1M window loses accuracy past ~300k,
+# so auto-compact at 300k (session-global — applies to whichever tier is active)
+# instead of the ~967k default. Blank DEEPCODE_CONTEXT_WINDOW to keep the default.
+context="${DEEPCODE_CONTEXT_WINDOW-300000}"
+[ -z "$context" ] || export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$context"
 
 exec claude "$@"
