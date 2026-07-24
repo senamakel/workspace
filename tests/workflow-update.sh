@@ -308,6 +308,34 @@ test_no_commit_and_already_current_modes() {
     "already-current mode reports up to date"
 }
 
+test_initializes_uninitialized_direct_submodule() {
+  local origin super selected output staged_paths
+  origin="$(make_remote uninitialized-direct-origin)"
+  super="$(make_superproject_with_submodule uninitialized-direct-super "$origin")"
+  selected="$(advance_remote uninitialized-direct-origin "initialized direct tip")"
+
+  git -C "$super" submodule deinit -f -- modules/alpha
+  rmdir "$super/modules/alpha"
+  assert_file_missing "$super/modules/alpha" \
+    "direct submodule checkout starts removed"
+
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+
+  [ -f "$super/modules/alpha/.git" ] \
+    || fail_test "direct submodule was not initialized"
+  assert_eq "main" "$(git -C "$super/modules/alpha" branch --show-current)" \
+    "initialized direct submodule ends on local main"
+  assert_eq "$selected" "$(git -C "$super/modules/alpha" rev-parse HEAD)" \
+    "initialized direct submodule reaches selected origin main"
+  staged_paths="$(git -C "$super" diff --cached --name-only)"
+  assert_eq "modules/alpha" "$staged_paths" \
+    "--no-commit stages the initialized direct gitlink"
+  assert_eq "$selected" "$(git -C "$super" rev-parse :modules/alpha)" \
+    "staged direct gitlink records the selected commit"
+  assert_contains "$output" "modules/alpha: selected origin/$selected" \
+    "status identifies the selected direct-submodule commit"
+}
+
 test_does_not_initialize_nested_submodules() {
   local nested parent super output
   nested="$(make_remote nested-child)"
@@ -336,5 +364,6 @@ run_test "fails when neither remote exposes main" test_fails_without_remote_main
 run_test "fails without overwriting an untracked obstruction" test_fails_without_overwriting_untracked_obstruction
 run_test "commits only changed direct gitlinks" test_commits_only_changed_direct_gitlinks
 run_test "supports no-commit and already-current modes" test_no_commit_and_already_current_modes
+run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
 run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
 printf '1..%s\n' "$PASS_COUNT"
