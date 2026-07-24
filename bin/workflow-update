@@ -50,49 +50,73 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# Canonical remote of a repo dir: upstream if present, else origin.
-canonical_remote() {
-  git -C "$1" remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin
-}
-
-# Default branch of a remote (falls back to main, then master).
-default_branch() {
-  local dir="$1" remote="$2" ref
-  ref=$(git -C "$dir" symbolic-ref --quiet "refs/remotes/$remote/HEAD" 2>/dev/null) \
-    && { echo "${ref##*/}"; return; }
-  if git -C "$dir" show-ref --verify --quiet "refs/remotes/$remote/main"; then
-    echo main
-  else
-    echo master
-  fi
-}
-
 TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null)" \
   || { fail "not inside a git repository"; exit 1; }
 cd "$TOPLEVEL"
 [ -f .gitmodules ] || { fail "no .gitmodules here — not a workflow superproject"; exit 1; }
 
 git submodule sync
-git submodule update --init
 
-# ── 1. Bump each first-level submodule to its remote default branch ─
+select_main() {
+  local dir="$1" candidate ref commit
+  for candidate in upstream origin; do
+    if ! git -C "$dir" remote get-url "$candidate" >/dev/null 2>&1; then
+      warn "$dir: $candidate is not configured"
+      continue
+    fi
+    if ! git -C "$dir" fetch "$candidate" --prune; then
+      warn "$dir: failed to fetch $candidate"
+      continue
+    fi
+    ref="refs/remotes/$candidate/main"
+    if ! commit="$(git -C "$dir" rev-parse --verify "$ref^{commit}" 2>/dev/null)"; then
+      warn "$dir: $candidate/main does not resolve to a commit"
+      continue
+    fi
+    SELECTED_REMOTE="$candidate"
+    SELECTED_COMMIT="$commit"
+    return 0
+  done
+  fail "$dir: neither upstream/main nor origin/main is available"
+  return 1
+}
+
+force_local_main() {
+  local dir="$1" commit="$2" current
+  git -C "$dir" reset --hard HEAD
+  current="$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  if [ "$current" != "main" ]; then
+    git -C "$dir" branch -f main "$commit"
+    git -C "$dir" checkout --quiet main
+  fi
+  git -C "$dir" reset --hard "$commit"
+}
+
 CHANGED=0
 while IFS= read -r SM_PATH; do
-  [ -d "$SM_PATH/.git" ] || [ -f "$SM_PATH/.git" ] || { warn "skipping $SM_PATH (not initialized)"; continue; }
-  SM_REMOTE=$(canonical_remote "$SM_PATH")
-  git -C "$SM_PATH" fetch "$SM_REMOTE" --prune
-  SM_BRANCH=$(default_branch "$SM_PATH" "$SM_REMOTE")
-  OLD=$(git -C "$SM_PATH" rev-parse --short HEAD)
-  git -C "$SM_PATH" checkout --quiet "refs/remotes/$SM_REMOTE/$SM_BRANCH"
-  NEW=$(git -C "$SM_PATH" rev-parse --short HEAD)
-  if [ "$OLD" = "$NEW" ]; then
-    info "$SM_PATH: up to date at $NEW ($SM_REMOTE/$SM_BRANCH)"
+  [ -n "$SM_PATH" ] || continue
+  if [ ! -d "$SM_PATH/.git" ] && [ ! -f "$SM_PATH/.git" ]; then
+    git submodule update --init -- "$SM_PATH"
+  fi
+  [ -d "$SM_PATH/.git" ] || [ -f "$SM_PATH/.git" ] \
+    || { fail "$SM_PATH: submodule was not initialized"; exit 1; }
+
+  select_main "$SM_PATH"
+  RECORDED="$(git rev-parse "HEAD:$SM_PATH")"
+  force_local_main "$SM_PATH" "$SELECTED_COMMIT"
+  info "$SM_PATH: selected $SELECTED_REMOTE/$SELECTED_COMMIT"
+
+  if [ "$RECORDED" = "$SELECTED_COMMIT" ]; then
+    info "$SM_PATH: superproject pointer unchanged"
   else
-    pass "$SM_PATH: $OLD -> $NEW ($SM_REMOTE/$SM_BRANCH)"
-    git add "$SM_PATH"
+    git add -- "$SM_PATH"
+    pass "$SM_PATH: superproject pointer changed ($RECORDED -> $SELECTED_COMMIT)"
     CHANGED=1
   fi
-done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}')
+done < <(
+  git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null \
+    | sed 's/^[^ ]* //'
+)
 
 # ── 2. Commit the moved pointers ───────────────────────────────────
 if [ "$CHANGED" = "0" ]; then
