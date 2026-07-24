@@ -121,7 +121,7 @@ pane="$(
 )"
 tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T 'cloud · robot1'
 tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" \
-  "mosh droid@robot1.digital.ocean -- bash -lc 'tmux attach -t super-review || ~/tmux-cloud.sh'" \
+  "mosh droid@robot1.digital.ocean -- zsh -lc '~/bin/mosh-tmux'" \
   C-m
 
 pane="$(

@@ -91,7 +91,8 @@ home-level script's session recreation behavior and layout:
 2. a mixed two-by-two `libraries` window rooted at `tinycortex`, `tinyagents`,
    `tinychannels`, and `tinyjuice`;
 3. `btop`;
-4. `cloud`, which runs the existing Robot1 `mosh` and remote tmux command;
+4. `cloud`, which runs
+   `mosh droid@robot1.digital.ocean -- zsh -lc '~/bin/mosh-tmux'`;
 5. `macmini`, which runs the existing Mac mini `mosh` and
    `~/bin/mosh-tmux` command;
 6. `dragonfly`, which runs
