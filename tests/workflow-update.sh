@@ -336,6 +336,49 @@ test_initializes_uninitialized_direct_submodule() {
     "status identifies the selected direct-submodule commit"
 }
 
+test_rejects_unrelated_repository_at_submodule_path() {
+  local origin super unrelated_head unrelated_branch unrelated_content
+  local super_head super_gitlink output status
+  origin="$(make_remote unrelated-repository-origin)"
+  super="$(make_superproject_with_submodule unrelated-repository-super "$origin")"
+
+  git -C "$super" submodule deinit -f -- modules/alpha
+  rmdir "$super/modules/alpha"
+  git init -q "$super/modules/alpha"
+  configure_identity "$super/modules/alpha"
+  git -C "$super/modules/alpha" remote add origin "$origin"
+  printf 'valuable local content\n' > "$super/modules/alpha/valuable.txt"
+  git -C "$super/modules/alpha" add valuable.txt
+  git -C "$super/modules/alpha" commit -qm "Valuable unrelated commit"
+  git -C "$super/modules/alpha" branch -M main
+
+  unrelated_head="$(git -C "$super/modules/alpha" rev-parse HEAD)"
+  unrelated_branch="$(git -C "$super/modules/alpha" branch --show-current)"
+  unrelated_content="$(cat "$super/modules/alpha/valuable.txt")"
+  super_head="$(git -C "$super" rev-parse HEAD)"
+  super_gitlink="$(git -C "$super" rev-parse :modules/alpha)"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] || fail_test "unrelated repository at submodule path must fail"
+  assert_contains "$output" \
+    "modules/alpha: unrelated Git repository obstructs submodule path" \
+    "failure identifies the unrelated repository obstruction"
+  assert_eq "$unrelated_head" "$(git -C "$super/modules/alpha" rev-parse HEAD)" \
+    "unrelated repository HEAD is unchanged"
+  assert_eq "$unrelated_branch" "$(git -C "$super/modules/alpha" branch --show-current)" \
+    "unrelated repository branch is unchanged"
+  assert_eq "$unrelated_content" "$(cat "$super/modules/alpha/valuable.txt")" \
+    "unrelated repository tracked content is unchanged"
+  assert_eq "$super_head" "$(git -C "$super" rev-parse HEAD)" \
+    "unrelated repository obstruction preserves superproject HEAD"
+  assert_eq "$super_gitlink" "$(git -C "$super" rev-parse :modules/alpha)" \
+    "unrelated repository obstruction preserves the staged gitlink"
+}
+
 test_does_not_initialize_nested_submodules() {
   local nested parent super output
   nested="$(make_remote nested-child)"
@@ -365,5 +408,6 @@ run_test "fails without overwriting an untracked obstruction" test_fails_without
 run_test "commits only changed direct gitlinks" test_commits_only_changed_direct_gitlinks
 run_test "supports no-commit and already-current modes" test_no_commit_and_already_current_modes
 run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
+run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path
 run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
 printf '1..%s\n' "$PASS_COUNT"

@@ -53,9 +53,41 @@ done
 TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null)" \
   || { fail "not inside a git repository"; exit 1; }
 cd "$TOPLEVEL"
+TOPLEVEL_PHYSICAL="$(pwd -P)"
 [ -f .gitmodules ] || { fail "no .gitmodules here — not a workflow superproject"; exit 1; }
 
 git submodule sync
+
+verify_submodule_ownership() {
+  local dir="$1" name="$2" reported_superproject resolved_superproject
+  local actual_git_dir expected_git_dir
+  reported_superproject="$(
+    git -C "$dir" rev-parse --show-superproject-working-tree 2>/dev/null || true
+  )"
+  resolved_superproject="$(
+    [ -n "$reported_superproject" ] \
+      && cd "$reported_superproject" 2>/dev/null \
+      && pwd -P \
+      || true
+  )"
+  actual_git_dir="$(
+    cd "$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null)" 2>/dev/null \
+      && pwd -P \
+      || true
+  )"
+  expected_git_dir="$(git rev-parse --git-path "modules/$name")"
+  case "$expected_git_dir" in
+    /*) ;;
+    *) expected_git_dir="$TOPLEVEL/$expected_git_dir" ;;
+  esac
+  expected_git_dir="$(cd "$expected_git_dir" 2>/dev/null && pwd -P || true)"
+  if [ "$resolved_superproject" != "$TOPLEVEL_PHYSICAL" ] \
+    || [ -z "$actual_git_dir" ] \
+    || [ "$actual_git_dir" != "$expected_git_dir" ]; then
+    fail "$dir: unrelated Git repository obstructs submodule path"
+    return 1
+  fi
+}
 
 select_main() {
   local dir="$1" candidate ref commit
@@ -111,13 +143,16 @@ force_local_main() {
 }
 
 CHANGED_PATHS=()
-while IFS= read -r SM_PATH; do
+while read -r SM_KEY SM_PATH; do
   [ -n "$SM_PATH" ] || continue
+  SM_NAME="${SM_KEY#submodule.}"
+  SM_NAME="${SM_NAME%.path}"
   if [ ! -d "$SM_PATH/.git" ] && [ ! -f "$SM_PATH/.git" ]; then
     git submodule update --init -- "$SM_PATH"
   fi
   [ -d "$SM_PATH/.git" ] || [ -f "$SM_PATH/.git" ] \
     || { fail "$SM_PATH: submodule was not initialized"; exit 1; }
+  verify_submodule_ownership "$SM_PATH" "$SM_NAME"
 
   select_main "$SM_PATH"
   RECORDED="$(git rev-parse "HEAD:$SM_PATH")"
@@ -133,7 +168,6 @@ while IFS= read -r SM_PATH; do
   fi
 done < <(
   git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null \
-    | sed 's/^[^ ]* //'
 )
 
 # ── 2. Commit the moved pointers ───────────────────────────────────
