@@ -93,8 +93,10 @@ home-level script's session recreation behavior and layout:
 3. `btop`;
 4. `cloud`, which runs the existing Robot1 `mosh` and remote tmux command;
 5. `macmini`, which runs the existing Mac mini `mosh` and
-   `~/bin/mosh-tmux` command; and
-6. `shell`.
+   `~/bin/mosh-tmux` command;
+6. `dragonfly`, which runs
+   `mosh enamakel@dragonfly -- zsh -lc '~/bin/mosh-tmux'`; and
+7. `shell`.
 
 The launcher uses `$HOME/work/tinyhumansai` as its default repository root,
 preserves the `super-review` session name, and resolves `tmux`, `btop`, and
@@ -154,8 +156,9 @@ executables to verify:
 - the remote launcher reuses an existing session without rebuilding windows;
 - the remote prefix and theme are applied;
 - the master launcher produces the preserved five workflow, libraries,
-  system, cloud, Mac mini, and shell windows; and
-- pane working directories and remote commands are exact.
+  system, cloud, Mac mini, Dragonfly, and shell windows;
+- pane working directories and remote commands are exact; and
+- the `dragonfly` remote window follows `macmini` and precedes `shell`.
 
 Final validation includes the integration suite, Bash syntax for all managed
 scripts, Zsh syntax, agent and skill validation, installer dry-run, and
