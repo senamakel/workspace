@@ -336,6 +336,39 @@ test_initializes_uninitialized_direct_submodule() {
     "status identifies the selected direct-submodule commit"
 }
 
+test_supports_old_form_direct_submodule() {
+  local origin super submodule git_dir selected output status staged_paths
+  origin="$(make_remote old-form-origin)"
+  super="$(make_superproject_with_submodule old-form-super "$origin")"
+  submodule="$super/modules/alpha"
+  git_dir="$(git -C "$submodule" rev-parse --absolute-git-dir)"
+
+  git -C "$submodule" config --unset core.worktree
+  rm "$submodule/.git"
+  mv "$git_dir" "$submodule/.git"
+  selected="$(advance_remote old-form-origin "old form tip")"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
+  status=$?
+  set -e
+
+  assert_eq "0" "$status" "old-form direct-submodule update succeeds: $output"
+  assert_eq "main" "$(git -C "$submodule" branch --show-current)" \
+    "old-form submodule ends on local main"
+  assert_eq "$selected" "$(git -C "$submodule" rev-parse HEAD)" \
+    "old-form submodule reaches selected origin main"
+  assert_eq "$selected" "$(git -C "$submodule" rev-parse refs/heads/main)" \
+    "old-form local main is forced to the selected commit"
+  staged_paths="$(git -C "$super" diff --cached --name-only)"
+  assert_eq "modules/alpha" "$staged_paths" \
+    "--no-commit stages the old-form direct gitlink"
+  assert_eq "$selected" "$(git -C "$super" rev-parse :modules/alpha)" \
+    "staged old-form gitlink records the selected commit"
+  assert_contains "$output" "modules/alpha: selected origin/$selected" \
+    "status identifies the selected old-form direct-submodule commit"
+}
+
 test_supports_spaced_submodule_names_and_paths() {
   local origin super selected output staged_paths status
   origin="$(make_remote spaced-path-origin)"
@@ -441,6 +474,7 @@ run_test "fails without overwriting an untracked obstruction" test_fails_without
 run_test "commits only changed direct gitlinks" test_commits_only_changed_direct_gitlinks
 run_test "supports no-commit and already-current modes" test_no_commit_and_already_current_modes
 run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
+run_test "supports an old-form direct submodule" test_supports_old_form_direct_submodule
 run_test "supports spaced submodule names and paths" test_supports_spaced_submodule_names_and_paths
 run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path
 run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
