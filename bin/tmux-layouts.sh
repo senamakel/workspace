@@ -60,23 +60,23 @@ tmux_make_grid_window() {
   )"
   middle="$(
     tmux_call "$command" "$server" split-window \
-      -h -p 66 -t "$left" -c "$directory" -P -F '#{pane_id}'
+      -h -l '66%' -t "$left" -c "$directory" -P -F '#{pane_id}'
   )"
   right="$(
     tmux_call "$command" "$server" split-window \
-      -h -p 50 -t "$middle" -c "$directory" -P -F '#{pane_id}'
+      -h -l '50%' -t "$middle" -c "$directory" -P -F '#{pane_id}'
   )"
   bottom_left="$(
     tmux_call "$command" "$server" split-window \
-      -v -p 50 -t "$left" -c "$directory" -P -F '#{pane_id}'
+      -v -l '50%' -t "$left" -c "$directory" -P -F '#{pane_id}'
   )"
   bottom_middle="$(
     tmux_call "$command" "$server" split-window \
-      -v -p 50 -t "$middle" -c "$directory" -P -F '#{pane_id}'
+      -v -l '50%' -t "$middle" -c "$directory" -P -F '#{pane_id}'
   )"
   bottom_right="$(
     tmux_call "$command" "$server" split-window \
-      -v -p 50 -t "$right" -c "$directory" -P -F '#{pane_id}'
+      -v -l '50%' -t "$right" -c "$directory" -P -F '#{pane_id}'
   )"
 
   title="${directory##*/}"
