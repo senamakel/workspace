@@ -227,9 +227,35 @@ test_fails_without_remote_main() {
   assert_eq "$before" "$(git -C "$super" rev-parse HEAD)" "failure creates no pointer commit"
 }
 
+test_fails_without_overwriting_untracked_obstruction() {
+  local origin super before status output
+  origin="$(make_remote untracked-obstruction-origin)"
+  super="$(make_superproject_with_submodule untracked-obstruction-super "$origin")"
+  printf 'remote tracked content\n' > "$TEST_ROOT/untracked-obstruction-origin-seed/obstruction.txt"
+  git -C "$TEST_ROOT/untracked-obstruction-origin-seed" add obstruction.txt
+  git -C "$TEST_ROOT/untracked-obstruction-origin-seed" commit -qm "Add obstructing tracked file"
+  git -C "$TEST_ROOT/untracked-obstruction-origin-seed" push -q origin main
+  printf 'preserve local content\n' > "$super/modules/alpha/obstruction.txt"
+  before="$(git -C "$super" rev-parse HEAD)"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" 2>&1)"
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] || fail_test "untracked obstruction must fail"
+  assert_contains "$output" "untracked path obstructs synchronization: obstruction.txt" \
+    "failure identifies the untracked obstruction"
+  assert_eq "preserve local content" "$(cat "$super/modules/alpha/obstruction.txt")" \
+    "untracked obstruction content is preserved"
+  assert_eq "$before" "$(git -C "$super" rev-parse HEAD)" \
+    "untracked obstruction creates no pointer commit"
+}
+
 run_test "validates the command interface" test_interface_validation
 run_test "does not synchronize the superproject" test_superproject_is_not_synchronized
 run_test "prefers upstream main and forces local main" test_prefers_upstream_and_forces_local_main
 run_test "falls back to origin for every unusable upstream condition" test_origin_fallback_conditions
 run_test "fails when neither remote exposes main" test_fails_without_remote_main
+run_test "fails without overwriting an untracked obstruction" test_fails_without_overwriting_untracked_obstruction
 printf '1..%s\n' "$PASS_COUNT"

@@ -82,7 +82,25 @@ select_main() {
 }
 
 force_local_main() {
-  local dir="$1" commit="$2" current
+  local dir="$1" commit="$2" current target path ancestor type
+  for target in HEAD "$commit"; do
+    while IFS= read -r -d '' path; do
+      if git -C "$dir" cat-file -e "$target:$path" 2>/dev/null; then
+        fail "$dir: untracked path obstructs synchronization: $path"
+        return 1
+      fi
+      ancestor="$path"
+      while [[ "$ancestor" == */* ]]; do
+        ancestor="${ancestor%/*}"
+        type="$(git -C "$dir" cat-file -t "$target:$ancestor" 2>/dev/null || true)"
+        if [ -n "$type" ] && [ "$type" != "tree" ]; then
+          fail "$dir: untracked path obstructs synchronization: $path"
+          return 1
+        fi
+      done
+    done < <(git -C "$dir" ls-files --others -z)
+  done
+
   git -C "$dir" reset --hard HEAD
   current="$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
   if [ "$current" != "main" ]; then
