@@ -5,7 +5,9 @@
 #
 # Creates or reuses branch <slug> at <repo>/worktrees/<slug>. New branches start
 # at the current HEAD. Submodules are initialized recursively in the resulting
-# worktree. The final report is stable and suitable for agent orchestration.
+# worktree, cloned over SSH (git@github.com) regardless of the HTTPS URLs in
+# .gitmodules; set WORKTREE_HTTPS=1 to keep HTTPS. The final report is stable and
+# suitable for agent orchestration.
 set -euo pipefail
 
 fail() {
@@ -96,7 +98,22 @@ else
   fi
 fi
 
-if ! SUBMODULE_OUTPUT=$(git -C "$WT_DIR" submodule update --init --recursive 2>&1); then
+# Clone GitHub submodules over SSH regardless of the HTTPS URLs in .gitmodules.
+# `-c` overrides are exported via GIT_CONFIG_PARAMETERS, so they propagate to
+# every nested (recursive) submodule clone too — no edits to .gitmodules or
+# global config. Set WORKTREE_HTTPS=1 to keep the original HTTPS URLs.
+SUBMODULE_STATUS=0
+if [ "${WORKTREE_HTTPS:-0}" = "1" ]; then
+  SUBMODULE_OUTPUT=$(git -C "$WT_DIR" submodule update --init --recursive 2>&1) \
+    || SUBMODULE_STATUS=$?
+else
+  SUBMODULE_OUTPUT=$(git -C "$WT_DIR" \
+    -c url."git@github.com:".insteadOf="https://github.com/" \
+    -c url."git@github.com:".insteadOf="http://github.com/" \
+    submodule update --init --recursive 2>&1) \
+    || SUBMODULE_STATUS=$?
+fi
+if [ "$SUBMODULE_STATUS" -ne 0 ]; then
   fail "worktree exists, but recursive submodule initialization failed: $WT_DIR"
   printf '%s\n' "$SUBMODULE_OUTPUT" >&2
   exit 1
