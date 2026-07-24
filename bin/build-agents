@@ -92,8 +92,13 @@ render_codex() {
   model=$(jq -r '.codex.model | @json' "$metadata")
   effort=$(jq -r '.codex.modelReasoningEffort | @json' "$metadata")
 
-  if rg -q '"""' "$instructions"; then
-    fail "$instructions contains a TOML triple-quote delimiter"
+  # Emit instructions as a TOML *literal* multi-line string ('''...''') rather
+  # than a basic ("""...""") one: literal strings do not process backslash
+  # escapes, so regex/sed/path content like `\1` or `\.` in the instructions
+  # stays verbatim instead of tripping the TOML parser. The only sequence a
+  # literal string cannot contain is its own delimiter.
+  if rg -q "'''" "$instructions"; then
+    fail "$instructions contains a TOML triple-single-quote delimiter"
     exit 1
   fi
 
@@ -104,9 +109,9 @@ render_codex() {
     printf 'description = %s\n' "$description"
     printf 'model = %s\n' "$model"
     printf 'model_reasoning_effort = %s\n' "$effort"
-    printf '%s\n' 'developer_instructions = """'
+    printf '%s\n' "developer_instructions = '''"
     sed -n '1,$p' "$instructions"
-    printf '%s\n' '"""'
+    printf '%s\n' "'''"
   } >"$output"
 }
 
