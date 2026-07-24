@@ -252,6 +252,16 @@ resolve the conflict safely yourself, or the resolver returns `BLOCKED`, escalat
 that specific conflict with both sides' intent. (Running as a main loop via
 `pr-babysit`, you can dispatch subagents — so a conflict is routine, not a stop.)
 
+## Documentation Pass
+
+Before the PR is ready, make sure its changed code is documented. Once per head
+(not every tick), dispatch the `doc-writer` subagent over the PR's **changed
+files** to add or update doc comments on new public surfaces and any
+folder/module overview that helps. It changes docs only (never behavior) and
+commits a scoped `docs:` commit; push it and let CI re-run. Skip this for trivial
+or docs-only diffs, and don't re-run it every loop — track that you've done the
+documentation pass for the current head and only redo it if new code lands.
+
 ## Done = Green and Clean
 
 Keep looping until **all** of these hold, then return `READY_FOR_APPROVAL`:
