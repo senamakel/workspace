@@ -559,6 +559,41 @@
       ]
     },
     {
+      "repo": "ghostty-org/ghostty",
+      "url": "https://github.com/ghostty-org/ghostty",
+      "default_branch": "main",
+      "languages": [
+        "Zig"
+      ],
+      "license": "MIT",
+      "stars": 58665,
+      "open_issues": 262,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 80,
+      "signals": {
+        "pushed_at": "2026-07-24T18:00:50Z",
+        "open_prs": 109,
+        "recent_external_pr_merges": [
+          "jcollie",
+          "jparise",
+          "martinemde",
+          "pluiedev"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 109 open PRs and 262 issues for a 58k-star project is well-managed; clear contribution guide with native app build instructions"
+      },
+      "rationale": "GPU-accelerated terminal emulator in Zig by Mitchell Hashimoto (HashiCorp co-founder). MIT licensed with strong external contributor base. Native macOS/Linux support with active development. Terminal protocol improvements and platform integration are well-scoped.",
+      "evidence_urls": [
+        "https://github.com/ghostty-org/ghostty",
+        "https://github.com/ghostty-org/ghostty/blob/main/CONTRIBUTING.md",
+        "https://github.com/ghostty-org/ghostty/pulse"
+      ]
+    },
+    {
       "repo": "gleam-lang/gleam",
       "url": "https://github.com/gleam-lang/gleam",
       "default_branch": "main",
@@ -1301,6 +1336,38 @@
         "https://github.com/tauri-apps/tauri",
         "https://github.com/tauri-apps/tauri/blob/dev/CONTRIBUTING.md",
         "https://github.com/tauri-apps/tauri/pulse"
+      ]
+    },
+    {
+      "repo": "tmux/tmux",
+      "url": "https://github.com/tmux/tmux",
+      "default_branch": "master",
+      "languages": [
+        "C"
+      ],
+      "license": "ISC",
+      "stars": 48036,
+      "open_issues": 34,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 68,
+      "signals": {
+        "pushed_at": "2026-07-25T06:03:06Z",
+        "open_prs": 11,
+        "recent_external_pr_merges": [
+          "ilyagr"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "very low \u2014 only 11 open PRs and 34 open issues; but external contributor pipeline is thin (1 recent merge) and no CONTRIBUTING.md; contributions historically flow through mailing list"
+      },
+      "rationale": "The canonical terminal multiplexer. ISC licensed. Very mature with exceptionally low issue count. External contribution process is not GitHub-native \u2014 patches historically flow through mailing list. Watch for GitHub-based contribution documentation before targeting.",
+      "evidence_urls": [
+        "https://github.com/tmux/tmux",
+        "https://github.com/tmux/tmux/blob/master/README",
+        "https://github.com/tmux/tmux/pulse"
       ]
     },
     {
