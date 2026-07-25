@@ -226,7 +226,10 @@ Each number is a ceiling, not a quota. The launcher defaults to the
 `deepcode-flash` harness (DeepSeek V4 Flash on every tier), and to unattended
 execution for deliberately started runs. Pass another harness name to override
 it, `--safe` to retain permission prompts, or `--dry-run` to inspect the
-complete prompt.
+complete prompt. Contribution runs additionally enforce a shared ceiling of
+five newly opened upstream PRs per UTC day, based on durable issue records.
+Existing PRs may still be resumed and babysat after the daily opening allowance
+is exhausted.
 
 Shared state lives in `open-source/repositories.json` and one
 `open-source/issues/<owner>--<repo>--<number>.json` record per issue. Validate it

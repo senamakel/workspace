@@ -42,6 +42,17 @@ test_routes_contributor() {
     "contributor extra prompt"
 }
 
+test_caps_daily_contributions() {
+  local output
+  output="$("$COMMAND" contribute --limit 10 --dry-run)"
+  assert_contains "$output" "Daily upstream PR cap: 5" \
+    "daily contribution cap"
+  assert_contains "$output" "Batch limit: 5" \
+    "effective contribution batch"
+  assert_contains "$output" "Requested batch limit: 10" \
+    "requested contribution batch"
+}
+
 test_rejects_bad_limit() {
   if "$COMMAND" triage --limit 0 --dry-run >/dev/null 2>&1; then
     fail_test "zero limit was accepted"
@@ -55,6 +66,8 @@ test_routes_research
 printf 'ok 1 - routes repository research\n'
 test_routes_contributor
 printf 'ok 2 - routes master contribution work\n'
+test_caps_daily_contributions
+printf 'ok 3 - caps daily contributions\n'
 test_rejects_bad_limit
-printf 'ok 3 - rejects invalid batch limits\n'
-printf '1..3\n'
+printf 'ok 4 - rejects invalid batch limits\n'
+printf '1..4\n'

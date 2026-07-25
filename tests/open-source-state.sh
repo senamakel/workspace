@@ -53,6 +53,17 @@ test_active_pr_is_rejected() {
   fi
 }
 
+test_pr_slot_date_is_validated() {
+  local state="$TEST_ROOT/pr-slot"
+  make_state "$state"
+  jq '.claim.pr_slot_date = "25 July"' \
+    "$ROOT/tests/fixtures/open-source-queued-issue.json" \
+    >"$state/issues/example--project--42.json"
+  if "$CHECK" "$state" >/dev/null 2>&1; then
+    fail_test "malformed PR slot date passed validation"
+  fi
+}
+
 test_empty_state_is_valid
 printf 'ok 1 - accepts an empty catalog and queue\n'
 test_valid_queued_issue_is_accepted
@@ -61,4 +72,6 @@ test_valid_repository_is_accepted
 printf 'ok 3 - accepts a fully evidenced repository\n'
 test_active_pr_is_rejected
 printf 'ok 4 - rejects an issue with an active PR\n'
-printf '1..4\n'
+test_pr_slot_date_is_validated
+printf 'ok 5 - validates PR slot dates\n'
+printf '1..5\n'

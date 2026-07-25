@@ -26,6 +26,13 @@ claim, verifies the fork/canonical remotes, and creates the exact worktree
 recorded by the claim. `run` executes a command from that target worktree, so
 agents do not accidentally explore or modify this repository.
 
+Contributor launches cap new upstream pull requests at five per UTC day across
+the shared state. Before target work begins, a contributor atomically reserves
+a slot with `claim.pr_slot_date`; records already opened that day also count.
+The launcher reduces its effective batch allowance by those durable slots.
+Agents recheck the count immediately before opening each PR; existing PR
+babysitting does not consume a new slot.
+
 ## State synchronization
 
 Operational state changes are the narrow exception to the normal pull-request

@@ -96,6 +96,9 @@ while IFS= read -r -d '' issue_file; do
       (.evidence_urls | length) > 0 and
       all(.evidence_urls[]; type == "string")) and
     ((.claim | type) == "object") and
+    ((.claim.pr_slot_date == null) or
+      ((.claim.pr_slot_date | type) == "string" and
+       (.claim.pr_slot_date | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")))) and
     ((.pull_request == null) or (.pull_request | type) == "object") and
     ((.history | type) == "array" and
       (.history | length) > 0 and

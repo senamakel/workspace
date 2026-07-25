@@ -32,10 +32,13 @@ open-source-work run <owner/repo#issue> -- rg '<pattern>'
 open-source-work run <owner/repo#issue> -- <focused-test-command>
 ```
 
-The throughput goal is 30–50 useful PRs per day across the workforce, not per
-repository and not at the expense of quality. Never create filler patches,
-cosmetic churn, duplicate work, fragmented PRs, or changes made only to hit a
-number. Keep at most two of our unmerged PRs open in one target repository
+The hard throughput ceiling is five new upstream pull requests per UTC day
+across the entire workforce. The launch configuration reports today's durable
+count and remaining allowance. It is a ceiling, never a quota. When the
+allowance is zero, resume and babysit existing work but do not claim work that
+would require a new PR or open another PR. Never create filler patches,
+cosmetic churn, duplicate work, fragmented PRs, or changes made only to hit the
+ceiling. Keep at most two of our unmerged PRs open in one target repository
 unless its maintainers explicitly invite more.
 
 ## Non-negotiable boundaries
@@ -70,7 +73,10 @@ and per-repository load. Before claiming:
    record, and select another item.
 5. Set `status: "claimed"`; fill `claim.worker` with a stable
    `<hostname>/<harness>` identity, `claim.claimed_at`, the intended branch, and
-   target-repository worktree path. Append history.
+   target-repository worktree path. If this work is expected to open a new PR,
+   pull/recount the daily records and reserve one of the five slots by setting
+   `claim.pr_slot_date` to today's UTC date. Append history. Do not reserve or
+   claim new-PR work when all five slots are used.
 6. Validate, atomic-commit only the issue record, run `git pull --rebase`, and
    push immediately.
 
@@ -132,9 +138,14 @@ state exactly what was not run.
 
 ## Open the pull request
 
-Refresh the collision audit once more before publication. Push the feature
-branch to the contributor fork and open a PR against the canonical upstream
-default branch. The PR must:
+Refresh shared state immediately before publication. The record must have
+`claim.pr_slot_date` equal to today's UTC date. If it has no current slot, pull,
+recount today's opened PRs and reservations, reserve a free slot in this one
+record, validate, commit, rebase, and push it before publication. If five slots
+are already used, persist the work as `blocked` with the daily-cap reason and
+resume it on a later UTC day; do not publish. Otherwise refresh the collision
+audit, push the feature branch to the contributor fork, and open a PR against
+the canonical upstream default branch. The PR must:
 
 - link the issue using the target project's preferred closing syntax;
 - explain the root cause and smallest behavioral change;

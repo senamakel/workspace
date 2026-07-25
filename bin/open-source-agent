@@ -98,6 +98,7 @@ esac
 
 HARNESS="deepcode-flash"
 LIMIT="$DEFAULT_LIMIT"
+REQUESTED_LIMIT=""
 MODE="automatic"
 DRY_RUN=0
 EXTRA_PARTS=()
@@ -142,6 +143,7 @@ case "$LIMIT" in
 esac
 [ "$LIMIT" -gt 0 ] || { fail "--limit must be greater than zero"; exit 1; }
 [ "$LIMIT" -le 50 ] || { fail "--limit cannot exceed 50"; exit 1; }
+REQUESTED_LIMIT="$LIMIT"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 PLAYBOOK_FILE="$ROOT/agents/$AGENT_NAME/instructions.md"
@@ -149,6 +151,28 @@ PLAYBOOK_FILE="$ROOT/agents/$AGENT_NAME/instructions.md"
   || { fail "missing agent playbook: $PLAYBOOK_FILE"; exit 1; }
 require git gh jq "$ROOT/bin/check-open-source-state"
 "$ROOT/bin/check-open-source-state"
+
+DAILY_CONFIG=""
+if [ "$STAGE" = contribute ]; then
+  DAILY_CAP=5
+  UTC_DAY="$(date -u +%Y-%m-%d)"
+  USED_TODAY=0
+  while IFS= read -r -d '' issue_file; do
+    opened_at="$(jq -r '.pull_request.opened_at // empty' "$issue_file")"
+    slot_date="$(jq -r '.claim.pr_slot_date // empty' "$issue_file")"
+    case "$opened_at:$slot_date" in
+      "$UTC_DAY"*|*:"$UTC_DAY") USED_TODAY=$((USED_TODAY + 1)) ;;
+    esac
+  done < <(find "$ROOT/open-source/issues" -maxdepth 1 -type f \
+    -name '*.json' -print0)
+  REMAINING_TODAY=$((DAILY_CAP - USED_TODAY))
+  [ "$REMAINING_TODAY" -ge 0 ] || REMAINING_TODAY=0
+  [ "$LIMIT" -le "$REMAINING_TODAY" ] || LIMIT="$REMAINING_TODAY"
+  DAILY_CONFIG="Daily upstream PR cap: $DAILY_CAP
+Durable PR slots used today (UTC): $USED_TODAY
+New upstream PR allowance remaining today: $REMAINING_TODAY
+Requested batch limit: $REQUESTED_LIMIT"
+fi
 
 PLAYBOOK="$(sed -n '1,$p' "$PLAYBOOK_FILE")"
 EXTRA="${EXTRA_PARTS[*]:-}"
@@ -161,6 +185,7 @@ Target-repository command: open-source-work
 Stage: $STAGE
 Batch limit: $LIMIT
 Harness: $HARNESS
+$DAILY_CONFIG
 
 Operate autonomously through this stage up to the batch limit. The limit is a
 ceiling, never a quota. Stop early when no item meets every playbook gate.
