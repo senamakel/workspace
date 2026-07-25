@@ -45,3 +45,9 @@ For installer changes, exercise both dry-run behavior and idempotency; a second 
 ## Commit & Pull Request Guidelines
 
 Recent history favors short, scoped, imperative subjects such as `bin: add deepcode wrapper` and `readme: document the deepcode tool`. This repository is the exception to the shared worktree workflow: do not create or use worktrees for workspace-repo changes. Work in the primary checkout on a feature branch instead. Commit with `atomic-commit "<scoped message>" -- <explicit files...>` so unrelated changes remain uncommitted. Describe behavior and validation in the PR, and link relevant issues. Screenshots are only needed for user-visible terminal or status-line changes. Open PRs against the canonical upstream repository, not a personal fork.
+
+Operational updates under `open-source/` are the narrow exception to the PR
+rule: agents may commit and push one validated state file directly to `main` so
+other machines can claim work safely. They must pull with rebase before and
+after the state edit, never force-push, and abandon a claim if the same issue
+record conflicts.
