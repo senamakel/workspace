@@ -18,6 +18,22 @@ There is no compilation step or centralized test suite. Validate the part you ch
 
 Run `./install.sh` only from the primary checkout, because links created from a disposable worktree will break when that worktree is removed.
 
+## Syncing Remote Workspaces
+
+After changes have landed on `origin/main`, update all three remote boxes from
+their primary checkouts. Preserve any machine-local tracked changes; investigate
+a failed fast-forward instead of resetting or stashing them automatically.
+
+```sh
+ssh enamakel@dragonfly 'cd ~/work/workspace && git pull --ff-only && ./install.sh'
+ssh enamakel@mac-mini 'cd ~/work/workspace && git pull --ff-only && ./install.sh'
+ssh droid@robot1.digital.ocean 'cd ~/work/workspace && git pull --ff-only && ./install.sh'
+```
+
+Use a login-capable remote shell if a host's non-interactive `PATH` cannot find
+standard tools. Confirm each pull and install succeeds before reporting the
+three machines as synchronized.
+
 ## Coding Style & Naming Conventions
 
 Shell scripts use `#!/usr/bin/env bash`, two-space indentation, quoted variable expansions, and defensive settings such as `set -euo pipefail` where appropriate. Prefer small functions with clear lowercase names and local variables. Name command-line tools with lowercase kebab-case (`workflow-update`) and skill directories after the capability they provide. Keep JSON/JSONC formatting consistent with neighboring files.
