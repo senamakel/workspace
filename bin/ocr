@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ocr — OpenCodeReview routed through OpenRouter with the shared DeepSeek setup.
+set -euo pipefail
+
+if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+  echo "ocr: OPENROUTER_API_KEY is not set." >&2
+  echo "  Add it to your machine-local ~/.zshrc; do not store it in this repo." >&2
+  exit 1
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "ocr: 'npm' is not installed." >&2
+  echo "  Run install-open-code-review after installing Node.js and npm." >&2
+  exit 1
+fi
+
+ocr_bin="${OCR_REAL_BIN:-$(npm prefix --global)/bin/ocr}"
+if [ ! -x "$ocr_bin" ]; then
+  echo "ocr: OpenCodeReview is not installed at $ocr_bin." >&2
+  echo "  Run: install-open-code-review" >&2
+  exit 1
+fi
+
+# OCR's built-in OpenAI provider falls back to OPENAI_API_KEY. Its machine-local
+# config points that provider at OpenRouter; map the existing key only for this
+# child process so other OpenAI-compatible tools remain unaffected.
+export OPENAI_API_KEY="$OPENROUTER_API_KEY"
+
+exec "$ocr_bin" "$@"

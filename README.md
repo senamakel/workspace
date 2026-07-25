@@ -442,6 +442,22 @@ of the ~967k default; override with `DEEPCODE_CONTEXT_WINDOW` (blank it to keep 
 model's full window). Requires `OPENROUTER_API_KEY` in the environment (set it in
 your `~/.zshrc`, not this repo). All arguments pass straight through to `claude`.
 
+### `ocr [args...]`
+
+Runs Alibaba's OpenCodeReview CLI through OpenRouter using the same machine-local
+`OPENROUTER_API_KEY` as `deepcode`. Install and configure the npm package with
+`install-open-code-review`; the installer stores only the OpenRouter URL, protocol,
+and DeepSeek model names in `~/.opencodereview/config.json`, never the key. Reviews
+default to `deepseek/deepseek-v4-pro`; `deepseek/deepseek-v4-flash` is also
+configured and can be selected with OCR's `--model` option.
+
+```sh
+install-open-code-review
+ocr llm test
+ocr review
+ocr review --from main --to feature-branch
+```
+
 ### `workflow-update [--no-commit]`
 
 Synchronizes only first-level submodules (no recursion), selecting

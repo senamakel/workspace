@@ -7,6 +7,13 @@ case ":$PATH:" in
 esac
 unset _workspace_bin
 
+ocr() {
+  local installer wrapper
+  installer="$(command -v install-open-code-review)"
+  wrapper="${installer:h}/ocr"
+  "$wrapper" "$@"
+}
+
 res() {
   local remote=upstream
   git remote get-url upstream >/dev/null 2>&1 || remote=origin
@@ -62,4 +69,3 @@ rust-clean() {
     echo "Done."
   fi
 }
-

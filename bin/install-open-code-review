@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Install OpenCodeReview and configure its non-secret OpenRouter/DeepSeek route.
+set -euo pipefail
+
+package="@alibaba-group/open-code-review"
+default_model="deepseek/deepseek-v4-pro"
+models='["deepseek/deepseek-v4-pro","deepseek/deepseek-v4-flash"]'
+
+if [ "${1:-}" = "--dry-run" ]; then
+  echo "[would install] npm install --global $package"
+  echo "[would configure] OpenRouter with $default_model"
+  exit 0
+fi
+if [ "$#" -ne 0 ]; then
+  echo "usage: install-open-code-review [--dry-run]" >&2
+  exit 1
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "install-open-code-review: 'npm' is not installed." >&2
+  exit 1
+fi
+
+npm install --global "$package"
+
+ocr_bin="$(npm prefix --global)/bin/ocr"
+if [ ! -x "$ocr_bin" ]; then
+  echo "install-open-code-review: expected executable not found: $ocr_bin" >&2
+  exit 1
+fi
+
+# Use the built-in OpenAI-compatible provider so OCR can read OPENAI_API_KEY.
+# bin/ocr supplies that variable from the machine-local OPENROUTER_API_KEY.
+"$ocr_bin" config set provider openai
+"$ocr_bin" config set model "$default_model"
+"$ocr_bin" config set providers.openai.url https://openrouter.ai/api/v1
+"$ocr_bin" config set providers.openai.protocol openai
+"$ocr_bin" config set providers.openai.models "$models"
+"$ocr_bin" config set providers.openai.api_key ""
+
+echo
+"$ocr_bin" version
+echo "Configured OpenCodeReview for OpenRouter. Run: ocr llm test"
