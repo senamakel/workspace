@@ -8,7 +8,7 @@
   "created_at": "2026-07-25T13:32:39Z",
   "updated_at": "2026-07-25T15:33:58Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "claimed",
+  "status": "rejected",
   "priority_score": 80,
   "estimated_minutes": 120,
   "verification_plan": "Build nushell from source (`cargo build`). Create an alias `alias \"from jsonc\" = from json`, then attempt to use it in a pipeline like `open deno.jsonc`. Confirm the error \"Can't run alias directly. Unwrap it first.\" appears. Fix the alias resolution in the evaluator to forward aliases to their underlying commands in pipeline context. Run `cargo test` to verify no regressions in command resolution.",
@@ -40,6 +40,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "claimed",
       "note": "Claimed by dragonfly/deepcode-flash. PR slot reserved for 2026-07-25."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "rejected",
+      "note": "Rejected: nushell AGENTS.md explicitly instructs 'Never create a PR.' Cannot proceed with contribution pipeline."
     }
   ]
 }

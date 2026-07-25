@@ -8,7 +8,7 @@
   "created_at": "2026-07-23T16:54:48Z",
   "updated_at": "2026-07-23T17:39:37Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "claimed",
+  "status": "rejected",
   "priority_score": 88,
   "estimated_minutes": 30,
   "verification_plan": "Build tree-sitter from source (make). Run `readelf -d libtree-sitter.so* | grep SONAME` to verify the SONAME is set to `libtree-sitter.so.0` (not `libtree-sitter.so.0.26`). Run `ldconfig -N` in the build output directory and confirm symlinks `libtree-sitter.so.0 → libtree-sitter.so.0.26` and `libtree-sitter.so → libtree-sitter.so.0.26` are created. Run existing test suite via `make test` to confirm no regressions.",
@@ -40,6 +40,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "claimed",
       "note": "Claimed by dragonfly/deepcode-flash. PR slot reserved for 2026-07-25."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "rejected",
+      "note": "Rejected: tree-sitter CONTRIBUTING has strict AI policy banning direct agent interaction and requiring human-at-wheel. Cannot proceed with automated pipeline."
     }
   ]
 }

@@ -8,7 +8,7 @@
   "created_at": "2026-07-22T00:39:43Z",
   "updated_at": "2026-07-24T22:47:02Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "claimed",
+  "status": "in_progress",
   "priority_score": 82,
   "estimated_minutes": 120,
   "verification_plan": "Build atuin from source with `cargo build`. Populate a test history with entries like `foo something long command` and `foo bar something`. Query `foo bar` via atuin's fuzzy search and verify the `foo bar something` result ranks higher than `foo ...b...a...r...`. Compare against fzf ranking of the same data. Run `cargo test` to check for regressions in the search/skim ranking code.",
@@ -40,6 +40,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "claimed",
       "note": "Claimed by dragonfly/deepcode-flash. PR slot reserved for 2026-07-25."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "in_progress",
+      "note": "Proceeding: atuin allows AI assistance with human review requirement. Working on fix."
     }
   ]
 }

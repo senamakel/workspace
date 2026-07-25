@@ -8,7 +8,7 @@
   "created_at": "2026-07-24T15:34:32Z",
   "updated_at": "2026-07-24T19:22:51Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "claimed",
+  "status": "rejected",
   "priority_score": 90,
   "estimated_minutes": 30,
   "verification_plan": "Build typst from source (cargo build). Write a small test file calling `#luma()` and `#luma(\"invalid\")` and verify both produce a compilation error rather than being silently accepted. Run the existing test suite to confirm no regressions.",
@@ -41,6 +41,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "claimed",
       "note": "Claimed by dragonfly/deepcode-flash. PR slot reserved for 2026-07-25."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "rejected",
+      "note": "Rejected: typst CONTRIBUTING explicitly says 'AI-driven contributions will not be accepted'. Cannot proceed with automated pipeline."
     }
   ]
 }
