@@ -8,7 +8,7 @@
   "created_at": "2026-07-25T08:13:43Z",
   "updated_at": "2026-07-25T08:13:43Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "queued",
+  "status": "claimed",
   "priority_score": 85,
   "estimated_minutes": 60,
   "verification_plan": "Install deno 2.9.4. Create a minimal deno.json with `{\"unstable\": [\"no-legacy-abort\"]}` and a test script that calls `Deno.serve`. Run without `--unstable-no-legacy-abort` CLI flag and verify the deprecation warning does NOT appear (confirming the config entry is wired). Then add the feature name to the wrong config parsing path and re-run to confirm the fix works. Run `cargo test` in the cli crate for regressions.",
@@ -23,7 +23,11 @@
     "https://github.com/denoland/deno/blob/main/cli/args/mod.rs"
   ],
   "claim": {
-    "pr_slot_date": null
+    "worker": "dragonfly/deepcode-flash",
+    "claimed_at": "2026-07-25T17:00:00Z",
+    "branch": "denoland-deno-36307",
+    "path": "~/work/open-source/denoland--deno/worktrees/denoland-deno-36307",
+    "pr_slot_date": "2026-07-25"
   },
   "pull_request": null,
   "history": [
@@ -31,6 +35,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "queued",
       "note": "Triaged from 72-hour window. Bug: the `no-legacy-abort` unstable feature name works via CLI flag but is not wired in the deno.json config unstable list parsing path despite being recognized as a valid feature name. Config parsing fix in cli/args/mod.rs."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "claimed",
+      "note": "Claimed by dragonfly/deepcode-flash. PR slot reserved for 2026-07-25."
     }
   ]
 }

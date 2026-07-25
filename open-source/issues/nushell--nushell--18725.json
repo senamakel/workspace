@@ -8,7 +8,7 @@
   "created_at": "2026-07-25T13:32:39Z",
   "updated_at": "2026-07-25T15:33:58Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "queued",
+  "status": "claimed",
   "priority_score": 80,
   "estimated_minutes": 120,
   "verification_plan": "Build nushell from source (`cargo build`). Create an alias `alias \"from jsonc\" = from json`, then attempt to use it in a pipeline like `open deno.jsonc`. Confirm the error \"Can't run alias directly. Unwrap it first.\" appears. Fix the alias resolution in the evaluator to forward aliases to their underlying commands in pipeline context. Run `cargo test` to verify no regressions in command resolution.",
@@ -23,7 +23,11 @@
     "https://github.com/nushell/nushell/blob/main/crates/nu-parser/src/parser.rs"
   ],
   "claim": {
-    "pr_slot_date": null
+    "worker": "dragonfly/deepcode-flash",
+    "claimed_at": "2026-07-25T17:00:00Z",
+    "branch": "nushell-nushell-18725",
+    "path": "~/work/open-source/nushell--nushell/worktrees/nushell-nushell-18725",
+    "pr_slot_date": "2026-07-25"
   },
   "pull_request": null,
   "history": [
@@ -31,6 +35,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "queued",
       "note": "Triaged from 72-hour window. Bug: defining an alias that wraps another command and then using it in a pipeline produces a fatal error 'Can't run alias directly. Unwrap it first.' instead of executing the underlying command. Affects the alias resolution/evaluation path in nushell. Requires investigation in the evaluator or parser."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "claimed",
+      "note": "Claimed by dragonfly/deepcode-flash. PR slot reserved for 2026-07-25."
     }
   ]
 }
