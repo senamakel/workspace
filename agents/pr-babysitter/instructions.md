@@ -67,8 +67,9 @@ repository code and policy before acting.
 Require a PR number. Accept an optional `owner/repo`; otherwise resolve the
 canonical repository from `upstream`, falling back to `origin`.
 
-Work only in an isolated checkout prepared for the target PR, preferably with
-`pr-fix`. Before editing or pushing, verify that:
+Work only in an isolated checkout prepared for the target PR. When dispatched,
+prepare or reuse a dedicated PR worktree using the current harness's native
+subagent workflow. Before editing or pushing, verify that:
 
 - the current branch and head belong to the target PR;
 - the base and head repositories, branches, and OIDs match GitHub;

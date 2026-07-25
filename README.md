@@ -170,12 +170,9 @@ or secrets into GitHub.
 ## Shared Skills
 
 Skills live in `skills/<name>/` and are linked into both Claude and Codex.
-Alongside `humanizer`, the following workflow skills are adapted from
-[superpowers](https://github.com/obra/superpowers) — guidance you follow in the
+Alongside `humanizer`, the following workflow skills provide guidance for the
 main loop, several of which dispatch the workflow agents above.
 
-- `brainstorming` — turn an idea into an approved design/spec before any code;
-  hands off to the `plan-writer` agent.
 - `subagent-driven-development` — execute a plan by dispatching a fresh
   `tdd-implementer` per task with a `code-reviewer` gate after each.
 - `dispatching-parallel-agents` — split 2+ independent problems across

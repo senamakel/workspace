@@ -154,6 +154,8 @@ remove_shared_skill_link() {
 
 remove_shared_skill_link "claude" "using-superpowers"
 remove_shared_skill_link "codex" "using-superpowers"
+remove_shared_skill_link "claude" "brainstorming"
+remove_shared_skill_link "codex" "brainstorming"
 
 # Keep one symlink per generated file so Claude Code can still drop local files
 # into ~/.claude/agents.
