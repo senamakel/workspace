@@ -26,7 +26,7 @@
     "worker": "dragonfly/deepcode-flash",
     "claimed_at": "2026-07-25T17:00:00Z",
     "branch": "nushell-nushell-18725",
-    "path": "~/work/open-source/nushell--nushell/worktrees/nushell-nushell-18725",
+    "worktree": "/home/enamakel/work/open-source/nushell--nushell/worktrees/nushell-nushell-18725",
     "pr_slot_date": "2026-07-25"
   },
   "pull_request": null,

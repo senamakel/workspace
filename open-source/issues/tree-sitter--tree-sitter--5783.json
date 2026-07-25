@@ -26,7 +26,7 @@
     "worker": "dragonfly/deepcode-flash",
     "claimed_at": "2026-07-25T17:00:00Z",
     "branch": "tree-sitter-tree-sitter-5783",
-    "path": "~/work/open-source/tree-sitter--tree-sitter/worktrees/tree-sitter-tree-sitter-5783",
+    "worktree": "/home/enamakel/work/open-source/tree-sitter--tree-sitter/worktrees/tree-sitter-tree-sitter-5783",
     "pr_slot_date": "2026-07-25"
   },
   "pull_request": null,

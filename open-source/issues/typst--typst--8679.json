@@ -27,7 +27,7 @@
     "worker": "dragonfly/deepcode-flash",
     "claimed_at": "2026-07-25T17:00:00Z",
     "branch": "typst-typst-8679",
-    "path": "~/work/open-source/typst--typst/worktrees/typst-typst-8679",
+    "worktree": "/home/enamakel/work/open-source/typst--typst/worktrees/typst-typst-8679",
     "pr_slot_date": "2026-07-25"
   },
   "pull_request": null,

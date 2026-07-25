@@ -26,7 +26,7 @@
     "worker": "dragonfly/deepcode-flash",
     "claimed_at": "2026-07-25T17:00:00Z",
     "branch": "atuinsh-atuin-3702",
-    "path": "~/work/open-source/atuinsh--atuin/worktrees/atuinsh-atuin-3702",
+    "worktree": "/home/enamakel/work/open-source/atuinsh--atuin/worktrees/atuinsh-atuin-3702",
     "pr_slot_date": "2026-07-25"
   },
   "pull_request": null,
