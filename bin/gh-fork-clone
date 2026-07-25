@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# gh-fork-clone — fork a GitHub repo, clone your fork to ~/work/others/<name>.
+#
+# Usage: gh-fork-clone <owner/repo> [gh-fork-flags...]
+#
+#   gh-fork-clone atuinsh/atuin
+#   gh-fork-clone sharkdp/bat --clone=false   # fork only, already cloned
+#   gh-fork-clone QwenLM/qwen-code --remote   # fork + add upstream remote
+#
+# The target directory is ~/work/others/<repo-name>.  If the directory already
+# exists, the script skips the clone and just ensures the fork exists.
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+usage() {
+  cat <<'EOF'
+Usage: gh-fork-clone <owner/repo> [gh-fork-flags...]
+
+  Fork a GitHub repository, then clone your fork into ~/work/others/<repo>.
+
+Examples:
+  gh-fork-clone atuinsh/atuin
+  gh-fork-clone sharkdp/bat --remote
+  gh-fork-clone hyprwm/Hyprland --clone=false
+
+Flags after the repo are passed through to `gh repo fork`.
+EOF
+  exit 0
+}
+
+main() {
+  if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    usage
+  fi
+
+  if [ $# -eq 0 ]; then
+    echo -e "${RED}Error:${NC} no repository specified." >&2
+    echo "Usage: gh-fork-clone <owner/repo>" >&2
+    exit 1
+  fi
+
+  local repo="$1"
+  shift
+
+  # Validate repo format
+  if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo -e "${RED}Error:${NC} '$repo' doesn't look like owner/repo." >&2
+    exit 1
+  fi
+
+  # Check that gh is available
+  if ! command -v gh &>/dev/null; then
+    echo -e "${RED}Error:${NC} gh (GitHub CLI) is not installed." >&2
+    exit 1
+  fi
+
+  # Check gh auth
+  if ! gh auth status &>/dev/null; then
+    echo -e "${RED}Error:${NC} gh is not authenticated. Run 'gh auth login' first." >&2
+    exit 1
+  fi
+
+  local repo_name="${repo#*/}"
+  local target_dir="$HOME/work/others/$repo_name"
+
+  # -----------------------------------------------------------------------
+  # Step 1 — Fork (idempotent: gh repo fork --remote is safe to re-run)
+  # -----------------------------------------------------------------------
+  echo -e "${BOLD}→ Forking ${repo}...${NC}"
+  if gh repo fork "$repo" --clone=false "$@" 2>&1; then
+    echo -e "  ${GREEN}✓${NC} fork ready"
+  else
+    # Fork may already exist — that's fine, continue
+    echo -e "  ${YELLOW}!${NC} fork may already exist, continuing..."
+  fi
+
+  # -----------------------------------------------------------------------
+  # Step 2 — Clone (skip if target directory already exists)
+  # -----------------------------------------------------------------------
+  if [ -d "$target_dir" ]; then
+    echo -e "  ${YELLOW}!${NC} $target_dir already exists, skipping clone."
+    echo -e "  ${GREEN}✓${NC} cd $target_dir"
+  else
+    mkdir -p "$(dirname "$target_dir")"
+
+    # Determine our fork URL
+    local gh_user
+    gh_user="$(gh api user --jq '.login')"
+    local fork_url="git@github.com:${gh_user}/${repo_name}.git"
+
+    echo -e "${BOLD}→ Cloning ${fork_url} into ${target_dir}...${NC}"
+    git clone "$fork_url" "$target_dir"
+    echo -e "  ${GREEN}✓${NC} cloned"
+
+    # Add upstream remote pointing at the original repo
+    (
+      cd "$target_dir"
+      local upstream_url="git@github.com:${repo}.git"
+      if ! git remote get-url upstream &>/dev/null; then
+        git remote add upstream "$upstream_url"
+        echo -e "  ${GREEN}✓${NC} upstream remote → ${upstream_url}"
+      fi
+    )
+  fi
+
+  # -----------------------------------------------------------------------
+  # Summary
+  # -----------------------------------------------------------------------
+  echo
+  echo -e "${BOLD}${GREEN}Done.${NC}"
+  echo -e "  repo:   ${BOLD}${repo}${NC}"
+  echo -e "  fork:   ${BOLD}$(gh api user --jq '.login')/${repo_name}${NC}"
+  echo -e "  local:  ${BOLD}${target_dir}${NC}"
+
+  if [ -d "$target_dir/.git" ]; then
+    echo
+    echo "Remotes:"
+    (cd "$target_dir" && git remote -v) | sed 's/^/  /'
+  fi
+}
+
+main "$@"
