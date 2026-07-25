@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "repo": "nushell/nushell",
+  "issue_number": 18725,
+  "id": "nushell/nushell#18725",
+  "url": "https://github.com/nushell/nushell/issues/18725",
+  "title": "Nushell failed: Can't run alias directly. Unwrap it first.",
+  "created_at": "2026-07-25T13:32:39Z",
+  "updated_at": "2026-07-25T15:33:58Z",
+  "triaged_at": "2026-07-25T17:00:00Z",
+  "status": "queued",
+  "priority_score": 80,
+  "estimated_minutes": 120,
+  "verification_plan": "Build nushell from source (`cargo build`). Create an alias `alias \"from jsonc\" = from json`, then attempt to use it in a pipeline like `open deno.jsonc`. Confirm the error \"Can't run alias directly. Unwrap it first.\" appears. Fix the alias resolution in the evaluator to forward aliases to their underlying commands in pipeline context. Run `cargo test` to verify no regressions in command resolution.",
+  "signals": {
+    "has_active_pr": false,
+    "assigned": false,
+    "recent_claim": false
+  },
+  "evidence_urls": [
+    "https://github.com/nushell/nushell/issues/18725",
+    "https://github.com/nushell/nushell/blob/main/CONTRIBUTING.md",
+    "https://github.com/nushell/nushell/blob/main/crates/nu-parser/src/parser.rs"
+  ],
+  "claim": {
+    "pr_slot_date": null
+  },
+  "pull_request": null,
+  "history": [
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "queued",
+      "note": "Triaged from 72-hour window. Bug: defining an alias that wraps another command and then using it in a pipeline produces a fatal error 'Can't run alias directly. Unwrap it first.' instead of executing the underlying command. Affects the alias resolution/evaluation path in nushell. Requires investigation in the evaluator or parser."
+    }
+  ]
+}

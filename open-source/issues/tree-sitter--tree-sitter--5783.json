@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "repo": "tree-sitter/tree-sitter",
+  "issue_number": 5783,
+  "id": "tree-sitter/tree-sitter#5783",
+  "url": "https://github.com/tree-sitter/tree-sitter/issues/5783",
+  "title": "`SONAME` in libtree-sitter.so prevents `ldconfig` from creating symlink libtree-sitter.so.0 → libtree-sitter.so.0.26",
+  "created_at": "2026-07-23T16:54:48Z",
+  "updated_at": "2026-07-23T17:39:37Z",
+  "triaged_at": "2026-07-25T17:00:00Z",
+  "status": "queued",
+  "priority_score": 88,
+  "estimated_minutes": 30,
+  "verification_plan": "Build tree-sitter from source (make). Run `readelf -d libtree-sitter.so* | grep SONAME` to verify the SONAME is set to `libtree-sitter.so.0` (not `libtree-sitter.so.0.26`). Run `ldconfig -N` in the build output directory and confirm symlinks `libtree-sitter.so.0 → libtree-sitter.so.0.26` and `libtree-sitter.so → libtree-sitter.so.0.26` are created. Run existing test suite via `make test` to confirm no regressions.",
+  "signals": {
+    "has_active_pr": false,
+    "assigned": false,
+    "recent_claim": false
+  },
+  "evidence_urls": [
+    "https://github.com/tree-sitter/tree-sitter/issues/5783",
+    "https://github.com/tree-sitter/tree-sitter/blob/master/CONTRIBUTING.md",
+    "https://github.com/tree-sitter/tree-sitter/blob/master/Makefile"
+  ],
+  "claim": {
+    "pr_slot_date": null
+  },
+  "pull_request": null,
+  "history": [
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "queued",
+      "note": "Triaged from 72-hour window. Build-system fix: SONAME in Makefile/libtool set to libtree-sitter.so.0.26 instead of libtree-sitter.so.0, preventing ldconfig from managing version symlinks. Scoped one-line fix in build configuration."
+    }
+  ]
+}
