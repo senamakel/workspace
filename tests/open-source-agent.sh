@@ -32,8 +32,12 @@ test_routes_contributor() {
   assert_contains "$output" "You are the master execution agent" \
     "contributor playbook"
   assert_contains "$output" "Batch limit: 2" "contributor limit"
-  assert_contains "$output" "Harness: deepcode" \
+  assert_contains "$output" "Harness: deepcode-flash" \
     "default contributor harness"
+  assert_contains "$output" "Control-plane checkout (not a contribution target): $ROOT" \
+    "workspace is identified as control plane"
+  assert_contains "$output" "Target-repository command: open-source-work" \
+    "target repository helper"
   assert_contains "$output" "Additional instructions: resume waiting PRs" \
     "contributor extra prompt"
 }

@@ -155,14 +155,21 @@ EXTRA="${EXTRA_PARTS[*]:-}"
 PROMPT="$PLAYBOOK
 
 --- LAUNCH CONFIGURATION (this run) ---
-Workspace repository: senamakel/workspace
-Workspace primary checkout: $ROOT
+Control-plane repository: senamakel/workspace
+Control-plane checkout (not a contribution target): $ROOT
+Target-repository command: open-source-work
 Stage: $STAGE
 Batch limit: $LIMIT
 Harness: $HARNESS
 
 Operate autonomously through this stage up to the batch limit. The limit is a
-ceiling, never a quota. Stop early when no item meets every playbook gate."
+ceiling, never a quota. Stop early when no item meets every playbook gate.
+
+The launch directory contains only pipeline configuration and durable state.
+Never treat it as the repository to inspect, debug, edit, test, or contribute
+to. For contribution work, resolve and prepare the target with
+\`open-source-work\`, then run all repository exploration and implementation
+inside the target worktree reported by that command."
 
 [ -z "$EXTRA" ] || PROMPT="$PROMPT
 
