@@ -86,8 +86,8 @@ Then open the PR against the **upstream** repo's base branch (via `gh pr create
 the behavior and how it was validated, and linking any relevant issues.
 
 **Do NOT clean up the worktree** — it stays alive so you can address PR feedback.
-This repo's `pr-*` tools (`pr-list`, `pr-fix`, `pr-merge`) and the `pr-babysitter`
-agent take over from here.
+This repo's PR workflow (`pr-list`, `pr-merge`) and the native `pr-babysitter`
+subagent take over from here.
 
 ### Option 2: Keep as-is
 

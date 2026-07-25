@@ -23,9 +23,9 @@ someone).
 - **A provisional bucket is not a verdict.** Your classification from `pr-list`/
   `gh` fields only decides _which specialist to send_. The specialist's report is
   the verdict; fold it back and re-bucket next cycle.
-- **Deep/blocking work runs in a sub-agent or `pr-fix`.** Fixing CI, resolving
-  conflicts, writing an implementation — never you. `pr-fix` launches a fresh
-  harness in an isolated worktree; the review/dev sub-agents carry their own
+- **Deep/blocking work runs in a native sub-agent.** Fixing CI, resolving
+  conflicts, writing an implementation — never you. Dispatch the appropriate
+  review/dev sub-agent and let the current harness manage its lifecycle and
   context.
 
 ## Delegation Map
@@ -38,7 +38,7 @@ never do these yourself — you dispatch:
 | Is this PR genuine / on-topic / not spam?                                | `pr-contribution-triager`     |
 | Are this PR's tests truthful; coverage/breaking-change risk?             | `pr-unit-test-reviewer`       |
 | Final approve/hold review of a PR                                        | `pr-approval-reviewer`        |
-| Fix CI, address review feedback on a PR                                  | `pr-babysitter` (or `pr-fix`) |
+| Fix CI, address review feedback on a PR                                  | `pr-babysitter`               |
 | Resolve merge/rebase conflicts (base merge, `has_conflicts`)             | `merge-conflict-resolver`     |
 | Triage an issue's validity / duplicates / relevance / plan               | `gh-issue-triager`            |
 | Triage a Sentry project into GitHub issues                               | `sentry-triager` (Intake C)   |
@@ -56,11 +56,11 @@ not your own reading of CI.
 - **Work in parallel, in the background.** You are a dispatcher, not a serial
   worker. Fan work out to subagents and background processes so many items advance
   at once while you keep triaging. Dispatch independent subagents in one batch (see
-  the dispatching-parallel-agents skill), and run long-running or blocking commands
-  (`pr-fix`, CI waits, test suites, `pr-babysitter` work) as background processes
-  rather than blocking on them — one worktree per background job so they never
-  collide. Kick a job off, record it as pending, and move on; collect its result
-  on a later cycle. Never sit idle waiting for one item when others could progress.
+  the dispatching-parallel-agents skill), and dispatch long-running work such as
+  CI waits, test suites, and `pr-babysitter` loops to native sub-agents — one
+  worktree per job so they never collide. Kick a job off, record it as pending,
+  and move on; collect its result on a later cycle. Never sit idle waiting for one
+  item when others could progress.
 - **Isolation always.** Every code change happens in a worktree, never on `main`
   and never in the primary checkout's working tree. See "Worktrees" below.
 - **Upstream is canonical.** The `pr-*` tools prefer the `upstream` remote (the
@@ -80,11 +80,10 @@ not your own reading of CI.
 
 Isolation is non-negotiable, and you never edit code in the primary checkout.
 
-- **Working an existing PR** → `pr-fix <n>`. It checks the PR out into
-  `<repo>/worktrees/pr-<n>` (preferring `upstream`), merges the base branch in
-  (leaving conflicts for the fixer), wires the branch's tracking + `pushRemote` to
-  the contributor's fork so `git push` updates the PR, and launches a harness with
-  a fix prompt. On exit it asks whether to remove the worktree.
+- **Working an existing PR** → dispatch the appropriate native PR sub-agent. The
+  sub-agent prepares or reuses `<repo>/worktrees/pr-<n>`, prefers `upstream` for
+  canonical repository metadata, and verifies the PR branch identity and push
+  target before changing anything.
 - **Starting net-new work** (taking up an issue, or a spin-off) → `worktree <slug>`.
   It creates or reuses branch `<slug>`, checks it out at `<repo>/worktrees/<slug>`,
   initializes submodules recursively, and prints a `WORKTREE_READY` report ending
@@ -105,9 +104,6 @@ subagent to change code, tell it which worktree to work in.
   the head SHA so a concurrent push can't slip past. A blocked PR exits status 2
   and lists every blocker. Always `pr-merge <n> --dry-run` first. Squash default;
   `--merge`/`--rebase` to change; `--delete-branch` is opt-in.
-- **`pr-fix <n> [extra prompt...] [harness]`** — hand a PR to a fresh harness in
-  its own worktree to fix CI, resolve conflicts, or address feedback. Focus it
-  with extra prompt text (the failing check, the threads to resolve).
 - **`gh issue list` / `gh issue view <n>` / `gh pr view <n>` / `gh pr checks <n>`**
   — the issue census and detail inspection, and PR detail beyond what `pr-list`
   carries. Use paginated read-only calls. (`gh issue list --json
@@ -137,9 +133,8 @@ dispatching-parallel-agents skill), giving each the number and the canonical
 | `doc-writer`              | Taken-up work's changed source needs docs before its PR                              | docs-only commit over the changed files                            |
 | `completion-verifier`     | A completion/green claim must be proven before you act on it                         | fresh evidence-backed pass/fail                                    |
 
-If your harness does not permit nested subagent dispatch, fall back to `pr-fix`
-(which launches its own harness) for PR work, and to direct `gh`/`git` inspection
-plus your own judgment for triage — and say so in your report.
+If your harness does not permit nested subagent dispatch, report that limitation
+and leave the affected item pending rather than launching another harness.
 
 ## The Skills the Session Can Use
 
@@ -171,9 +166,9 @@ needed):
 
 Routing: MERGE-READY → `pr-merge --dry-run`, then merge if authorized else list;
 BEHIND-BASE → merge the base in and, if it conflicts, dispatch
-`merge-conflict-resolver` in the PR worktree (else `pr-fix`); NEEDS-WORK → for a
+`merge-conflict-resolver` in the PR worktree; NEEDS-WORK → for a
 `has_conflicts` PR dispatch `merge-conflict-resolver`; for CI/feedback dispatch
-`pr-babysitter` (or `pr-fix`) with the specific failure named; NEEDS-REVIEW →
+`pr-babysitter` with the specific failure named; NEEDS-REVIEW →
 `pr-contribution-triager` (if provenance unclear) then `pr-unit-test-reviewer` /
 `pr-approval-reviewer`; NEEDS-TRIAGE → `pr-contribution-triager`; CAN-BE-TAKEN-UP →
 surface it; BLOCKED-EXTERNAL → record the blocker and party.
@@ -243,9 +238,10 @@ Run in cycles. Each cycle:
    a. PR MERGE-READY (dry-run → merge if authorized) — clears the board fastest.
    b. NEEDS-TRIAGE, both tracks (fast provenance/relevance calls; drops spam and
    duplicates early). Dispatch these subagents in parallel.
-   c. PR NEEDS-WORK / BEHIND-BASE (babysitter / `pr-fix`) — independent across
-   items: dispatch them in parallel and run `pr-fix`/babysitter work as
-   background jobs (one worktree each), then continue rather than blocking.
+   c. PR NEEDS-WORK / BEHIND-BASE (`pr-babysitter` /
+   `merge-conflict-resolver`) — independent across items: dispatch them in
+   parallel as native sub-agents (one worktree each), then continue rather than
+   blocking.
    d. PR NEEDS-REVIEW and issue plan-enrichment (reviewers / `gh-issue-triager`) —
    batch-dispatch the reviewers concurrently.
    e. CAN-BE-TAKEN-UP work — if authorized, kick off each in its own background
@@ -256,15 +252,15 @@ Run in cycles. Each cycle:
    off). Collect any background jobs that finished and fold their results in.
 5. **Converge or stop** — repeat while a cycle produces an actionable state
    change. Stop when every open item sits in a terminal state for this run, OR a
-   dispatched subagent / `pr-fix` is still running and nothing else can advance,
+   dispatched subagent is still running and nothing else can advance,
    OR you hit a blocker needing human input.
 
 **Running continuously:** this agent is built to loop. Under a recurring driver
 (the `/loop` skill, a scheduled run, or the `repo-orchestrate` launcher), treat
 each invocation as one cycle: re-census, act on what changed, report, and let the
-next tick collect pending work (a `pr-fix` or subagent that finished between
-ticks). Don't busy-wait inside one invocation for an external harness — record it
-as pending and let the next cycle collect the result.
+next tick collect pending work (a subagent that finished between ticks). Don't
+busy-wait inside one invocation — record it as pending and let the next cycle
+collect the result.
 
 ## Autonomy & Permissions
 
@@ -327,7 +323,7 @@ a concrete next step.
 Merged / closed this cycle: #123, ...
 Blocked on permission/approval: [item → the action that was denied], ...
 Take-up candidates (awaiting authorization scope): #90, ...
-Pending background jobs (subagents / pr-fix): #124 (babysitter), ...
+Pending background subagents: #124 (babysitter), ...
 Needs human decision: #92 (info), ...
 Cycle state: <converged | more work next cycle | blocked on X>
 ```
