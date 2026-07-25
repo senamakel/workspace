@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+workflow-remotes [--dry-run] <workflow-directory>
+
+Configure a TinyHumans workflow checkout and its recursive submodules.
+EOF
+}
+
+DRY_RUN=0
+if [ "${1:-}" = "--dry-run" ]; then
+  DRY_RUN=1
+  shift
+fi
+if [ "$#" -ne 1 ]; then
+  usage >&2
+  exit 1
+fi
+
+WORKFLOW="$1"
+git -C "$WORKFLOW" rev-parse --show-toplevel >/dev/null 2>&1 || {
+  printf 'workflow-remotes: not a Git repository: %s\n' "$WORKFLOW" >&2
+  exit 1
+}
+WORKFLOW="$(cd "$WORKFLOW" && pwd -P)"
+
+repository_name() {
+  local directory="$1" remote url repository
+  for remote in upstream origin; do
+    url="$(git -C "$directory" remote get-url "$remote" 2>/dev/null || true)"
+    case "$url" in
+      git@github.com:*/*.git|https://github.com/*/*.git|ssh://git@github.com/*/*.git)
+        repository="${url##*/}"
+        printf '%s\n' "${repository%.git}"
+        return
+        ;;
+    esac
+  done
+  printf 'workflow-remotes: no GitHub repository remote found: %s\n' \
+    "$directory" >&2
+  return 1
+}
+
+set_remote() {
+  local directory="$1" name="$2" url="$3"
+  if git -C "$directory" remote get-url "$name" >/dev/null 2>&1; then
+    git -C "$directory" remote set-url "$name" "$url"
+  else
+    git -C "$directory" remote add "$name" "$url"
+  fi
+}
+
+configure_repository() {
+  local directory="$1" root="$2" repository origin_owner
+  repository="$(repository_name "$directory")"
+  origin_owner=senamakel
+  [ "$root" = "1" ] && origin_owner=tinyhumansai
+
+  if [ "$DRY_RUN" = "1" ]; then
+    printf '[would configure] %s (%s)\n' "$directory" "$repository"
+    return
+  fi
+
+  set_remote "$directory" origin \
+    "git@github.com:$origin_owner/$repository.git"
+  set_remote "$directory" upstream \
+    "git@github.com:tinyhumansai/$repository.git"
+  git -C "$directory" config remote.pushDefault origin
+  if git -C "$directory" show-ref --verify --quiet refs/heads/main; then
+    git -C "$directory" config branch.main.remote upstream
+    git -C "$directory" config branch.main.merge refs/heads/main
+  fi
+  printf '[configured] %s\n' "$directory"
+}
+
+if [ "$DRY_RUN" = "1" ]; then
+  printf '[would initialize] recursive submodules in %s\n' "$WORKFLOW"
+else
+  git -C "$WORKFLOW" submodule update --init --recursive
+fi
+
+configure_repository "$WORKFLOW" 1
+while IFS= read -r directory; do
+  [ -n "$directory" ] || continue
+  configure_repository "$directory" 0
+done < <(git -C "$WORKFLOW" submodule foreach --quiet --recursive 'pwd -P')
