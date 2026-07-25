@@ -60,6 +60,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "waiting",
       "note": "Blocked on CLA Assistant — needs human to sign CLA at https://cla-assistant.deno.deno.net/. Code compiles, PR is mergeable."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "waiting",
+      "note": "CLA signed and passing. Blocked on first-time contributor CI approval gate — a maintainer with write access must approve workflow runs at https://github.com/denoland/deno/actions/runs/30166440061. Code is mergeable and ready for review."
     }
   ]
 }
