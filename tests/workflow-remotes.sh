@@ -39,7 +39,7 @@ make_fixture() {
   local workflow="$TEST_ROOT/$suffix-workflow-openhuman"
 
   make_repo "$nested" backend
-  git -C "$nested" remote add origin git@github.com:tinyhumansai/backend.git
+  git -C "$nested" remote add origin https://github.com/tinyhumansai/backend
 
   make_repo "$direct" openhuman
   GIT_ALLOW_PROTOCOL=file git -C "$direct" submodule add -q \
@@ -58,7 +58,7 @@ make_fixture() {
   git -C "$workflow/modules/openhuman" remote set-url origin \
     git@github.com:tinyhumansai/openhuman.git
   git -C "$workflow/modules/openhuman/modules/backend" remote set-url origin \
-    git@github.com:tinyhumansai/backend.git
+    https://github.com/tinyhumansai/backend
   printf '%s\n' "$workflow"
 }
 

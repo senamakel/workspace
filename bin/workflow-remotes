@@ -31,7 +31,7 @@ repository_name() {
   for remote in upstream origin; do
     url="$(git -C "$directory" remote get-url "$remote" 2>/dev/null || true)"
     case "$url" in
-      git@github.com:*/*.git|https://github.com/*/*.git|ssh://git@github.com/*/*.git)
+      git@github.com:*/*|https://github.com/*/*|ssh://git@github.com/*/*)
         repository="${url##*/}"
         printf '%s\n' "${repository%.git}"
         return
