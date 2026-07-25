@@ -96,7 +96,7 @@ case "$STAGE" in
     ;;
 esac
 
-HARNESS="deepcode"
+HARNESS="deepcode-flash"
 LIMIT="$DEFAULT_LIMIT"
 MODE="automatic"
 DRY_RUN=0

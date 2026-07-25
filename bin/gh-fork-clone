@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# gh-fork-clone — fork a GitHub repo, clone your fork to ~/work/others/<name>.
+# gh-fork-clone — fork a GitHub repo, clone your fork locally with upstream
+# remote configured.
 #
-# Usage: gh-fork-clone <owner/repo> [gh-fork-flags...]
+# Usage: gh-fork-clone <owner/repo> [flags...]
 #
 #   gh-fork-clone atuinsh/atuin
-#   gh-fork-clone sharkdp/bat --clone=false   # fork only, already cloned
-#   gh-fork-clone QwenLM/qwen-code --remote   # fork + add upstream remote
+#   gh-fork-clone sharkdp/bat --target-dir /tmp/bat-dev
+#   gh-fork-clone QwenLM/qwen-code --open-source   # ~/work/open-source/qwenlm--qwen-code
+#   gh-fork-clone hyprwm/Hyprland --clone=false    # fork only
 #
-# The target directory is ~/work/others/<repo-name>.  If the directory already
-# exists, the script skips the clone and just ensures the fork exists.
+# Default target: ~/work/others/<repo-name>.
+# Idempotent — safe to re-run on existing forks and clones.
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -19,16 +21,23 @@ NC='\033[0m'
 
 usage() {
   cat <<'EOF'
-Usage: gh-fork-clone <owner/repo> [gh-fork-flags...]
+Usage: gh-fork-clone <owner/repo> [flags...]
 
-  Fork a GitHub repository, then clone your fork into ~/work/others/<repo>.
+  Fork a GitHub repository, then clone your fork locally with upstream
+  remote pointing at the canonical repo.
+
+Flags:
+  --target-dir <dir>   clone into <dir> (default: ~/work/others/<repo>)
+  --open-source        use open-source convention ~/work/open-source/<owner>--<repo>
+  --clone=false        fork only, skip the clone (passed through to gh)
+
+Other flags after the repo are forwarded to `gh repo fork`.
 
 Examples:
   gh-fork-clone atuinsh/atuin
-  gh-fork-clone sharkdp/bat --remote
-  gh-fork-clone hyprwm/Hyprland --clone=false
-
-Flags after the repo are passed through to `gh repo fork`.
+  gh-fork-clone sharkdp/bat --target-dir /tmp/bat-dev
+  gh-fork-clone hyprwm/Hyprland --open-source
+  gh-fork-clone QwenLM/qwen-code --clone=false
 EOF
   exit 0
 }
@@ -66,13 +75,55 @@ main() {
   fi
 
   local repo_name="${repo#*/}"
-  local target_dir="$HOME/work/others/$repo_name"
+  local repo_owner="${repo%/*}"
+  local target_dir=""
+  local open_source_mode=0
+  local fork_flags=()
+
+  # Parse our flags; unknown flags pass through to gh repo fork
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --target-dir)
+        [ $# -ge 2 ] || { echo -e "${RED}Error:${NC} --target-dir requires a value." >&2; exit 1; }
+        target_dir="$2"
+        shift 2
+        ;;
+      --open-source)
+        open_source_mode=1
+        shift
+        ;;
+      --clone=false)
+        fork_flags+=("$1")
+        shift
+        ;;
+      --clone)  # --clone with value
+        fork_flags+=("$1" "$2")
+        shift 2
+        ;;
+      *)
+        fork_flags+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  # Determine target directory
+  if [ -z "$target_dir" ]; then
+    if [ "$open_source_mode" -eq 1 ]; then
+      # Lowercase the owner for consistent filesystem naming
+      local owner_lower
+      owner_lower="$(echo "$repo_owner" | tr '[:upper:]' '[:lower:]')"
+      target_dir="$HOME/work/open-source/${owner_lower}--${repo_name}"
+    else
+      target_dir="$HOME/work/others/$repo_name"
+    fi
+  fi
 
   # -----------------------------------------------------------------------
   # Step 1 — Fork (idempotent: gh repo fork --remote is safe to re-run)
   # -----------------------------------------------------------------------
   echo -e "${BOLD}→ Forking ${repo}...${NC}"
-  if gh repo fork "$repo" --clone=false "$@" 2>&1; then
+  if gh repo fork "$repo" --clone=false "${fork_flags[@]}" 2>&1; then
     echo -e "  ${GREEN}✓${NC} fork ready"
   else
     # Fork may already exist — that's fine, continue

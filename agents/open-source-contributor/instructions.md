@@ -57,13 +57,29 @@ means another worker won; preserve the winning record and pick another issue.
 
 ## Prepare the target checkout
 
-Use or create a primary clone under
-`~/work/open-source/<owner>--<repository>`. Configure:
+Use `gh-fork-clone --open-source <repo>` to fork and clone the target
+repository in one step:
 
-- `upstream` as the canonical target repository;
-- `origin` as the writable contributor fork;
-- pulls/default-branch updates from `upstream`;
-- feature pushes to `origin`.
+```bash
+gh-fork-clone --open-source <owner/repo>
+```
+
+This:
+- forks the canonical repo to your GitHub account (idempotent),
+- clones the fork into `~/work/open-source/<owner>--<repo>/` (skips if it exists),
+- configures `origin` → your fork, `upstream` → the canonical repo,
+- and is safe to re-run — existing forks and clones are detected and skipped.
+
+After clone, verify the remotes and fetch the default branch from upstream:
+
+```bash
+cd ~/work/open-source/<owner>--<repo>
+git fetch upstream
+git checkout "$(git remote show upstream | sed -n '/HEAD branch/s/.*: //p')"
+```
+
+The `gh-fork-clone` helper lives in `bin/gh-fork-clone` in the workspace
+repository and is available on `PATH`.
 
 Create one isolated target-repository worktree per issue with `worktree
 <owner>-<repo>-<issue>`. The workspace repository's no-worktree exception does
