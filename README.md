@@ -222,16 +222,19 @@ open-source-agent contribute --limit 5
 
 Repository discovery is manually triggered. The triager consumes only active
 catalog entries, and the contributor consumes only its durable issue queue.
-Each number is a ceiling, not a quota. The launcher defaults to the `deepcode`
-harness so its session remains available for interactive messaging, and to
-unattended execution for deliberately started runs. Pass another harness name
-to override it, `--safe` to retain permission prompts, or `--dry-run` to inspect
-the complete prompt.
+Each number is a ceiling, not a quota. The launcher defaults to the
+`deepcode-flash` harness (DeepSeek V4 Flash on every tier), and to unattended
+execution for deliberately started runs. Pass another harness name to override
+it, `--safe` to retain permission prompts, or `--dry-run` to inspect the
+complete prompt.
 
 Shared state lives in `open-source/repositories.json` and one
 `open-source/issues/<owner>--<repo>--<number>.json` record per issue. Validate it
 with `bin/check-open-source-state`. State claims are pushed before target work
 starts, so a same-record rebase conflict safely gives the claim to one machine.
+Use `open-source-work repos|queue|show` to inspect state, `prepare` to create a
+claimed external worktree, and `run` to execute commands inside that target
+without relying on the harness launch directory.
 
 ### `worktree <slug> [--json]`
 

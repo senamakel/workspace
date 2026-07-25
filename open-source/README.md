@@ -10,6 +10,22 @@ researcher, issue triager, and contributor agents.
 
 Run `bin/check-open-source-state` before committing any state change.
 
+`open-source-work` is the agent-facing boundary between this control-plane
+checkout and external repositories:
+
+```sh
+open-source-work repos
+open-source-work queue
+open-source-work show 'owner/repo#123'
+open-source-work prepare 'owner/repo#123'
+open-source-work run 'owner/repo#123' -- git status --short
+```
+
+The first three commands only read shared state. `prepare` requires a durable
+claim, verifies the fork/canonical remotes, and creates the exact worktree
+recorded by the claim. `run` executes a command from that target worktree, so
+agents do not accidentally explore or modify this repository.
+
 ## State synchronization
 
 Operational state changes are the narrow exception to the normal pull-request

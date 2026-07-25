@@ -10,6 +10,28 @@ Operate only on `queued` records under `open-source/issues/` whose repository is
 currently `active` in `open-source/repositories.json`. If the queue is empty,
 stop successfully and request an `open-source-issue-triager` run.
 
+The launch directory is the `senamakel/workspace` control plane, not a
+contribution target. Do not inspect its source as evidence for a queued bug and
+do not implement target-project changes there. Start each run with:
+
+```bash
+open-source-work queue
+open-source-work repos
+```
+
+Use `open-source-work show <owner/repo#issue>` for the complete queue record.
+After the durable claim, use `open-source-work prepare
+<owner/repo#issue>`. It forks/clones the canonical repository, verifies
+`origin` and `upstream`, fetches the catalogued default branch, and creates the
+claimed worktree from `upstream/<default-branch>`. Its JSON result is the
+authoritative target path. Run one-off exploration and proof commands without
+working-directory ambiguity:
+
+```bash
+open-source-work run <owner/repo#issue> -- rg '<pattern>'
+open-source-work run <owner/repo#issue> -- <focused-test-command>
+```
+
 The throughput goal is 30–50 useful PRs per day across the workforce, not per
 repository and not at the expense of quality. Never create filler patches,
 cosmetic churn, duplicate work, fragmented PRs, or changes made only to hit a
@@ -57,35 +79,29 @@ means another worker won; preserve the winning record and pick another issue.
 
 ## Prepare the target checkout
 
-Use `gh-fork-clone --open-source <repo>` to fork and clone the target
-repository in one step:
+Normally use the queue-aware preparation command:
 
 ```bash
-gh-fork-clone --open-source <owner/repo>
+open-source-work prepare <owner/repo#issue>
 ```
 
 This:
 - forks the canonical repo to your GitHub account (idempotent),
 - clones the fork into `~/work/open-source/<owner>--<repo>/` (skips if it exists),
 - configures `origin` → your fork, `upstream` → the canonical repo,
-- and is safe to re-run — existing forks and clones are detected and skipped.
+- verifies `origin` points to your fork and `upstream` to the canonical repo;
+- fetches the catalogued upstream default branch;
+- creates or reuses the claim's isolated worktree and branch; and
+- initializes recursive submodules.
 
-After clone, verify the remotes and fetch the default branch from upstream:
-
-```bash
-cd ~/work/open-source/<owner>--<repo>
-git fetch upstream
-git checkout "$(git remote show upstream | sed -n '/HEAD branch/s/.*: //p')"
-```
-
-The `gh-fork-clone` helper lives in `bin/gh-fork-clone` in the workspace
-repository and is available on `PATH`.
-
-Create one isolated target-repository worktree per issue with `worktree
-<owner>-<repo>-<issue>`. The workspace repository's no-worktree exception does
-not apply to target projects. Update the record to `in_progress` only after
-checkout identity, default-branch head, fork push target, and applicable
-instructions are verified.
+Before claiming, set the intended branch to `<owner>-<repo>-<issue>` and the
+worktree to
+`~/work/open-source/<lowercase-owner>--<repo>/worktrees/<branch>`. The helper
+rejects a claim whose path does not follow this convention. The workspace
+repository's no-worktree exception does not apply to target projects. Update
+the record to `in_progress` only after the helper's repository, branch, base,
+head, and path report are verified and applicable target instructions are
+read.
 
 Re-run the collision audit immediately before the first edit. Abandon cleanly
 if another contribution appeared.
