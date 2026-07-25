@@ -55,6 +55,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "pr_open",
       "note": "PR #3749 opened against upstream/main. Head SHA: 31fbe906."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "green",
+      "note": "All 22 CI checks pass. Greptile review addressed and resolved. Waiting on maintainer approval/merge."
     }
   ]
 }
