@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "afplay /System/Library/Sounds/Glass.aiff"
+            "command": "\"$HOME/work/workspace/bin/afplay\" /System/Library/Sounds/Glass.aiff"
           }
         ]
       }
@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "afplay /System/Library/Sounds/Ping.aiff"
+            "command": "\"$HOME/work/workspace/bin/afplay\" /System/Library/Sounds/Ping.aiff"
           }
         ]
       }

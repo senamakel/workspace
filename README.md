@@ -198,6 +198,18 @@ main loop, several of which dispatch the workflow agents above.
 
 ## Tools
 
+### `afplay [arguments...]`
+
+Provides portable notification audio for Claude/Codex hooks. On macOS it
+delegates unchanged arguments to `/usr/bin/afplay`. On Linux it ignores the
+macOS sound path and emits one terminal BEL through `/dev/tty`; SSH and mosh
+carry that bell back to the local terminal without a reverse tunnel or daemon.
+If no TTY exists, it exits successfully and silently.
+
+Set `AFPLAY_OUTPUT=silent` to disable fallback bells or
+`AFPLAY_OUTPUT=stdout` when a caller deliberately wants BEL on standard output.
+The fallback never evaluates arguments or runs a configurable callback.
+
 ### `open-source-agent <research|triage|contribute> [harness]`
 
 Runs one explicit stage of the open-source contribution pipeline:

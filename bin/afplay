@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# afplay — portable, safe notification sound shim.
+#
+# On macOS, delegate to the native player. Elsewhere, emit a terminal bell over
+# the current PTY so SSH/mosh carries the notification back to the client.
+# Sound-file arguments are deliberately ignored by the fallback and never
+# evaluated.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: afplay [native-afplay arguments...]
+
+macOS: delegates arguments to /usr/bin/afplay.
+Other systems: emits one terminal bell and exits successfully.
+
+Environment:
+  AFPLAY_NATIVE  native player path (default: /usr/bin/afplay)
+  AFPLAY_OUTPUT  auto (default), stdout, tty, or silent
+EOF
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+NATIVE_PLAYER="${AFPLAY_NATIVE:-/usr/bin/afplay}"
+if [ -x "$NATIVE_PLAYER" ] && ! [ "$NATIVE_PLAYER" -ef "$0" ]; then
+  exec "$NATIVE_PLAYER" "$@"
+fi
+
+OUTPUT_MODE="${AFPLAY_OUTPUT:-auto}"
+case "$OUTPUT_MODE" in
+  silent)
+    exit 0
+    ;;
+  stdout)
+    printf '\a'
+    exit 0
+    ;;
+  tty)
+    if [ -w /dev/tty ]; then
+      printf '\a' >/dev/tty
+    fi
+    exit 0
+    ;;
+  auto)
+    if [ -w /dev/tty ]; then
+      printf '\a' >/dev/tty
+    elif [ -t 1 ]; then
+      printf '\a'
+    fi
+    exit 0
+    ;;
+  *)
+    printf 'afplay: invalid AFPLAY_OUTPUT: %s\n' "$OUTPUT_MODE" >&2
+    exit 2
+    ;;
+esac
