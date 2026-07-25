@@ -68,6 +68,41 @@
       ]
     },
     {
+      "repo": "Alexays/Waybar",
+      "url": "https://github.com/Alexays/Waybar",
+      "default_branch": "master",
+      "languages": [
+        "C++"
+      ],
+      "license": "MIT",
+      "stars": 11677,
+      "open_issues": 696,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-21T19:13:15Z",
+        "open_prs": 70,
+        "recent_external_pr_merges": [
+          "aaronred345",
+          "bjnobre",
+          "LukashonakV",
+          "Mrpaoo"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 70 open PRs and 696 issues; module-based architecture with independent widget contributions; diverse external contributor base"
+      },
+      "rationale": "Highly customizable Wayland status bar. MIT licensed with modular widget architecture \u2014 each module is independently maintainable. Adding new widget modules or improving existing ones (CPU, memory, network, etc.) are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/Alexays/Waybar",
+        "https://github.com/Alexays/Waybar/blob/master/CONTRIBUTING.md",
+        "https://github.com/Alexays/Waybar/pulse"
+      ]
+    },
+    {
       "repo": "astral-sh/ruff",
       "url": "https://github.com/astral-sh/ruff",
       "default_branch": "main",
@@ -296,6 +331,38 @@
         "https://github.com/clap-rs/clap",
         "https://github.com/clap-rs/clap/blob/master/CONTRIBUTING.md",
         "https://github.com/clap-rs/clap/pulse"
+      ]
+    },
+    {
+      "repo": "containers/podman",
+      "url": "https://github.com/containers/podman",
+      "default_branch": "main",
+      "languages": [
+        "Go"
+      ],
+      "license": "Apache-2.0",
+      "stars": 32362,
+      "open_issues": 1093,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 76,
+      "signals": {
+        "pushed_at": "2026-07-24T15:58:44Z",
+        "open_prs": 100,
+        "recent_external_pr_merges": [
+          "i-OmSharma"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 multi-maintainer Red Hat project; external contributions are accepted but diluted by large internal team"
+      },
+      "rationale": "Daemonless container engine in Go, Docker alternative. Apache-2.0 with Red Hat backing. Rootless container improvements, systemd integration, and networking enhancements are well-scoped and aligned with Linux ecosystem.",
+      "evidence_urls": [
+        "https://github.com/containers/podman",
+        "https://github.com/containers/podman/blob/main/CONTRIBUTING.md",
+        "https://github.com/containers/podman/pulse"
       ]
     },
     {
@@ -528,6 +595,38 @@
       ]
     },
     {
+      "repo": "fastfetch-cli/fastfetch",
+      "url": "https://github.com/fastfetch-cli/fastfetch",
+      "default_branch": "dev",
+      "languages": [
+        "C"
+      ],
+      "license": "MIT",
+      "stars": 23887,
+      "open_issues": 66,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 68,
+      "signals": {
+        "pushed_at": "2026-07-24T00:50:59Z",
+        "open_prs": 40,
+        "recent_external_pr_merges": [
+          "h4sht"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 40 open PRs and 66 open issues; but external contributor pool appears narrow (one dominant external author); no CONTRIBUTING.md"
+      },
+      "rationale": "Neofetch replacement in C, MIT licensed. Active with low issue count. External contributor diversity is limited. Adding hardware detection modules and distro ASCII art are entry points. Watch for broader contributor base.",
+      "evidence_urls": [
+        "https://github.com/fastfetch-cli/fastfetch",
+        "https://github.com/fastfetch-cli/fastfetch/blob/dev/README.md",
+        "https://github.com/fastfetch-cli/fastfetch/pulse"
+      ]
+    },
+    {
       "repo": "fish-shell/fish-shell",
       "url": "https://github.com/fish-shell/fish-shell",
       "default_branch": "master",
@@ -556,6 +655,41 @@
         "https://github.com/fish-shell/fish-shell",
         "https://fishshell.com/docs/current/license.html",
         "https://github.com/fish-shell/fish-shell/pulse"
+      ]
+    },
+    {
+      "repo": "flatpak/flatpak",
+      "url": "https://github.com/flatpak/flatpak",
+      "default_branch": "main",
+      "languages": [
+        "C"
+      ],
+      "license": "LGPL-2.1",
+      "stars": 5001,
+      "open_issues": 1013,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-06T10:34:14Z",
+        "open_prs": 75,
+        "recent_external_pr_merges": [
+          "filmsi",
+          "A6GibKm",
+          "electricbrass",
+          "IGS-GIT"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 75 open PRs is manageable; diverse external contributor base from different Linux distributions"
+      },
+      "rationale": "Linux application sandboxing and distribution framework. LGPL-2.1 license. Strong external contributor diversity. Portal integration, sandboxing improvements, and distribution-specific fixes are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/flatpak/flatpak",
+        "https://github.com/flatpak/flatpak/blob/main/CONTRIBUTING.md",
+        "https://github.com/flatpak/flatpak/pulse"
       ]
     },
     {
@@ -661,6 +795,41 @@
         "https://github.com/helix-editor/helix",
         "https://github.com/helix-editor/helix/blob/master/CONTRIBUTING.md",
         "https://github.com/helix-editor/helix/pulse"
+      ]
+    },
+    {
+      "repo": "hyprwm/Hyprland",
+      "url": "https://github.com/hyprwm/Hyprland",
+      "default_branch": "main",
+      "languages": [
+        "C++"
+      ],
+      "license": "BSD-3-Clause",
+      "stars": 37449,
+      "open_issues": 186,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-25T11:53:52Z",
+        "open_prs": 139,
+        "recent_external_pr_merges": [
+          "gulafaran",
+          "kolayne",
+          "aurelleb",
+          "ErrorNoInternet"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 139 open PRs and only 186 issues for a 37k-star project; community is active but well-managed; Wiki contains detailed contribution guidance"
+      },
+      "rationale": "Most popular dynamic tiling Wayland compositor with visual effects. BSD-3-Clause license. Explosive growth with active community. Plugin system, animation improvements, and multi-monitor handling are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/hyprwm/Hyprland",
+        "https://wiki.hyprland.org/Contributing-and-Debugging/",
+        "https://github.com/hyprwm/Hyprland/pulse"
       ]
     },
     {
@@ -792,6 +961,41 @@
         "https://github.com/leptos-rs/leptos",
         "https://github.com/leptos-rs/leptos/blob/main/CONTRIBUTING.md",
         "https://github.com/leptos-rs/leptos/pulse"
+      ]
+    },
+    {
+      "repo": "linuxmint/cinnamon",
+      "url": "https://github.com/linuxmint/cinnamon",
+      "default_branch": "master",
+      "languages": [
+        "JavaScript",
+        "C",
+        "Python"
+      ],
+      "license": "GPL-2.0",
+      "stars": 5530,
+      "open_issues": 922,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 70,
+      "signals": {
+        "pushed_at": "2026-07-21T01:31:07Z",
+        "open_prs": 69,
+        "recent_external_pr_merges": [
+          "leigh123linux",
+          "Cobinja"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 69 open PRs and 922 issues; traditional desktop with GPL-2.0 license; Mint lead (clefebvre) drives most merges"
+      },
+      "rationale": "Traditional desktop environment for Linux Mint. GPL-2.0 license. Moderate external contributor evidence. JavaScript/C extensions and applet development are entry points. Watch for improved GitHub contribution docs.",
+      "evidence_urls": [
+        "https://github.com/linuxmint/cinnamon",
+        "https://github.com/linuxmint/cinnamon/blob/master/README.md",
+        "https://github.com/linuxmint/cinnamon/pulse"
       ]
     },
     {
@@ -1271,6 +1475,40 @@
       ]
     },
     {
+      "repo": "swaywm/sway",
+      "url": "https://github.com/swaywm/sway",
+      "default_branch": "master",
+      "languages": [
+        "C"
+      ],
+      "license": "MIT",
+      "stars": 17159,
+      "open_issues": 1358,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 77,
+      "signals": {
+        "pushed_at": "2026-07-20T14:49:57Z",
+        "open_prs": 215,
+        "recent_external_pr_merges": [
+          "smlx",
+          "maxhambraeus",
+          "64-bitman"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 215 open PRs and 1358 issues; mature project with active contributor base; wlroots-based compositor"
+      },
+      "rationale": "i3-compatible Wayland compositor built on wlroots. MIT licensed with mature ecosystem. Protocol compliance, output management, and input handling improvements are well-scoped entry points with clear testing.",
+      "evidence_urls": [
+        "https://github.com/swaywm/sway",
+        "https://github.com/swaywm/sway/blob/master/CONTRIBUTING.md",
+        "https://github.com/swaywm/sway/pulse"
+      ]
+    },
+    {
       "repo": "sxyazi/yazi",
       "url": "https://github.com/sxyazi/yazi",
       "default_branch": "main",
@@ -1300,6 +1538,40 @@
         "https://github.com/sxyazi/yazi",
         "https://github.com/sxyazi/yazi/blob/main/CONTRIBUTING.md",
         "https://github.com/sxyazi/yazi/pulse"
+      ]
+    },
+    {
+      "repo": "systemd/systemd",
+      "url": "https://github.com/systemd/systemd",
+      "default_branch": "main",
+      "languages": [
+        "C"
+      ],
+      "license": "GPL-2.0",
+      "stars": 16524,
+      "open_issues": 3335,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 69,
+      "signals": {
+        "pushed_at": "2026-07-25T15:27:34Z",
+        "open_prs": 497,
+        "recent_external_pr_merges": [
+          "yuwata",
+          "ananthb",
+          "rockorager"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "high \u2014 497 open PRs and 3335 open issues; foundational Linux component with rigorous review process and CLA requirement; mailing list contribution model"
+      },
+      "rationale": "Core Linux system and service manager. GPL-2.0 with documented contribution guide. Very high issue/PR volume and rigorous review. Better suited for experienced systems programmers. Watch for well-triaged newcomer issues.",
+      "evidence_urls": [
+        "https://github.com/systemd/systemd",
+        "https://github.com/systemd/systemd/blob/main/docs/CONTRIBUTING.md",
+        "https://github.com/systemd/systemd/pulse"
       ]
     },
     {
