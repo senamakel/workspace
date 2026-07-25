@@ -8,7 +8,7 @@
   "created_at": "2026-07-25T08:13:43Z",
   "updated_at": "2026-07-25T08:13:43Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "in_progress",
+  "status": "pr_open",
   "priority_score": 85,
   "estimated_minutes": 60,
   "verification_plan": "Install deno 2.9.4. Create a minimal deno.json with `{\"unstable\": [\"no-legacy-abort\"]}` and a test script that calls `Deno.serve`. Run without `--unstable-no-legacy-abort` CLI flag and verify the deprecation warning does NOT appear (confirming the config entry is wired). Then add the feature name to the wrong config parsing path and re-run to confirm the fix works. Run `cargo test` in the cli crate for regressions.",
@@ -29,7 +29,12 @@
     "worktree": "/home/enamakel/work/open-source/denoland--deno/worktrees/denoland-deno-36307",
     "pr_slot_date": "2026-07-25"
   },
-  "pull_request": null,
+  "pull_request": {
+    "number": 36312,
+    "url": "https://github.com/denoland/deno/pull/36312",
+    "head_sha": "5c99a90500595bc7ef07c406fc13cbf51d3581e2",
+    "opened_at": "2026-07-25T17:00:00Z"
+  },
   "history": [
     {
       "at": "2026-07-25T17:00:00Z",
@@ -45,6 +50,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "in_progress",
       "note": "Proceeding: deno requires AI disclosure but allows AI-assisted contributions. Will disclose in PR."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "pr_open",
+      "note": "PR #36312 opened against upstream/main. Head SHA: 5c99a90500."
     }
   ]
 }
