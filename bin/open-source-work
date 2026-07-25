@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# open-source-work — resolve and operate in open-source contribution targets.
+#
+# Usage:
+#   open-source-work repos [--json]
+#   open-source-work queue [--status <status>] [--json]
+#   open-source-work show <owner/repo#issue>
+#   open-source-work path <owner/repo#issue>
+#   open-source-work prepare <owner/repo#issue>
+#   open-source-work run <owner/repo#issue> -- <command> [args...]
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-1}"
+}
+
+require() {
+  local executable
+  for executable in "$@"; do
+    command -v "$executable" >/dev/null 2>&1 \
+      || fail "missing required tool: $executable"
+  done
+}
+
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+CONTROL_ROOT="${OPEN_SOURCE_CONTROL_ROOT:-$SCRIPT_ROOT}"
+STATE_ROOT="$CONTROL_ROOT/open-source"
+CATALOG="$STATE_ROOT/repositories.json"
+ISSUES_DIR="$STATE_ROOT/issues"
+CLONE_ROOT="${OPEN_SOURCE_CLONE_ROOT:-$HOME/work/open-source}"
+
+require jq
+[ -f "$CATALOG" ] || fail "missing repository catalog: $CATALOG"
+[ -d "$ISSUES_DIR" ] || fail "missing issue directory: $ISSUES_DIR"
+
+issue_file() {
+  local id="$1" repo number owner name
+  [[ "$id" =~ ^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)#([0-9]+)$ ]] \
+    || fail "issue must be written as owner/repo#number: $id"
+  owner="${BASH_REMATCH[1]}"
+  name="${BASH_REMATCH[2]}"
+  number="${BASH_REMATCH[3]}"
+  repo="$owner/$name"
+  local file="$ISSUES_DIR/${owner}--${name}--${number}.json"
+  [ -f "$file" ] || fail "issue is not in the contribution queue: $repo#$number"
+  printf '%s\n' "$file"
+}
+
+target_path() {
+  local file="$1" path
+  path="$(jq -r '.claim.worktree // empty' "$file")"
+  [ -n "$path" ] || fail "issue has no claimed target worktree; claim it durably first"
+  case "$path" in
+    /*) ;;
+    *) fail "claimed worktree must be an absolute path: $path" ;;
+  esac
+  printf '%s\n' "$path"
+}
+
+list_repos() {
+  local format="text"
+  [ "${1:-}" != "--json" ] || { format="json"; shift; }
+  [ $# -eq 0 ] || usage
+  if [ "$format" = "json" ]; then
+    jq '[.repositories[] | select(.status == "active")]' "$CATALOG"
+  else
+    jq -r '
+      ["REPOSITORY", "BRANCH", "SCORE", "LANGUAGES"],
+      (.repositories[]
+        | select(.status == "active")
+        | [.repo, .default_branch, (.selection_score | tostring),
+           (.languages | join(","))])
+      | @tsv
+    ' "$CATALOG"
+  fi
+}
+
+list_queue() {
+  local format="text" status=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) format="json"; shift ;;
+      --status)
+        [ $# -ge 2 ] || fail "--status requires a value"
+        status="$2"
+        shift 2
+        ;;
+      *) usage ;;
+    esac
+  done
+
+  local filter
+  if [ -n "$status" ]; then
+    filter='select(.status == $status)'
+  else
+    filter='select(.status | IN("queued", "claimed", "in_progress", "pr_open", "waiting"))'
+  fi
+
+  if [ "$format" = "json" ]; then
+    jq -s --arg status "$status" "map($filter)
+      | sort_by(.priority_score, .updated_at) | reverse" \
+      "$ISSUES_DIR"/*.json 2>/dev/null \
+      || printf '[]\n'
+  else
+    {
+      printf 'ISSUE\tSTATUS\tSCORE\tMINUTES\tTITLE\n'
+      jq -sr --arg status "$status" "map($filter)
+        | sort_by(.priority_score, .updated_at) | reverse[]
+        | [.id, .status, (.priority_score | tostring),
+           (.estimated_minutes | tostring), .title]
+        | @tsv" "$ISSUES_DIR"/*.json 2>/dev/null
+    } || true
+  fi
+}
+
+prepare_target() {
+  local file="$1" repo branch default_branch clone_path worktree expected_path
+  repo="$(jq -r '.repo' "$file")"
+  branch="$(jq -r '.claim.branch // empty' "$file")"
+  worktree="$(target_path "$file")"
+  [ -n "$branch" ] || fail "issue has no claimed branch; claim it durably first"
+  default_branch="$(jq -r --arg repo "$repo" '
+    .repositories[] | select(.repo == $repo and .status == "active")
+    | .default_branch
+  ' "$CATALOG")"
+  [ -n "$default_branch" ] \
+    || fail "target repository is not active in the catalog: $repo"
+
+  local owner="${repo%/*}" name="${repo#*/}" owner_lower
+  owner_lower="$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')"
+  clone_path="$CLONE_ROOT/${owner_lower}--${name}"
+  expected_path="$clone_path/worktrees/$branch"
+  [ "$worktree" = "$expected_path" ] \
+    || fail "claim worktree must be $expected_path (found $worktree)"
+
+  require git gh "$CONTROL_ROOT/bin/gh-fork-clone"
+  "$CONTROL_ROOT/bin/gh-fork-clone" "$repo" --open-source \
+    --target-dir "$clone_path"
+
+  [ "$(git -C "$clone_path" remote get-url upstream)" = "git@github.com:${repo}.git" ] \
+    || fail "upstream remote does not match canonical repository: $repo"
+  local gh_user
+  gh_user="$(gh api user --jq '.login')"
+  [ "$(git -C "$clone_path" remote get-url origin)" = \
+    "git@github.com:${gh_user}/${name}.git" ] \
+    || fail "origin remote is not the authenticated user's fork"
+
+  git -C "$clone_path" fetch upstream "$default_branch"
+  if [ -e "$worktree/.git" ]; then
+    [ "$(git -C "$worktree" branch --show-current)" = "$branch" ] \
+      || fail "existing worktree is on the wrong branch: $worktree"
+  elif git -C "$clone_path" show-ref --verify --quiet "refs/heads/$branch"; then
+    git -C "$clone_path" worktree add "$worktree" "$branch"
+  else
+    git -C "$clone_path" worktree add -b "$branch" "$worktree" \
+      "upstream/$default_branch"
+  fi
+  git -C "$worktree" submodule update --init --recursive
+
+  jq -n \
+    --arg repository "$repo" \
+    --arg path "$worktree" \
+    --arg branch "$branch" \
+    --arg base "upstream/$default_branch" \
+    --arg head "$(git -C "$worktree" rev-parse HEAD)" \
+    '{status: "ready", repository: $repository, path: $path,
+      branch: $branch, base: $base, head: $head}'
+}
+
+[ $# -gt 0 ] || usage
+command_name="$1"
+shift
+case "$command_name" in
+  repos)
+    list_repos "$@"
+    ;;
+  queue)
+    list_queue "$@"
+    ;;
+  show)
+    [ $# -eq 1 ] || usage
+    jq . "$(issue_file "$1")"
+    ;;
+  path)
+    [ $# -eq 1 ] || usage
+    target_path "$(issue_file "$1")"
+    ;;
+  prepare)
+    [ $# -eq 1 ] || usage
+    prepare_target "$(issue_file "$1")"
+    ;;
+  run)
+    [ $# -ge 3 ] && [ "$2" = "--" ] || usage
+    file="$(issue_file "$1")"
+    worktree="$(target_path "$file")"
+    [ -e "$worktree/.git" ] || fail "target is not prepared: $worktree"
+    shift 2
+    cd "$worktree"
+    exec "$@"
+    ;;
+  -h|--help)
+    usage 0
+    ;;
+  *)
+    fail "unknown command: $command_name"
+    ;;
+esac
