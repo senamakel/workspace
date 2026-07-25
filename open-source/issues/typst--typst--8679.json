@@ -8,7 +8,7 @@
   "created_at": "2026-07-24T15:34:32Z",
   "updated_at": "2026-07-24T19:22:51Z",
   "triaged_at": "2026-07-25T17:00:00Z",
-  "status": "queued",
+  "status": "claimed",
   "priority_score": 90,
   "estimated_minutes": 30,
   "verification_plan": "Build typst from source (cargo build). Write a small test file calling `#luma()` and `#luma(\"invalid\")` and verify both produce a compilation error rather than being silently accepted. Run the existing test suite to confirm no regressions.",
@@ -24,7 +24,11 @@
     "https://github.com/typst/typst/blob/main/crates/typst-community/src/visualize/luma.rs"
   ],
   "claim": {
-    "pr_slot_date": null
+    "worker": "dragonfly/deepcode-flash",
+    "claimed_at": "2026-07-25T17:00:00Z",
+    "branch": "typst-typst-8679",
+    "path": "~/work/open-source/typst--typst/worktrees/typst-typst-8679",
+    "pr_slot_date": "2026-07-25"
   },
   "pull_request": null,
   "history": [
@@ -32,6 +36,11 @@
       "at": "2026-07-25T17:00:00Z",
       "status": "queued",
       "note": "Triaged from 72-hour window. Bug: luma() accepts clearly invalid arguments like empty call or string. Simple input validation fix, well-scoped."
+    },
+    {
+      "at": "2026-07-25T17:00:00Z",
+      "status": "claimed",
+      "note": "Claimed by dragonfly/deepcode-flash. PR slot reserved for 2026-07-25."
     }
   ]
 }
