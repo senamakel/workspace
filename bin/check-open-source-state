@@ -104,19 +104,25 @@ while IFS= read -r -d '' issue_file; do
         ((.status | type) == "string") and
         ((.note | type) == "string" and (.note | length) > 0)
       )) and
+    (.history[-1].status == .status) and
     (if (.status | IN("claimed", "in_progress", "pr_open", "waiting",
       "green", "merged")) then
       ((.claim.worker | type) == "string" and
         (.claim.worker | length) > 0) and
       ((.claim.claimed_at | type) == "string") and
       ((.claim.branch | type) == "string" and
-        (.claim.branch | length) > 0)
+        (.claim.branch | length) > 0) and
+      ((.claim.worktree | type) == "string" and
+        (.claim.worktree | length) > 0)
     else true end) and
     (if (.status | IN("pr_open", "waiting", "green", "merged")) then
       ((.pull_request.url | type) == "string" and
         (.pull_request.url | startswith("https://github.com/"))) and
       (.pull_request.number |
-        (type == "number" and . > 0 and floor == .))
+        (type == "number" and . > 0 and floor == .)) and
+      ((.pull_request.head_sha | type) == "string" and
+        (.pull_request.head_sha | test("^[0-9a-f]{40}$"))) and
+      ((.pull_request.opened_at | type) == "string")
     else true end)
   ' "$issue_file" >/dev/null \
     || fail "invalid issue record: $issue_file"

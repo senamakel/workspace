@@ -31,6 +31,17 @@ test_valid_queued_issue_is_accepted() {
   "$CHECK" "$state" >/dev/null
 }
 
+test_valid_repository_is_accepted() {
+  local state="$TEST_ROOT/repository"
+  make_state "$state"
+  jq --slurpfile repository \
+    "$ROOT/tests/fixtures/open-source-repository.json" \
+    '.updated_at = "2026-07-25T12:00:00Z" |
+      .repositories = $repository' \
+    "$ROOT/open-source/repositories.json" >"$state/repositories.json"
+  "$CHECK" "$state" >/dev/null
+}
+
 test_active_pr_is_rejected() {
   local state="$TEST_ROOT/active-pr"
   make_state "$state"
@@ -46,6 +57,8 @@ test_empty_state_is_valid
 printf 'ok 1 - accepts an empty catalog and queue\n'
 test_valid_queued_issue_is_accepted
 printf 'ok 2 - accepts a complete queued issue\n'
+test_valid_repository_is_accepted
+printf 'ok 3 - accepts a fully evidenced repository\n'
 test_active_pr_is_rejected
-printf 'ok 3 - rejects an issue with an active PR\n'
-printf '1..3\n'
+printf 'ok 4 - rejects an issue with an active PR\n'
+printf '1..4\n'

@@ -1,0 +1,27 @@
+{
+  "repo": "example/project",
+  "url": "https://github.com/example/project",
+  "default_branch": "main",
+  "languages": [
+    "Rust"
+  ],
+  "license": "MIT",
+  "stars": 4200,
+  "open_issues": 31,
+  "status": "active",
+  "discovered_at": "2026-07-25T10:00:00Z",
+  "last_researched_at": "2026-07-25T12:00:00Z",
+  "selection_score": 86,
+  "signals": {
+    "commits_30d": 38,
+    "external_prs_merged_90d": 21,
+    "open_prs": 14,
+    "recent_unassigned_issues": 7,
+    "contention": "low"
+  },
+  "rationale": "Active maintainers merge focused external fixes and several recent, testable issues remain unassigned for more than a day.",
+  "evidence_urls": [
+    "https://github.com/example/project",
+    "https://github.com/example/project/pulls?q=is%3Apr+is%3Amerged"
+  ]
+}
