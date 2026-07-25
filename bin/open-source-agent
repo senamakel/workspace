@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# open-source-agent — launch one stage of the open-source contribution pipeline.
+#
+# Usage: open-source-agent <research|triage|contribute> [harness] [options] [extra prompt...]
+#
+#   open-source-agent research
+#   open-source-agent triage codex --limit 8
+#   open-source-agent contribute --limit 5 claude
+#   open-source-agent contribute --safe "only resume open PRs"
+#
+# Options:
+#   --limit N    maximum catalog additions, queued issues, or contributions
+#   --safe       keep harness permission prompts enabled
+#   --dry-run    print the composed prompt without launching a harness
+#
+# Automation is the default because contribution runs are explicitly launched
+# and otherwise stop repeatedly for harness approvals. --safe restores prompts.
+# Repository collision, verification, review, and publication gates still apply.
+set -euo pipefail
+
+if [ -t 1 ]; then
+  _R=$'\033[0;31m' _G=$'\033[0;32m' _Y=$'\033[0;33m' _B=$'\033[1m' _0=$'\033[0m'
+else
+  _R="" _G="" _Y="" _B="" _0=""
+fi
+pass() { printf '%s[PASS]%s %s\n' "$_G" "$_0" "$*"; }
+fail() { printf '%s[FAIL]%s %s\n' "$_R" "$_0" "$*" >&2; }
+warn() { printf '%s[WARN]%s %s\n' "$_Y" "$_0" "$*" >&2; }
+info() { printf '%s[INFO]%s %s\n' "$_B" "$_0" "$*"; }
+
+usage() {
+  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-1}"
+}
+
+require() {
+  local executable
+  for executable in "$@"; do
+    command -v "$executable" >/dev/null 2>&1 \
+      || { fail "missing required tool: $executable"; exit 1; }
+  done
+}
+
+HARNESSES="claude codex opencode deepcode deepcode-flash"
+is_harness() {
+  case " $HARNESSES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+harness_launch() {
+  local name="$1" prompt="$2" mode="$3"
+  case "$name" in
+    claude)
+      if [ "$mode" = safe ]; then claude "$prompt"
+      else claude --dangerously-skip-permissions "$prompt"; fi ;;
+    deepcode)
+      if [ "$mode" = safe ]; then deepcode "$prompt"
+      else deepcode --dangerously-skip-permissions "$prompt"; fi ;;
+    deepcode-flash)
+      if [ "$mode" = safe ]; then deepcode-flash "$prompt"
+      else deepcode-flash --dangerously-skip-permissions "$prompt"; fi ;;
+    codex)
+      if [ "$mode" = safe ]; then codex "$prompt"
+      else codex --dangerously-bypass-approvals-and-sandbox "$prompt"; fi ;;
+    opencode)
+      if [ "$mode" = safe ]; then opencode --prompt "$prompt"
+      else opencode --prompt "$prompt" --auto; fi ;;
+    *)
+      fail "unknown harness: $name"
+      exit 1
+      ;;
+  esac
+}
+
+[ $# -gt 0 ] || usage
+STAGE="$1"
+shift
+case "$STAGE" in
+  research)
+    AGENT_NAME="open-source-researcher"
+    DEFAULT_LIMIT=20
+    ;;
+  triage)
+    AGENT_NAME="open-source-issue-triager"
+    DEFAULT_LIMIT=10
+    ;;
+  contribute)
+    AGENT_NAME="open-source-contributor"
+    DEFAULT_LIMIT=5
+    ;;
+  -h|--help)
+    usage 0
+    ;;
+  *)
+    fail "unknown stage: $STAGE"
+    usage
+    ;;
+esac
+
+HARNESS="claude"
+LIMIT="$DEFAULT_LIMIT"
+MODE="automatic"
+DRY_RUN=0
+EXTRA_PARTS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --limit)
+      [ $# -ge 2 ] || { fail "--limit requires a number"; usage; }
+      LIMIT="$2"
+      shift 2
+      ;;
+    --safe)
+      MODE="safe"
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      usage 0
+      ;;
+    -*)
+      fail "unknown option: $1"
+      usage
+      ;;
+    *)
+      if is_harness "$1"; then
+        HARNESS="$1"
+      else
+        EXTRA_PARTS+=("$1")
+      fi
+      shift
+      ;;
+  esac
+done
+
+case "$LIMIT" in
+  ''|*[!0-9]*)
+    fail "--limit must be a positive integer: $LIMIT"
+    exit 1
+    ;;
+esac
+[ "$LIMIT" -gt 0 ] || { fail "--limit must be greater than zero"; exit 1; }
+[ "$LIMIT" -le 50 ] || { fail "--limit cannot exceed 50"; exit 1; }
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+PLAYBOOK_FILE="$ROOT/agents/$AGENT_NAME/instructions.md"
+[ -f "$PLAYBOOK_FILE" ] \
+  || { fail "missing agent playbook: $PLAYBOOK_FILE"; exit 1; }
+require git gh jq "$ROOT/bin/check-open-source-state"
+"$ROOT/bin/check-open-source-state"
+
+PLAYBOOK="$(sed -n '1,$p' "$PLAYBOOK_FILE")"
+EXTRA="${EXTRA_PARTS[*]:-}"
+PROMPT="$PLAYBOOK
+
+--- LAUNCH CONFIGURATION (this run) ---
+Workspace repository: senamakel/workspace
+Workspace primary checkout: $ROOT
+Stage: $STAGE
+Batch limit: $LIMIT
+Harness: $HARNESS
+
+Operate autonomously through this stage up to the batch limit. The limit is a
+ceiling, never a quota. Stop early when no item meets every playbook gate."
+
+[ -z "$EXTRA" ] || PROMPT="$PROMPT
+
+Additional instructions: $EXTRA"
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  printf '%s\n' "$PROMPT"
+  exit 0
+fi
+
+require "$HARNESS"
+cd "$ROOT"
+if [ "$MODE" = safe ]; then
+  info "permission mode: SAFE (harness prompts enabled)"
+else
+  warn "permission mode: AUTOMATIC (harness prompts bypassed; contribution gates remain)"
+fi
+info "launching $HARNESS as $AGENT_NAME (limit: $LIMIT)"
+
+set +e
+harness_launch "$HARNESS" "$PROMPT" "$MODE"
+agent_status=$?
+set -e
+[ "$agent_status" -eq 0 ] \
+  || warn "$HARNESS exited with status $agent_status"
+pass "$STAGE session ended"
+exit "$agent_status"
