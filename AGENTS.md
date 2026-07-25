@@ -12,6 +12,10 @@ There is no compilation step or centralized test suite. Validate the part you ch
 
 - `./install.sh --dry-run` previews symlink and loader changes without modifying home-directory files.
 - `bin/check-skills` validates every canonical skill’s directory and frontmatter.
+- `bin/check-open-source-state` validates the shared repository catalog and
+  contribution queue.
+- `tests/open-source-state.sh` and `tests/open-source-agent.sh` exercise the
+  open-source pipeline state and launcher.
 - `bash -n install.sh bin/* claude/statusline-command.sh` checks Bash syntax.
 - `zsh -n zshrc` checks the sourced Zsh configuration.
 - `git diff --check` catches whitespace errors before committing.

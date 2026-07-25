@@ -68,6 +68,7 @@ else
   "$REPO_ROOT/bin/build-agents" --output-root "$AGENT_BUILD_ROOT"
 fi
 "$REPO_ROOT/bin/check-skills"
+"$REPO_ROOT/bin/check-open-source-state"
 
 # Remove retired shared agents from the generated cache and harness directories.
 # Destination files are removed only when they are our exact generated symlinks.

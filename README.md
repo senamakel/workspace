@@ -14,6 +14,7 @@ the source of truth, so source changes appear in `git diff`.
 | `claude/mcp.json` | `~/.claude/mcp.json` |
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `skills/<name>/` | `~/.claude/skills/<name>`, `~/.codex/skills/<name>` (one canonical source) |
+| `open-source/` | Git-backed repository catalog and per-issue contribution queue shared by every machine |
 | `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
 | `bin/super-review` | `~/super-review.sh` |
 | `bin/workspace-tmux` | `~/bin/mosh-tmux` (installed by `workspace-init`) |
@@ -118,6 +119,16 @@ the warning without changing tmux state.
 - `gh-issue-triager` investigates duplicates and relevance, then either closes
   a high-confidence dropped issue with evidence or enriches an escalated issue
   with a managed, code-grounded implementation plan.
+- `open-source-researcher` refreshes the approved target-repository catalog
+  using popularity, current activity, external-contributor acceptance, low
+  issue contention, and local verification fit. It never selects issues.
+- `open-source-issue-triager` inspects highly recent issues in approved targets
+  and queues only unassigned, collision-free, bounded, reproducible candidates
+  with an exact verification plan. It never comments or starts implementation.
+- `open-source-contributor` is the execution-only conductor. It claims durable
+  queue records, drives target-repository work through native TDD/review
+  subagents, opens upstream PRs from the contributor fork, and babysits them
+  until green. It never researches repositories or invents work.
 
 The following workflow agents are adapted from the
 [superpowers](https://github.com/obra/superpowers) skill set as dispatchable,
@@ -186,6 +197,27 @@ main loop, several of which dispatch the workflow agents above.
 - `writing-skills` — create or edit a skill as TDD applied to documentation.
 
 ## Tools
+
+### `open-source-agent <research|triage|contribute> [harness]`
+
+Runs one explicit stage of the open-source contribution pipeline:
+
+```sh
+open-source-agent research --limit 20
+open-source-agent triage codex --limit 10
+open-source-agent contribute claude --limit 5
+```
+
+Repository discovery is manually triggered. The triager consumes only active
+catalog entries, and the contributor consumes only its durable issue queue.
+Each number is a ceiling, not a quota. The launcher defaults to unattended
+harness execution for deliberately started runs; pass `--safe` to retain
+permission prompts or `--dry-run` to inspect the complete prompt.
+
+Shared state lives in `open-source/repositories.json` and one
+`open-source/issues/<owner>--<repo>--<number>.json` record per issue. Validate it
+with `bin/check-open-source-state`. State claims are pushed before target work
+starts, so a same-record rebase conflict safely gives the claim to one machine.
 
 ### `worktree <slug> [--json]`
 
