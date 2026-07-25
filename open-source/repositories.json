@@ -3,10 +3,143 @@
   "updated_at": "2026-07-25T15:00:00Z",
   "repositories": [
     {
+      "repo": "ajeetdsouza/zoxide",
+      "url": "https://github.com/ajeetdsouza/zoxide",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 38236,
+      "open_issues": 132,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-20T12:05:30Z",
+        "open_prs": 34,
+        "recent_external_pr_merges": [
+          "developic",
+          "cyphercodes"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 34 open PRs and 132 open issues; manageable for a solo-maintainer project"
+      },
+      "rationale": "Smarter cd command in Rust, inspired by z and autojump. Supports all major shells with fzf integration. Low contention with clear scope for shell-specific improvements and completions.",
+      "evidence_urls": [
+        "https://github.com/ajeetdsouza/zoxide",
+        "https://github.com/ajeetdsouza/zoxide/blob/main/README.md",
+        "https://github.com/ajeetdsouza/zoxide/pulse"
+      ]
+    },
+    {
+      "repo": "alacritty/alacritty",
+      "url": "https://github.com/alacritty/alacritty",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 65058,
+      "open_issues": 335,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 72,
+      "signals": {
+        "pushed_at": "2026-07-14T03:43:13Z",
+        "open_prs": 9,
+        "recent_external_pr_merges": [
+          "WaterWhisperer"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 only 9 open PRs but external contributor activity is very sparse; development is deliberately conservative"
+      },
+      "rationale": "GPU-accelerated Rust terminal emulator. Low PR count but sparse external contribution history. Watch for increased external contributor acceptance before targeting.",
+      "evidence_urls": [
+        "https://github.com/alacritty/alacritty",
+        "https://github.com/alacritty/alacritty/blob/master/CONTRIBUTING.md",
+        "https://github.com/alacritty/alacritty/pulse"
+      ]
+    },
+    {
+      "repo": "astral-sh/ruff",
+      "url": "https://github.com/astral-sh/ruff",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 48838,
+      "open_issues": 2082,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 76,
+      "signals": {
+        "pushed_at": "2026-07-25T09:47:52Z",
+        "open_prs": 388,
+        "recent_external_pr_merges": [
+          "multiple external contributors; 900+ lint rules provide diverse entry points"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 388 open PRs is significant but the project is large with many rule-specific areas; Astral team is responsive"
+      },
+      "rationale": "Extremely fast Python linter and formatter in Rust. 900+ built-in rules provide many well-scoped contribution opportunities. Backed by Astral with strong engineering practices.",
+      "evidence_urls": [
+        "https://github.com/astral-sh/ruff",
+        "https://github.com/astral-sh/ruff/blob/main/CONTRIBUTING.md",
+        "https://github.com/astral-sh/ruff/pulse"
+      ]
+    },
+    {
+      "repo": "astral-sh/uv",
+      "url": "https://github.com/astral-sh/uv",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 87879,
+      "open_issues": 2801,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 76,
+      "signals": {
+        "pushed_at": "2026-07-25T14:16:46Z",
+        "open_prs": 440,
+        "recent_external_pr_merges": [
+          "zsol",
+          "EliteTK",
+          "ZayanKhan-12"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate-high \u2014 440 open PRs but Astral team has fast review cadence; 87k stars drives high contribution volume"
+      },
+      "rationale": "Fastest Python package manager written in Rust. Replaces pip, pip-tools, poetry, pyenv, and more. High star count means high visibility but also more competition for PR attention.",
+      "evidence_urls": [
+        "https://github.com/astral-sh/uv",
+        "https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md",
+        "https://github.com/astral-sh/uv/pulse"
+      ]
+    },
+    {
       "repo": "atuinsh/atuin",
       "url": "https://github.com/atuinsh/atuin",
       "default_branch": "main",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "MIT",
       "stars": 30761,
       "open_issues": 465,
@@ -17,11 +150,17 @@
       "signals": {
         "pushed_at": "2026-07-25T02:03:13Z",
         "open_prs": 85,
-        "recent_external_pr_merges": ["gounthar", "markovejnovic", "mvanhorn", "ukashazia", "ofek"],
+        "recent_external_pr_merges": [
+          "gounthar",
+          "markovejnovic",
+          "mvanhorn",
+          "ukashazia",
+          "ofek"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "moderate — 85 open PRs is manageable; maintainer (ellie) is responsive and merges external PRs regularly"
+        "observed_contention": "moderate \u2014 85 open PRs is manageable; maintainer (ellie) is responsive and merges external PRs regularly"
       },
       "rationale": "Rust-powered shell history tool with encrypted sync. Active community with strong external contributor acceptance. Good balance of popularity and manageable issue count. Directly useful for developer productivity.",
       "evidence_urls": [
@@ -31,10 +170,435 @@
       ]
     },
     {
+      "repo": "bevyengine/bevy",
+      "url": "https://github.com/bevyengine/bevy",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 47333,
+      "open_issues": 3348,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 70,
+      "signals": {
+        "pushed_at": "2026-07-24T06:55:28Z",
+        "open_prs": 547,
+        "recent_external_pr_merges": [
+          "many external contributors; 500+ contributor community"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "high \u2014 547 open PRs and 3348 open issues; very active Rust game engine community with large contributor base"
+      },
+      "rationale": "Data-driven Rust game engine. Strong community but very high volume of PRs and issues make it hard to get noticed. Watch for scoped ECS-related or rendering tasks with clear ownership.",
+      "evidence_urls": [
+        "https://github.com/bevyengine/bevy",
+        "https://github.com/bevyengine/bevy/blob/main/CONTRIBUTING.md",
+        "https://github.com/bevyengine/bevy/pulse"
+      ]
+    },
+    {
+      "repo": "biomejs/biome",
+      "url": "https://github.com/biomejs/biome",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 25373,
+      "open_issues": 506,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-25T15:03:57Z",
+        "open_prs": 115,
+        "recent_external_pr_merges": [
+          "dyc3",
+          "Mokto"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 115 open PRs is manageable; multi-maintainer team with structured review process"
+      },
+      "rationale": "Fast all-in-one JS/TS linter and formatter in Rust. Fork of Rome with renewed momentum. Adding lint rules and improving formatter compatibility are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/biomejs/biome",
+        "https://github.com/biomejs/biome/blob/main/CONTRIBUTING.md",
+        "https://github.com/biomejs/biome/pulse"
+      ]
+    },
+    {
+      "repo": "BurntSushi/ripgrep",
+      "url": "https://github.com/BurntSushi/ripgrep",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Unlicense",
+      "stars": 66519,
+      "open_issues": 165,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 72,
+      "signals": {
+        "pushed_at": "2026-07-24T12:03:10Z",
+        "open_prs": 50,
+        "recent_external_pr_merges": [
+          "albatrossflyon-coder"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 50 open PRs but BurntSushi authors most changes; external PR acceptance is limited; project is intentionally conservative"
+      },
+      "rationale": "The fastest grep tool in Rust. Unlicense (public domain). Extremely mature and stable. External contributions are accepted but BurntSushi drives nearly all development. Best approached with targeted bug fixes.",
+      "evidence_urls": [
+        "https://github.com/BurntSushi/ripgrep",
+        "https://github.com/BurntSushi/ripgrep/blob/master/CONTRIBUTING.md",
+        "https://github.com/BurntSushi/ripgrep/pulse"
+      ]
+    },
+    {
+      "repo": "clap-rs/clap",
+      "url": "https://github.com/clap-rs/clap",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 16585,
+      "open_issues": 441,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 70,
+      "signals": {
+        "pushed_at": "2026-07-21T22:01:04Z",
+        "open_prs": 90,
+        "recent_external_pr_merges": [
+          "arihant2math"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low-moderate \u2014 arg parsing library with focused scope; external contributions accepted but rare given maturity"
+      },
+      "rationale": "Command-line argument parser for Rust. Apache-2.0 licensed. Very mature and stable \u2014 most contributions are derivative work improvements. Watch for documentation and error-message enhancements.",
+      "evidence_urls": [
+        "https://github.com/clap-rs/clap",
+        "https://github.com/clap-rs/clap/blob/master/CONTRIBUTING.md",
+        "https://github.com/clap-rs/clap/pulse"
+      ]
+    },
+    {
+      "repo": "dagger/dagger",
+      "url": "https://github.com/dagger/dagger",
+      "default_branch": "main",
+      "languages": [
+        "Go"
+      ],
+      "license": "Apache-2.0",
+      "stars": 16095,
+      "open_issues": 137,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 71,
+      "signals": {
+        "pushed_at": "2026-07-24T23:06:57Z",
+        "open_prs": 137,
+        "recent_external_pr_merges": [
+          "marcosnils"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 open_issues count includes PRs; SDK module additions and language support are well-scoped but external contributor pipeline appears thin"
+      },
+      "rationale": "CI/CD pipeline engine in Go. Apache-2.0 licensed. Adding SDK support for new languages and improving pipeline performance are well-scoped. Watch for broader external contributor acceptance.",
+      "evidence_urls": [
+        "https://github.com/dagger/dagger",
+        "https://github.com/dagger/dagger/blob/main/CONTRIBUTING.md",
+        "https://github.com/dagger/dagger/pulse"
+      ]
+    },
+    {
+      "repo": "dandavison/delta",
+      "url": "https://github.com/dandavison/delta",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 31550,
+      "open_issues": 417,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 82,
+      "signals": {
+        "pushed_at": "2026-07-25T00:40:33Z",
+        "open_prs": 112,
+        "recent_external_pr_merges": [
+          "albatrossflyon-coder",
+          "Bartok9"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low-moderate \u2014 112 open PRs is manageable; maintainer is responsive and merges regularly"
+      },
+      "rationale": "Syntax-highlighting pager for git diff output in Rust. Enhances code review workflows. Theme additions, language support improvements, and git integration fixes are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/dandavison/delta",
+        "https://github.com/dandavison/delta/blob/main/CONTRIBUTING.md",
+        "https://github.com/dandavison/delta/pulse"
+      ]
+    },
+    {
+      "repo": "denoland/deno",
+      "url": "https://github.com/denoland/deno",
+      "default_branch": "main",
+      "languages": [
+        "Rust",
+        "TypeScript"
+      ],
+      "license": "MIT",
+      "stars": 107804,
+      "open_issues": 1455,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 77,
+      "signals": {
+        "pushed_at": "2026-07-24T22:05:29Z",
+        "open_prs": 1455,
+        "recent_external_pr_merges": [
+          "lusbuab",
+          "nathanwhit"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 open_issues includes PRs; maintainer team (Deno Land) is responsive with clear contribution docs on deno.com"
+      },
+      "rationale": "Modern JavaScript/TypeScript runtime in Rust. MIT licensed with strong corporate backing. Clear contribution documentation. Standard library improvements and Node.js compatibility fixes are well-scoped.",
+      "evidence_urls": [
+        "https://github.com/denoland/deno",
+        "https://docs.deno.com/go/contributing",
+        "https://github.com/denoland/deno/pulse"
+      ]
+    },
+    {
+      "repo": "DioxusLabs/dioxus",
+      "url": "https://github.com/DioxusLabs/dioxus",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 38288,
+      "open_issues": 723,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 76,
+      "signals": {
+        "pushed_at": "2026-07-23T05:32:38Z",
+        "open_prs": 89,
+        "recent_external_pr_merges": [
+          "hardliner66",
+          "nicoburns"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "low-moderate \u2014 89 open PRs is manageable; web/mobile/desktop targets offer diverse contribution areas"
+      },
+      "rationale": "Full-stack Rust app framework targeting web, desktop, and mobile. Active development with cross-platform renderers. Platform-specific fixes and component library enhancements are good entry points.",
+      "evidence_urls": [
+        "https://github.com/DioxusLabs/dioxus",
+        "https://github.com/DioxusLabs/dioxus/blob/main/README.md",
+        "https://github.com/DioxusLabs/dioxus/pulse"
+      ]
+    },
+    {
+      "repo": "emilk/egui",
+      "url": "https://github.com/emilk/egui",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 29830,
+      "open_issues": 1132,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 73,
+      "signals": {
+        "pushed_at": "2026-07-24T08:24:34Z",
+        "open_prs": 196,
+        "recent_external_pr_merges": [
+          "multiple external contributors across 400+ contributor base"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 196 open PRs and 1132 open issues; immediate-mode GUI library with steady contribution flow"
+      },
+      "rationale": "Immediate-mode GUI library for Rust. Popular for game dev tools and quick UIs. Widget additions and platform integration fixes are available but PR volume is competitive. Watch for clearer triage.",
+      "evidence_urls": [
+        "https://github.com/emilk/egui",
+        "https://github.com/emilk/egui/blob/main/CONTRIBUTING.md",
+        "https://github.com/emilk/egui/pulse"
+      ]
+    },
+    {
+      "repo": "extrawurst/gitui",
+      "url": "https://github.com/extrawurst/gitui",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 22286,
+      "open_issues": 328,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-17T07:32:50Z",
+        "open_prs": 90,
+        "recent_external_pr_merges": [
+          "cruessler",
+          "chirpcel"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 manageable PR count; external contributors from diverse backgrounds; TUI git client niche is well-defined"
+      },
+      "rationale": "Blazing-fast Rust Git TUI. MIT licensed. Keybinding improvements, git operation integration, and platform-specific fixes are well-scoped. Healthy external contributor base.",
+      "evidence_urls": [
+        "https://github.com/extrawurst/gitui",
+        "https://github.com/extrawurst/gitui/blob/master/CONTRIBUTING.md",
+        "https://github.com/extrawurst/gitui/pulse"
+      ]
+    },
+    {
+      "repo": "eza-community/eza",
+      "url": "https://github.com/eza-community/eza",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "EUPL-1.2",
+      "stars": 22718,
+      "open_issues": 405,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 76,
+      "signals": {
+        "pushed_at": "2026-07-24T18:08:33Z",
+        "open_prs": 131,
+        "recent_external_pr_merges": [
+          "multiple external contributors; active community fork of exa"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low-moderate \u2014 131 open PRs is manageable; community-driven fork with welcoming contributor culture"
+      },
+      "rationale": "Modern ls replacement in Rust with icons and git support. Community-maintained fork of exa. Color/icon additions, sorting improvements, and platform-specific fixes are approachable entry points.",
+      "evidence_urls": [
+        "https://github.com/eza-community/eza",
+        "https://github.com/eza-community/eza/blob/main/CONTRIBUTING.md",
+        "https://github.com/eza-community/eza/pulse"
+      ]
+    },
+    {
+      "repo": "fish-shell/fish-shell",
+      "url": "https://github.com/fish-shell/fish-shell",
+      "default_branch": "master",
+      "languages": [
+        "C++",
+        "Rust"
+      ],
+      "license": "GPL-2.0",
+      "stars": 33913,
+      "open_issues": 559,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 65,
+      "signals": {
+        "pushed_at": "2026-07-22T18:02:46Z",
+        "open_prs": 57,
+        "recent_external_pr_merges": [],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 57 open PRs is manageable but most recent merged external PRs are from July 2025 (> 1 year ago); external contributor pipeline appears stalled"
+      },
+      "rationale": "Smart user-friendly shell with Rust components. GPL-2.0 license. Recent external merged PRs are over a year old \u2014 fails the 90-day external contributor gate. Monitor for renewed external contribution activity.",
+      "evidence_urls": [
+        "https://github.com/fish-shell/fish-shell",
+        "https://fishshell.com/docs/current/license.html",
+        "https://github.com/fish-shell/fish-shell/pulse"
+      ]
+    },
+    {
+      "repo": "gleam-lang/gleam",
+      "url": "https://github.com/gleam-lang/gleam",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 21683,
+      "open_issues": 223,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 80,
+      "signals": {
+        "pushed_at": "2026-07-25T12:22:00Z",
+        "open_prs": 56,
+        "recent_external_pr_merges": [
+          "frakappa",
+          "GearsDatapacks",
+          "jtdowney"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 56 open PRs and 223 open issues is very manageable; friendly community with responsive maintainer (lpil)"
+      },
+      "rationale": "Statically typed functional language on the BEAM VM, compiler in Rust. Welcoming community with clear contribution paths. Standard library additions and compiler improvements are well-scoped.",
+      "evidence_urls": [
+        "https://github.com/gleam-lang/gleam",
+        "https://github.com/gleam-lang/gleam/blob/main/CONTRIBUTING.md",
+        "https://github.com/gleam-lang/gleam/pulse"
+      ]
+    },
+    {
       "repo": "helix-editor/helix",
       "url": "https://github.com/helix-editor/helix",
       "default_branch": "master",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "MPL-2.0",
       "stars": 45589,
       "open_issues": 1561,
@@ -45,11 +609,17 @@
       "signals": {
         "pushed_at": "2026-07-23T16:03:38Z",
         "open_prs": 483,
-        "recent_external_pr_merges": ["poliorcetics", "kpbaks", "iniw", "LeonMatthes", "zqianem"],
+        "recent_external_pr_merges": [
+          "poliorcetics",
+          "kpbaks",
+          "iniw",
+          "LeonMatthes",
+          "zqianem"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "moderate-high — 483 open PRs but project has 420+ contributors and clear merge cadence; grammar/LSP updates are easiest entry point"
+        "observed_contention": "moderate-high \u2014 483 open PRs but 420+ contributors with clear merge cadence; grammar/LSP updates are easiest entry point"
       },
       "rationale": "Leading Rust terminal editor with active development. Grammar updates, language server additions, and tree-sitter improvements offer well-scoped entry points. Strong external contributor diversity.",
       "evidence_urls": [
@@ -62,7 +632,9 @@
       "repo": "jdx/mise",
       "url": "https://github.com/jdx/mise",
       "default_branch": "main",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "MIT",
       "stars": 31118,
       "open_issues": 51,
@@ -73,11 +645,13 @@
       "signals": {
         "pushed_at": "2026-07-25T12:59:40Z",
         "open_prs": 25,
-        "recent_external_pr_merges": ["multiple external contributors across 470+ total"],
+        "recent_external_pr_merges": [
+          "multiple external contributors across 470+ total"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "low — only 25 open PRs and 51 open issues; uses GitHub Discussions for feature requests; 599 releases total"
+        "observed_contention": "low \u2014 only 25 open PRs and 51 open issues; uses GitHub Discussions for feature requests; 599 releases total"
       },
       "rationale": "Polyglot runtime version manager and task runner in Rust. Very low contention with active maintainer and frequent releases. Excellent entry points for adding tool backends, improving task runner, or enhancing env management.",
       "evidence_urls": [
@@ -90,7 +664,9 @@
       "repo": "jesseduffield/lazygit",
       "url": "https://github.com/jesseduffield/lazygit",
       "default_branch": "master",
-      "languages": ["Go"],
+      "languages": [
+        "Go"
+      ],
       "license": "MIT",
       "stars": 80718,
       "open_issues": 1016,
@@ -101,11 +677,13 @@
       "signals": {
         "pushed_at": "2026-07-25T13:08:32Z",
         "open_prs": 170,
-        "recent_external_pr_merges": ["multiple external contributors; 370+ total contributors"],
+        "recent_external_pr_merges": [
+          "multiple external contributors; 370+ total contributors"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "moderate — 170 open PRs but rapid maintainer merge velocity; 184 releases show strong release discipline"
+        "observed_contention": "moderate \u2014 170 open PRs but rapid maintainer merge velocity; 184 releases show strong release discipline"
       },
       "rationale": "Premier terminal Git UI written in Go. Massive user base with frequent releases. Good entry points in keybinding improvements, integration with new git features, and platform-specific fixes.",
       "evidence_urls": [
@@ -115,10 +693,149 @@
       ]
     },
     {
+      "repo": "jj-vcs/jj",
+      "url": "https://github.com/jj-vcs/jj",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 30595,
+      "open_issues": 1186,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-24T21:45:34Z",
+        "open_prs": 380,
+        "recent_external_pr_merges": [
+          "hexbinoct",
+          "0WD0",
+          "mvanhorn",
+          "jennings"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 380 open PRs is substantial but diverse external contributor base from different orgs; Google-backed project"
+      },
+      "rationale": "Modern Git-compatible version control system in Rust. Google-backed with growing community. Git compatibility improvements and performance optimizations are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/jj-vcs/jj",
+        "https://github.com/jj-vcs/jj/blob/main/docs/contributing.md",
+        "https://github.com/jj-vcs/jj/pulse"
+      ]
+    },
+    {
+      "repo": "leptos-rs/leptos",
+      "url": "https://github.com/leptos-rs/leptos",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 21118,
+      "open_issues": 128,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-23T21:05:55Z",
+        "open_prs": 46,
+        "recent_external_pr_merges": [
+          "multiple external contributors; active Rust web framework community"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 46 open PRs and 128 open issues is very manageable; growing ecosystem with room for new contributors"
+      },
+      "rationale": "Fine-grained reactive Rust web framework. Lower contention than Dioxus/Yew. Server function improvements, SSR enhancements, and example/demo contributions are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/leptos-rs/leptos",
+        "https://github.com/leptos-rs/leptos/blob/main/CONTRIBUTING.md",
+        "https://github.com/leptos-rs/leptos/pulse"
+      ]
+    },
+    {
+      "repo": "neovim/neovim",
+      "url": "https://github.com/neovim/neovim",
+      "default_branch": "master",
+      "languages": [
+        "C",
+        "Lua",
+        "Vim Script"
+      ],
+      "license": "Apache-2.0",
+      "stars": 101340,
+      "open_issues": 1888,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 78,
+      "signals": {
+        "pushed_at": "2026-07-25T12:59:12Z",
+        "open_prs": 291,
+        "recent_external_pr_merges": [
+          "multiple external contributors; active multi-maintainer team"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 291 open PRs but large, established project with clear review process; Lua/C improvements well-distributed"
+      },
+      "rationale": "Hyperextensible Vim-based text editor. Apache-2.0 licensed with 100k+ stars. LSP integration, tree-sitter improvements, and Lua API enhancements are well-scoped entry points with clear review process.",
+      "evidence_urls": [
+        "https://github.com/neovim/neovim",
+        "https://github.com/neovim/neovim/blob/master/CONTRIBUTING.md",
+        "https://github.com/neovim/neovim/pulse"
+      ]
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "url": "https://github.com/NousResearch/hermes-agent",
+      "default_branch": "main",
+      "languages": [
+        "Python",
+        "TypeScript"
+      ],
+      "license": "MIT",
+      "stars": 220292,
+      "open_issues": 25176,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 70,
+      "signals": {
+        "pushed_at": "2026-07-25T14:17:54Z",
+        "open_prs": 17164,
+        "recent_external_pr_merges": [
+          "Frowtek",
+          "kshitijk4poor",
+          "OutThisLife",
+          "benbarclay"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "extreme \u2014 17k open PRs and 25k open issues; enormous community with very high noise level"
+      },
+      "rationale": "Autonomous AI agent with self-improving learning loop by Nous Research. MIT licensed and well-aligned with mission. Extreme contention makes this impractical for current workforce.",
+      "evidence_urls": [
+        "https://github.com/NousResearch/hermes-agent",
+        "https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md",
+        "https://github.com/NousResearch/hermes-agent/pulse"
+      ]
+    },
+    {
       "repo": "nushell/nushell",
       "url": "https://github.com/nushell/nushell",
       "default_branch": "main",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "MIT",
       "stars": 40082,
       "open_issues": 1455,
@@ -129,11 +846,13 @@
       "signals": {
         "pushed_at": "2026-07-25T13:48:05Z",
         "open_prs": 54,
-        "recent_external_pr_merges": ["multiple external contributors; active multi-maintainer team"],
+        "recent_external_pr_merges": [
+          "multiple external contributors; active multi-maintainer team"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "low-moderate — only 54 open PRs with 1455 open issues showing well-scoped work available; strong multi-maintainer review team"
+        "observed_contention": "low-moderate \u2014 only 54 open PRs with 1455 open issues showing well-scoped work available; strong multi-maintainer review team"
       },
       "rationale": "Modern shell written in Rust with structured data. Low PR contention relative to issue count suggests good opportunities. Adding new commands, improving completions, or enhancing plugin system are well-scoped entry points.",
       "evidence_urls": [
@@ -146,7 +865,10 @@
       "repo": "openai/codex",
       "url": "https://github.com/openai/codex",
       "default_branch": "main",
-      "languages": ["TypeScript", "Rust"],
+      "languages": [
+        "TypeScript",
+        "Rust"
+      ],
       "license": "Apache-2.0",
       "stars": 101354,
       "open_issues": 10851,
@@ -157,13 +879,15 @@
       "signals": {
         "pushed_at": "2026-07-25T05:02:20Z",
         "open_prs": 203,
-        "recent_external_pr_merges": ["external contributors visible"],
+        "recent_external_pr_merges": [
+          "external contributors visible"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "high — 10k+ open issues and 203 open PRs create significant noise; fast-moving project with large internal team driving most changes"
+        "observed_contention": "high \u2014 10k+ open issues and 203 open PRs create significant noise; fast-moving project with large internal team driving most changes"
       },
-      "rationale": "OpenAI's open-source coding agent CLI. Directly aligned with openhuman mission but very high issue/PR volume makes external visibility challenging. Watch for contention to stabilize before targeting.",
+      "rationale": "OpenAI's open-source coding agent CLI. Directly aligned with openhuman mission but very high issue/PR volume makes external visibility challenging. Watch for contention to stabilize.",
       "evidence_urls": [
         "https://github.com/openai/codex",
         "https://github.com/openai/codex/blob/main/CONTRIBUTING.md",
@@ -174,7 +898,12 @@
       "repo": "openclaw/openclaw",
       "url": "https://github.com/openclaw/openclaw",
       "default_branch": "main",
-      "languages": ["TypeScript", "Python", "Go", "Rust"],
+      "languages": [
+        "TypeScript",
+        "Python",
+        "Go",
+        "Rust"
+      ],
       "license": "MIT",
       "stars": 384085,
       "open_issues": 6997,
@@ -185,13 +914,18 @@
       "signals": {
         "pushed_at": "2026-07-25T14:56:22Z",
         "open_prs": 2901,
-        "recent_external_pr_merges": ["Sanjays2402", "zenglingbiao", "vincentkoc", "eugene-harold-krabs"],
+        "recent_external_pr_merges": [
+          "Sanjays2402",
+          "zenglingbiao",
+          "vincentkoc",
+          "eugene-harold-krabs"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "very high — 2900 open PRs and 7000 open issues; project explicitly states refactor-only and test-only PRs will be closed; new features require pre-approval"
+        "observed_contention": "very high \u2014 2900 open PRs and 7000 open issues; project explicitly states refactor-only and test-only PRs will be closed; new features require pre-approval"
       },
-      "rationale": "Personal AI assistant with 25+ messaging channels. MIT license. Extremely popular but also extremely contended — 2900 open PRs is the highest of any candidate. Best approached with narrowly-scoped fixes after maintainer alignment.",
+      "rationale": "Personal AI assistant with 25+ messaging channels. MIT license. Extremely popular but also extremely contended. Best approached with narrowly-scoped fixes after maintainer alignment.",
       "evidence_urls": [
         "https://github.com/openclaw/openclaw",
         "https://github.com/openclaw/openclaw/blob/main/CONTRIBUTING.md",
@@ -199,38 +933,43 @@
       ]
     },
     {
-      "repo": "NousResearch/hermes-agent",
-      "url": "https://github.com/NousResearch/hermes-agent",
-      "default_branch": "main",
-      "languages": ["Python", "TypeScript"],
+      "repo": "pocketbase/pocketbase",
+      "url": "https://github.com/pocketbase/pocketbase",
+      "default_branch": "master",
+      "languages": [
+        "Go",
+        "JavaScript"
+      ],
       "license": "MIT",
-      "stars": 220292,
-      "open_issues": 25176,
+      "stars": 60236,
+      "open_issues": 19,
       "status": "watch",
       "discovered_at": "2026-07-25T15:00:00Z",
       "last_researched_at": "2026-07-25T15:00:00Z",
-      "selection_score": 70,
+      "selection_score": 68,
       "signals": {
-        "pushed_at": "2026-07-25T14:17:54Z",
-        "open_prs": 17164,
-        "recent_external_pr_merges": ["Frowtek", "kshitijk4poor", "OutThisLife", "benbarclay"],
+        "pushed_at": "2026-07-22T20:11:41Z",
+        "open_prs": 0,
+        "recent_external_pr_merges": [],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "extreme — 17k open PRs and 25k open issues; enormous community with very high noise level; external contributor visibility will be exceptionally difficult"
+        "observed_contention": "very low \u2014 0 open PRs and only 19 open issues; but no visible recently merged external PRs; development appears solo-driven"
       },
-      "rationale": "Autonomous AI agent with self-improving learning loop by Nous Research. MIT licensed and well-aligned with mission. Extreme contention makes this impractical for current workforce — monitor for issue triage improvements.",
+      "rationale": "Open-source Go backend in a single file. MIT licensed with strong growth. No visible external merged PRs suggests contribution pipeline is not established. Monitor for external contributor acceptance.",
       "evidence_urls": [
-        "https://github.com/NousResearch/hermes-agent",
-        "https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md",
-        "https://github.com/NousResearch/hermes-agent/pulse"
+        "https://github.com/pocketbase/pocketbase",
+        "https://github.com/pocketbase/pocketbase/blob/master/CONTRIBUTING.md",
+        "https://github.com/pocketbase/pocketbase/pulse"
       ]
     },
     {
       "repo": "QwenLM/qwen-code",
       "url": "https://github.com/QwenLM/qwen-code",
       "default_branch": "main",
-      "languages": ["TypeScript"],
+      "languages": [
+        "TypeScript"
+      ],
       "license": "Apache-2.0",
       "stars": 26306,
       "open_issues": 696,
@@ -241,13 +980,19 @@
       "signals": {
         "pushed_at": "2026-07-25T14:50:04Z",
         "open_prs": 111,
-        "recent_external_pr_merges": ["VectorPeak", "jay666mnj", "mvanhorn", "OrbitZore", "hogeheer499-commits"],
+        "recent_external_pr_merges": [
+          "VectorPeak",
+          "jay666mnj",
+          "mvanhorn",
+          "OrbitZore",
+          "hogeheer499-commits"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "moderate — 111 open PRs is manageable; external contributors from diverse orgs; CI bot actively assists reviews; issue-linked PR requirement is enforced"
+        "observed_contention": "moderate \u2014 111 open PRs is manageable; external contributors from diverse orgs; CI bot actively assists reviews"
       },
-      "rationale": "Most feature-complete open-source Claude Code alternative. Directly aligned with openhuman mission. Supports subagents, agent teams, dynamic workflows, MCP, and multiple providers. Strong CI and contribution pipeline.",
+      "rationale": "Most feature-complete open-source Claude Code alternative. Directly aligned with openhuman mission. Supports subagents, agent teams, dynamic workflows, MCP, and multiple providers.",
       "evidence_urls": [
         "https://github.com/QwenLM/qwen-code",
         "https://github.com/QwenLM/qwen-code/blob/main/CONTRIBUTING.md",
@@ -255,10 +1000,74 @@
       ]
     },
     {
+      "repo": "ratatui-org/ratatui",
+      "url": "https://github.com/ratatui-org/ratatui",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 21887,
+      "open_issues": 216,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 73,
+      "signals": {
+        "pushed_at": "2026-07-21T20:21:07Z",
+        "open_prs": 40,
+        "recent_external_pr_merges": [],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 40 open PRs and 216 issues; but 90% of recent merged PRs are dependabot; human external contributors exist in open PRs but haven't been recently merged"
+      },
+      "rationale": "Rust TUI library for building terminal UIs. MIT licensed. Weak recent external contributor acceptance \u2014 nearly all merged PRs are bot dependency updates. Watch for improved external merge rates before targeting.",
+      "evidence_urls": [
+        "https://github.com/ratatui-org/ratatui",
+        "https://github.com/ratatui-org/ratatui/blob/main/CONTRIBUTING.md",
+        "https://github.com/ratatui-org/ratatui/pulse"
+      ]
+    },
+    {
+      "repo": "rtk-ai/rtk",
+      "url": "https://github.com/rtk-ai/rtk",
+      "default_branch": "develop",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 73204,
+      "open_issues": 1715,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 70,
+      "signals": {
+        "pushed_at": "2026-07-25T15:01:04Z",
+        "open_prs": 875,
+        "recent_external_pr_merges": [
+          "multiple external contributors visible"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "high \u2014 875 open PRs and 1715 open issues for a project only 7 months old; extremely fast growth creates chaotic contribution environment"
+      },
+      "rationale": "LLM token compression CLI proxy in Rust. Reduces token usage by 60-90%. Directly aligned with mission but very new (Jan 2026) with explosive growth. Monitor for stabilization of contribution pipeline.",
+      "evidence_urls": [
+        "https://github.com/rtk-ai/rtk",
+        "https://github.com/rtk-ai/rtk/blob/develop/CONTRIBUTING.md",
+        "https://github.com/rtk-ai/rtk/pulse"
+      ]
+    },
+    {
       "repo": "rustdesk/rustdesk",
       "url": "https://github.com/rustdesk/rustdesk",
       "default_branch": "master",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "AGPL-3.0",
       "stars": 118837,
       "open_issues": 125,
@@ -269,13 +1078,15 @@
       "signals": {
         "pushed_at": "2026-07-25T14:33:16Z",
         "open_prs": 50,
-        "recent_external_pr_merges": ["multiple external contributors; 400+ total contributors"],
+        "recent_external_pr_merges": [
+          "multiple external contributors; 400+ total contributors"
+        ],
         "recent_commits_45d": true,
         "has_contributing": false,
         "has_build_docs": true,
-        "observed_contention": "low — only 125 open issues and 50 open PRs for a project of this size; very active development with daily pushes"
+        "observed_contention": "low \u2014 only 125 open issues and 50 open PRs for a project of this size; very active development with daily pushes"
       },
-      "rationale": "Open-source remote desktop software in Rust. Massive user base with low contention. Good entry points in platform-specific fixes, Wayland support, and Android/iOS improvements. AGPL-3.0 license.",
+      "rationale": "Open-source remote desktop software in Rust. Massive user base with low contention. Good entry points in platform-specific fixes, Wayland support, and Android/iOS improvements.",
       "evidence_urls": [
         "https://github.com/rustdesk/rustdesk",
         "https://github.com/rustdesk/rustdesk/releases",
@@ -283,10 +1094,80 @@
       ]
     },
     {
+      "repo": "sharkdp/bat",
+      "url": "https://github.com/sharkdp/bat",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 59869,
+      "open_issues": 417,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 85,
+      "signals": {
+        "pushed_at": "2026-07-01T20:15:58Z",
+        "open_prs": 89,
+        "recent_external_pr_merges": [
+          "curious-rabbit",
+          "adnrivera",
+          "Matei02355",
+          "dhruvkb"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 89 open PRs for a 60k-star project is very manageable; maintainer (sharkdp) is responsive and merges diverse external contributions"
+      },
+      "rationale": "Cat clone with syntax highlighting in Rust. One of the most popular Rust CLI tools with strong external contributor base. Syntax/theme additions and language support are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/sharkdp/bat",
+        "https://github.com/sharkdp/bat/blob/master/CONTRIBUTING.md",
+        "https://github.com/sharkdp/bat/pulse"
+      ]
+    },
+    {
+      "repo": "sharkdp/fd",
+      "url": "https://github.com/sharkdp/fd",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 43868,
+      "open_issues": 181,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 82,
+      "signals": {
+        "pushed_at": "2026-07-24T20:22:08Z",
+        "open_prs": 53,
+        "recent_external_pr_merges": [
+          "kobihikri",
+          "WilliamLeony"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 53 open PRs and 181 open issues is very manageable; maintainer (sharkdp) is responsive"
+      },
+      "rationale": "Fast find alternative in Rust. Low contention with proven maintainer. Pattern-matching improvements, ignore-file integration, and platform-specific path handling are approachable entry points.",
+      "evidence_urls": [
+        "https://github.com/sharkdp/fd",
+        "https://github.com/sharkdp/fd/blob/master/CONTRIBUTING.md",
+        "https://github.com/sharkdp/fd/pulse"
+      ]
+    },
+    {
       "repo": "starship/starship",
       "url": "https://github.com/starship/starship",
       "default_branch": "main",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "ISC",
       "stars": 59072,
       "open_issues": 1023,
@@ -297,11 +1178,16 @@
       "signals": {
         "pushed_at": "2026-07-24T15:49:41Z",
         "open_prs": 227,
-        "recent_external_pr_merges": ["ychampion", "arimu1", "poliorcetics", "davidkna"],
+        "recent_external_pr_merges": [
+          "ychampion",
+          "arimu1",
+          "poliorcetics",
+          "davidkna"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "moderate — 227 open PRs but many are renovate[bot] dependency updates; actual human PR count is lower; external human contributors are present and get merged"
+        "observed_contention": "moderate \u2014 227 open PRs but many are renovate[bot] dependency updates; actual human PR count is lower"
       },
       "rationale": "Cross-shell prompt written in Rust. ISC license. Healthy external contributor base but renovate[bot] inflates PR counts. Watch for core-feature issue availability before targeting.",
       "evidence_urls": [
@@ -311,10 +1197,51 @@
       ]
     },
     {
+      "repo": "supabase/supabase",
+      "url": "https://github.com/supabase/supabase",
+      "default_branch": "master",
+      "languages": [
+        "TypeScript",
+        "Elixir",
+        "Go",
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 106958,
+      "open_issues": 1143,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 72,
+      "signals": {
+        "pushed_at": "2026-07-25T00:37:15Z",
+        "open_prs": 895,
+        "recent_external_pr_merges": [
+          "czenko",
+          "nrichers",
+          "dnywh",
+          "kemaldotearth",
+          "alaister"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "high \u2014 895 open PRs and 1143 open issues; massive company-backed project with heavy community contribution volume"
+      },
+      "rationale": "Open-source Firebase alternative on Postgres. Strong external contributor base but very high PR volume makes it hard to stand out. Monitor for well-triaged issues before targeting.",
+      "evidence_urls": [
+        "https://github.com/supabase/supabase",
+        "https://github.com/supabase/supabase/blob/master/CONTRIBUTING.md",
+        "https://github.com/supabase/supabase/pulse"
+      ]
+    },
+    {
       "repo": "sxyazi/yazi",
       "url": "https://github.com/sxyazi/yazi",
       "default_branch": "main",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "MIT",
       "stars": 40742,
       "open_issues": 77,
@@ -325,13 +1252,15 @@
       "signals": {
         "pushed_at": "2026-07-25T10:41:29Z",
         "open_prs": 19,
-        "recent_external_pr_merges": ["multiple external contributors; 180+ total contributors"],
+        "recent_external_pr_merges": [
+          "multiple external contributors; 180+ total contributors"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "very low — only 19 open PRs and 77 open issues; excellent CONTRIBUTING.md with development setup guide; Lua plugin system enables easy extension"
+        "observed_contention": "very low \u2014 only 19 open PRs and 77 open issues; excellent CONTRIBUTING.md with development setup guide; Lua plugin system enables easy extension"
       },
-      "rationale": "Blazing-fast async Rust terminal file manager. Extremely low contention with clear contribution guide. Plugin system, image protocol support, and integration with ripgrep/fd/zoxide offer diverse entry points.",
+      "rationale": "Blazing-fast async Rust terminal file manager. Extremely low contention with clear contribution guide. Plugin system, image protocol support, and integration with external tools offer diverse entry points.",
       "evidence_urls": [
         "https://github.com/sxyazi/yazi",
         "https://github.com/sxyazi/yazi/blob/main/CONTRIBUTING.md",
@@ -342,7 +1271,9 @@
       "repo": "tauri-apps/tauri",
       "url": "https://github.com/tauri-apps/tauri",
       "default_branch": "dev",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "Apache-2.0",
       "stars": 109472,
       "open_issues": 1423,
@@ -353,11 +1284,17 @@
       "signals": {
         "pushed_at": "2026-07-25T14:24:32Z",
         "open_prs": 143,
-        "recent_external_pr_merges": ["onehumandev", "Kokoro2336", "Hushlor", "tenderdeve", "Legend-Master"],
+        "recent_external_pr_merges": [
+          "onehumandev",
+          "Kokoro2336",
+          "Hushlor",
+          "tenderdeve",
+          "Legend-Master"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "moderate — 143 open PRs across a large project with 450+ contributors; multi-maintainer team with structured review process"
+        "observed_contention": "moderate \u2014 143 open PRs across a large project with 450+ contributors; multi-maintainer team with structured review process"
       },
       "rationale": "Leading Rust desktop application framework and Electron alternative. Core to openhuman mission of building cross-platform desktop tools. Active v2.x development with strong external contributor base.",
       "evidence_urls": [
@@ -367,10 +1304,318 @@
       ]
     },
     {
+      "repo": "tobymao/sqlglot",
+      "url": "https://github.com/tobymao/sqlglot",
+      "default_branch": "main",
+      "languages": [
+        "Python"
+      ],
+      "license": "MIT",
+      "stars": 9461,
+      "open_issues": 7,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 70,
+      "signals": {
+        "pushed_at": "2026-07-24T15:01:54Z",
+        "open_prs": 3,
+        "recent_external_pr_merges": [
+          "PiyaDaswadkar"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "very low \u2014 only 7 open issues and 3 open PRs; very focused project with limited but real external contribution"
+      },
+      "rationale": "SQL parser, transpiler, and optimizer in Python. MIT licensed. Adding SQL dialect support and transpilation rules are well-scoped. Below 10k stars but strong activity and focused scope make it viable.",
+      "evidence_urls": [
+        "https://github.com/tobymao/sqlglot",
+        "https://github.com/tobymao/sqlglot/blob/main/CONTRIBUTING.md",
+        "https://github.com/tobymao/sqlglot/pulse"
+      ]
+    },
+    {
+      "repo": "tokio-rs/tokio",
+      "url": "https://github.com/tokio-rs/tokio",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 32648,
+      "open_issues": 435,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 76,
+      "signals": {
+        "pushed_at": "2026-07-23T06:31:44Z",
+        "open_prs": 100,
+        "recent_external_pr_merges": [
+          "kai-xlr",
+          "dicej",
+          "atouchet"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 foundational Rust async runtime with multi-maintainer team; PR review is thorough but can be slow"
+      },
+      "rationale": "Foundation of the Rust async ecosystem. MIT licensed. Documentation improvements, platform-specific I/O fixes, and runtime configuration options are approachable entry points.",
+      "evidence_urls": [
+        "https://github.com/tokio-rs/tokio",
+        "https://github.com/tokio-rs/tokio/blob/master/CONTRIBUTING.md",
+        "https://github.com/tokio-rs/tokio/pulse"
+      ]
+    },
+    {
+      "repo": "tracel-ai/burn",
+      "url": "https://github.com/tracel-ai/burn",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 15642,
+      "open_issues": 334,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 76,
+      "signals": {
+        "pushed_at": "2026-07-24T19:46:31Z",
+        "open_prs": 95,
+        "recent_external_pr_merges": [
+          "AnayGarodia",
+          "mattisonchao",
+          "simeon-kepp"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low-moderate \u2014 95 open PRs is manageable; Rust deep learning framework with growing community"
+      },
+      "rationale": "Deep learning framework in Rust. Apache-2.0 licensed. Adding operators, improving backend support (WGPU, CUDA, ROCm), and ONNX compatibility are well-scoped and aligned with Rust ecosystem growth.",
+      "evidence_urls": [
+        "https://github.com/tracel-ai/burn",
+        "https://github.com/tracel-ai/burn/blob/main/CONTRIBUTING.md",
+        "https://github.com/tracel-ai/burn/pulse"
+      ]
+    },
+    {
+      "repo": "tree-sitter/tree-sitter",
+      "url": "https://github.com/tree-sitter/tree-sitter",
+      "default_branch": "master",
+      "languages": [
+        "Rust",
+        "C"
+      ],
+      "license": "MIT",
+      "stars": 26421,
+      "open_issues": 140,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 80,
+      "signals": {
+        "pushed_at": "2026-07-25T00:56:57Z",
+        "open_prs": 30,
+        "recent_external_pr_merges": [
+          "WillLillis",
+          "AlexLB99"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 30 open PRs and 140 open issues is very manageable; diverse external contributor base adding language grammars and parser improvements"
+      },
+      "rationale": "Incremental parsing library powering syntax highlighting across the ecosystem. MIT licensed. Adding/binding language grammars and improving query support are well-scoped entry points with clear testing.",
+      "evidence_urls": [
+        "https://github.com/tree-sitter/tree-sitter",
+        "https://github.com/tree-sitter/tree-sitter/blob/master/CONTRIBUTING.md",
+        "https://github.com/tree-sitter/tree-sitter/pulse"
+      ]
+    },
+    {
+      "repo": "typst/typst",
+      "url": "https://github.com/typst/typst",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "Apache-2.0",
+      "stars": 55090,
+      "open_issues": 1265,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 82,
+      "signals": {
+        "pushed_at": "2026-07-25T04:22:21Z",
+        "open_prs": 72,
+        "recent_external_pr_merges": [
+          "ssemigr",
+          "slipperking",
+          "metsw24-max",
+          "MDLC01",
+          "eltos"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 72 open PRs on a 55k-star project is remarkably low; strong external contributor diversity from different orgs"
+      },
+      "rationale": "Modern typesetting system in Rust, LaTeX alternative. Exceptionally strong external contributor base with low PR contention. Adding packages, improving layout algorithms, and format support are well-scoped.",
+      "evidence_urls": [
+        "https://github.com/typst/typst",
+        "https://github.com/typst/typst/blob/main/CONTRIBUTING.md",
+        "https://github.com/typst/typst/pulse"
+      ]
+    },
+    {
+      "repo": "warpdotdev/warp",
+      "url": "https://github.com/warpdotdev/warp",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "AGPL-3.0",
+      "stars": 63658,
+      "open_issues": 4731,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 68,
+      "signals": {
+        "pushed_at": "2026-07-25T14:37:57Z",
+        "open_prs": 946,
+        "recent_external_pr_merges": [
+          "kevinyang372"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "extreme \u2014 946 open PRs and 4731 open issues; most merged PRs are from internal bot; very high noise-to-signal ratio"
+      },
+      "rationale": "Agentic terminal development environment in Rust. AGPL-3.0 license. Extremely high PR/issue volume with internal-driven development dominating. Monitor for clearer external contributor pathways.",
+      "evidence_urls": [
+        "https://github.com/warpdotdev/warp",
+        "https://github.com/warpdotdev/warp/blob/master/CONTRIBUTING.md",
+        "https://github.com/warpdotdev/warp/pulse"
+      ]
+    },
+    {
+      "repo": "wez/wezterm",
+      "url": "https://github.com/wez/wezterm",
+      "default_branch": "main",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 27921,
+      "open_issues": 1770,
+      "status": "watch",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 72,
+      "signals": {
+        "pushed_at": "2026-07-16T17:55:53Z",
+        "open_prs": 1770,
+        "recent_external_pr_merges": [
+          "tianrking",
+          "eldyl",
+          "JafarAbdi"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "moderate \u2014 open_issues count includes PRs; external contributors exist but project is primarily solo-maintainer driven (wez)"
+      },
+      "rationale": "GPU-accelerated Rust terminal emulator with multiplexer. MIT licensed. Strong external contributor evidence but high issue count and solo-maintainer model create bottleneck. Watch for expanded maintainer team.",
+      "evidence_urls": [
+        "https://github.com/wez/wezterm",
+        "https://github.com/wez/wezterm/blob/main/CONTRIBUTING.md",
+        "https://github.com/wez/wezterm/pulse"
+      ]
+    },
+    {
+      "repo": "Wilfred/difftastic",
+      "url": "https://github.com/Wilfred/difftastic",
+      "default_branch": "master",
+      "languages": [
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 25686,
+      "open_issues": 286,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 83,
+      "signals": {
+        "pushed_at": "2026-07-25T14:03:57Z",
+        "open_prs": 38,
+        "recent_external_pr_merges": [
+          "wetneb",
+          "Zearin",
+          "musicinmybrain",
+          "escape0707"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": false,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 38 open PRs and 286 open issues is very manageable; maintainer (Wilfred) is responsive to external contributions"
+      },
+      "rationale": "Structural diff tool in Rust using tree-sitter. Strong external contributor diversity. Adding language support via tree-sitter grammars and improving diff heuristics are well-scoped entry points.",
+      "evidence_urls": [
+        "https://github.com/Wilfred/difftastic",
+        "https://github.com/Wilfred/difftastic/blob/master/README.md",
+        "https://github.com/Wilfred/difftastic/pulse"
+      ]
+    },
+    {
+      "repo": "withastro/astro",
+      "url": "https://github.com/withastro/astro",
+      "default_branch": "main",
+      "languages": [
+        "TypeScript",
+        "Go",
+        "Rust"
+      ],
+      "license": "MIT",
+      "stars": 61299,
+      "open_issues": 143,
+      "status": "active",
+      "discovered_at": "2026-07-25T15:00:00Z",
+      "last_researched_at": "2026-07-25T15:00:00Z",
+      "selection_score": 80,
+      "signals": {
+        "pushed_at": "2026-07-25T09:50:32Z",
+        "open_prs": 143,
+        "recent_external_pr_merges": [
+          "ocavue",
+          "iamkaleemsajjad-hue"
+        ],
+        "recent_commits_45d": true,
+        "has_contributing": true,
+        "has_build_docs": true,
+        "observed_contention": "low \u2014 only 143 open issues (including PRs) on a 61k-star project is remarkably low; well-triaged issue tracker"
+      },
+      "rationale": "Modern web framework for content-driven sites. MIT licensed with Rust-powered compiler. Remarkably low issue count for its popularity. Integration adapters and build performance improvements are well-scoped.",
+      "evidence_urls": [
+        "https://github.com/withastro/astro",
+        "https://github.com/withastro/astro/blob/main/CONTRIBUTING.md",
+        "https://github.com/withastro/astro/pulse"
+      ]
+    },
+    {
       "repo": "zellij-org/zellij",
       "url": "https://github.com/zellij-org/zellij",
       "default_branch": "main",
-      "languages": ["Rust"],
+      "languages": [
+        "Rust"
+      ],
       "license": "MIT",
       "stars": 34495,
       "open_issues": 1837,
@@ -381,13 +1626,20 @@
       "signals": {
         "pushed_at": "2026-07-21T10:18:04Z",
         "open_prs": 319,
-        "recent_external_pr_merges": ["divens", "lhns", "MiroFurtado", "mofan552", "WeZZard", "truffle-dev"],
+        "recent_external_pr_merges": [
+          "divens",
+          "lhns",
+          "MiroFurtado",
+          "mofan552",
+          "WeZZard",
+          "truffle-dev"
+        ],
         "recent_commits_45d": true,
         "has_contributing": true,
         "has_build_docs": true,
-        "observed_contention": "moderate-high — CONTRIBUTING.md explicitly states maintainers are overloaded and can only accept large roadmap items; smaller fixes may face long review delays"
+        "observed_contention": "moderate-high \u2014 CONTRIBUTING.md explicitly states maintainers are overloaded and prioritize roadmap items over community contributions"
       },
-      "rationale": "Rust terminal multiplexer and tmux alternative. Good external contributor base. Downgraded to watch because maintainers explicitly state they're overloaded and prioritize roadmap items over community contributions.",
+      "rationale": "Rust terminal multiplexer and tmux alternative. Good external contributor base but maintainers explicitly state they're overloaded. Downgraded to watch until capacity signals improve.",
       "evidence_urls": [
         "https://github.com/zellij-org/zellij",
         "https://github.com/zellij-org/zellij/blob/main/CONTRIBUTING.md",
