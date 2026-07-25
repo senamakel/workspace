@@ -26,8 +26,8 @@ continue?" prompts waste the user's time.
 
 Use when you have an implementation plan, its tasks are mostly independent, and
 you're staying in this session. If tasks are tightly coupled, or you want a
-separate session, use the `plan-executor` agent instead. No plan yet? Brainstorm
-and write one first (`brainstorming` skill → `plan-writer` agent).
+separate session, use the `plan-executor` agent instead. If the work genuinely
+needs a plan, dispatch the `plan-writer` agent first.
 
 ## The Loop
 

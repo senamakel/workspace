@@ -151,7 +151,7 @@ else
 fi
 
 if [ "$DO_TAKEUP" = "1" ]; then
-  TAKEUP_LINE="AUTHORIZED — start net-new work on CAN-BE-TAKEN-UP / READY issues: create a worktree with \`worktree <slug>\`, drive it through the workflow skills (brainstorming if needed -> plan-writer -> subagent-driven-development -> finishing-a-development-branch) as background jobs, and open a PR. Never take up an item that already has an active PR."
+  TAKEUP_LINE="AUTHORIZED — start net-new work on CAN-BE-TAKEN-UP / READY issues: create a worktree with \`worktree <slug>\`, use plan-writer only when a plan is genuinely needed, then drive the work through subagent-driven-development and finishing-a-development-branch as background jobs, and open a PR. Never take up an item that already has an active PR."
   info "take-up: AUTHORIZED (start ready work, within permissions)"
 else
   TAKEUP_LINE="WITHHELD (--no-take-up) — do NOT start implementation. SURFACE take-up candidates with your recommendation (owner, effort, ROI)."

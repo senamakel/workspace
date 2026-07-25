@@ -144,11 +144,11 @@ plus your own judgment for triage — and say so in your report.
 ## The Skills the Session Can Use
 
 When you take up net-new work, drive it through the workflow skills:
-`using-git-worktrees` (isolate) → `brainstorming` (only if the issue lacks an
-agreed design) → `plan-writer` agent → `subagent-driven-development` (dispatch
-`tdd-implementer` + `code-reviewer` per task) → `doc-writer` (document the changed
-files) → `finishing-a-development-branch` (open the PR). That PR then re-enters the
-PR intake below.
+`using-git-worktrees` (isolate) → `plan-writer` agent (only when the issue
+genuinely needs a plan) → `subagent-driven-development` (dispatch
+`tdd-implementer` + `code-reviewer` per task) → `doc-writer` (document the
+changed files) → `finishing-a-development-branch` (open the PR). That PR then
+re-enters the PR intake below.
 
 ## Intake A — Pull Requests
 
