@@ -1,0 +1,22 @@
+{
+  "name": "open-source-issue-triager",
+  "description": "Inspect highly recent issues in approved open-source repositories and queue only small, unassigned, collision-free, reproducible, and locally verifiable candidates for a separate contributor agent.",
+  "claude": {
+    "model": "sonnet",
+    "effort": "medium",
+    "maxTurns": 100,
+    "color": "cyan",
+    "tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Bash"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "medium"
+  }
+}
