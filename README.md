@@ -198,6 +198,18 @@ main loop, several of which dispatch the workflow agents above.
 
 ## Tools
 
+### `afplay [arguments...]`
+
+Provides portable notification audio for Claude/Codex hooks. On macOS it
+delegates unchanged arguments to `/usr/bin/afplay`. On Linux it ignores the
+macOS sound path and emits one terminal BEL through `/dev/tty`; SSH and mosh
+carry that bell back to the local terminal without a reverse tunnel or daemon.
+If no TTY exists, it exits successfully and silently.
+
+Set `AFPLAY_OUTPUT=silent` to disable fallback bells or
+`AFPLAY_OUTPUT=stdout` when a caller deliberately wants BEL on standard output.
+The fallback never evaluates arguments or runs a configurable callback.
+
 ### `open-source-agent <research|triage|contribute> [harness]`
 
 Runs one explicit stage of the open-source contribution pipeline:
@@ -205,14 +217,16 @@ Runs one explicit stage of the open-source contribution pipeline:
 ```sh
 open-source-agent research --limit 20
 open-source-agent triage codex --limit 10
-open-source-agent contribute claude --limit 5
+open-source-agent contribute --limit 5
 ```
 
 Repository discovery is manually triggered. The triager consumes only active
 catalog entries, and the contributor consumes only its durable issue queue.
-Each number is a ceiling, not a quota. The launcher defaults to unattended
-harness execution for deliberately started runs; pass `--safe` to retain
-permission prompts or `--dry-run` to inspect the complete prompt.
+Each number is a ceiling, not a quota. The launcher defaults to the `deepcode`
+harness so its session remains available for interactive messaging, and to
+unattended execution for deliberately started runs. Pass another harness name
+to override it, `--safe` to retain permission prompts, or `--dry-run` to inspect
+the complete prompt.
 
 Shared state lives in `open-source/repositories.json` and one
 `open-source/issues/<owner>--<repo>--<number>.json` record per issue. Validate it

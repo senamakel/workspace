@@ -5,7 +5,7 @@
 #
 #   open-source-agent research
 #   open-source-agent triage codex --limit 8
-#   open-source-agent contribute --limit 5 claude
+#   open-source-agent contribute --limit 5
 #   open-source-agent contribute --safe "only resume open PRs"
 #
 # Options:
@@ -96,7 +96,7 @@ case "$STAGE" in
     ;;
 esac
 
-HARNESS="claude"
+HARNESS="deepcode"
 LIMIT="$DEFAULT_LIMIT"
 MODE="automatic"
 DRY_RUN=0
