@@ -1,0 +1,24 @@
+{
+  "name": "open-source-researcher",
+  "description": "Research active, popular open-source GitHub repositories where external contributions are welcomed and useful issues are not intensely contested; maintain the shared repository catalog without selecting issues or writing code.",
+  "claude": {
+    "model": "sonnet",
+    "effort": "medium",
+    "maxTurns": 80,
+    "color": "blue",
+    "tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Bash",
+      "WebSearch",
+      "WebFetch"
+    ]
+  },
+  "codex": {
+    "model": "gpt-5.6",
+    "modelReasoningEffort": "medium"
+  }
+}

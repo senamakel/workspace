@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "id": "example/project#42",
+  "repo": "example/project",
+  "issue_number": 42,
+  "title": "Handle an empty configuration file",
+  "url": "https://github.com/example/project/issues/42",
+  "created_at": "2026-07-25T10:00:00Z",
+  "updated_at": "2026-07-25T11:00:00Z",
+  "triaged_at": "2026-07-25T12:00:00Z",
+  "status": "queued",
+  "priority_score": 91,
+  "estimated_minutes": 90,
+  "verification_plan": "Add a failing empty-file fixture test, implement the parser guard, and run the focused parser suite.",
+  "signals": {
+    "has_active_pr": false,
+    "assigned": false,
+    "recent_claim": false,
+    "reproducible": true,
+    "recent_activity_hours": 2
+  },
+  "evidence_urls": [
+    "https://github.com/example/project/issues/42"
+  ],
+  "claim": {
+    "worker": null,
+    "claimed_at": null,
+    "branch": null,
+    "worktree": null
+  },
+  "pull_request": null,
+  "history": [
+    {
+      "at": "2026-07-25T12:00:00Z",
+      "status": "queued",
+      "note": "Recent, unassigned, reproducible, and no linked or competing pull request found."
+    }
+  ]
+}
