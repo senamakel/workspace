@@ -32,6 +32,8 @@ test_routes_contributor() {
   assert_contains "$output" "You are the master execution agent" \
     "contributor playbook"
   assert_contains "$output" "Batch limit: 2" "contributor limit"
+  assert_contains "$output" "Harness: deepcode" \
+    "default contributor harness"
   assert_contains "$output" "Additional instructions: resume waiting PRs" \
     "contributor extra prompt"
 }
