@@ -64,10 +64,16 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$FAKE_GIT_LOG"
 if [ "${1:-}" = "clone" ]; then
   destination="${4:?missing clone destination}"
-  mkdir -p "$destination"
+  mkdir -p "$destination/.git"
 fi
 EOF
   chmod +x "$fake_bin/git"
+  cat > "$fake_bin/workflow-remotes" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'workflow-remotes %s\n' "$*" >> "$FAKE_GIT_LOG"
+EOF
+  chmod +x "$fake_bin/workflow-remotes"
   : > "$log"
 }
 
@@ -75,7 +81,7 @@ run_init() {
   local home="$1" fake_bin="$2"
   shift 2
   HOME="$home" PATH="$fake_bin:/usr/bin:/bin" FAKE_GIT_LOG="$home/git.log" \
-    "$INIT" "$@"
+    WORKFLOW_REMOTES_COMMAND="$fake_bin/workflow-remotes" "$INIT" "$@"
 }
 
 assert_invalid() {
@@ -106,8 +112,10 @@ clone --recurse-submodules git@github.com:tinyhumansai/workflow-medulla.git $hom
 clone --recurse-submodules git@github.com:tinyhumansai/workflow-tinyplace.git $home/custom/workflow-tinyplace
 clone --recurse-submodules git@github.com:tinyhumansai/workflow-opencompany.git $home/custom/workflow-opencompany
 clone --recurse-submodules git@github.com:tinyhumansai/workflow-dashboard.git $home/custom/workflow-dashboard"
-  assert_eq "$expected" "$(cat "$log")" \
+  assert_eq "$expected" "$(grep '^clone ' "$log")" \
     "exactly five recursive SSH clones are issued in manifest order"
+  assert_line_count 5 "workflow-remotes " "$log" \
+    "every cloned workflow is configured"
   for repository_name in openhuman medulla tinyplace opencompany dashboard; do
     assert_exists "$home/custom/workflow-$repository_name" \
       "$repository_name destination is created"
@@ -117,7 +125,7 @@ clone --recurse-submodules git@github.com:tinyhumansai/workflow-dashboard.git $h
   assert_exists "$home/bin" "HOME/bin is created"
 }
 
-test_existing_destinations_are_opaque() {
+test_existing_destinations_are_preserved_and_git_checkouts_are_configured() {
   local home fake_bin log workspace directory_marker file_marker symlink_target
   local no_git_home no_git_bin repository_name
   home="$(new_home existing)"
@@ -126,6 +134,7 @@ test_existing_destinations_are_opaque() {
   make_fake_git "$fake_bin" "$log"
   workspace="$home/work"
   mkdir -p "$workspace/workflow-openhuman"
+  mkdir -p "$workspace/workflow-openhuman/.git"
   directory_marker="$workspace/workflow-openhuman/do-not-touch"
   printf 'preserve directory\n' > "$directory_marker"
   file_marker="$workspace/workflow-medulla"
@@ -141,8 +150,9 @@ test_existing_destinations_are_opaque() {
     "existing file contents are untouched"
   assert_eq "$symlink_target" "$(readlink "$workspace/workflow-tinyplace")" \
     "existing symlink is untouched"
-  assert_line_count 0 "workflow-openhuman.git" "$log" \
-    "existing directory makes no Git call"
+  assert_contains "$(cat "$log")" \
+    "workflow-remotes $workspace/workflow-openhuman" \
+    "existing Git checkout is configured"
   assert_line_count 0 "workflow-medulla.git" "$log" \
     "existing file makes no Git call"
   assert_line_count 0 "workflow-tinyplace.git" "$log" \
@@ -191,6 +201,9 @@ test_dry_run_and_argument_handling() {
   assert_contains "$output" \
     "[would clone] git@github.com:tinyhumansai/workflow-dashboard.git -> $home/preview/workflow-dashboard" \
     "clone actions are previewed"
+  assert_contains "$output" \
+    "[would configure] recursive remotes in $home/preview/workflow-dashboard" \
+    "remote configuration is previewed"
   assert_line_count 0 "" "$log" "dry run never calls Git"
   assert_missing "$home/preview" "dry run does not create workspace"
   assert_missing "$home/bin" "dry run does not create HOME/bin"
@@ -218,7 +231,8 @@ test_dry_run_and_argument_handling() {
 }
 
 run_test "clones the exact repository set" test_clones_exact_repository_set
-run_test "leaves existing destinations opaque" test_existing_destinations_are_opaque
+run_test "preserves existing paths and configures Git checkouts" \
+  test_existing_destinations_are_preserved_and_git_checkouts_are_configured
 run_test "keeps dry-run inert and validates arguments" \
   test_dry_run_and_argument_handling
 printf '1..%s\n' "$PASS_COUNT"
