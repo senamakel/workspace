@@ -4,10 +4,11 @@
 # Usage: worktree <slug> [--json]
 #
 # Creates or reuses branch <slug> at <repo>/worktrees/<slug>. New branches start
-# at the current HEAD. Submodules are initialized recursively in the resulting
-# worktree, cloned over SSH (git@github.com) regardless of the HTTPS URLs in
-# .gitmodules; set WORKTREE_HTTPS=1 to keep HTTPS. The final report is stable and
-# suitable for agent orchestration.
+# at the current HEAD. Submodules are initialized recursively and shallowly
+# (--depth 1, retried at full depth on failure) in the resulting worktree,
+# cloned over SSH (git@github.com) regardless of the HTTPS URLs in .gitmodules;
+# set WORKTREE_HTTPS=1 to keep HTTPS, WORKTREE_DEPTH=0 to skip the shallow pass.
+# The final report is stable and suitable for agent orchestration.
 set -euo pipefail
 
 fail() {
@@ -15,7 +16,7 @@ fail() {
 }
 
 usage() {
-  sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 require() {
@@ -102,16 +103,34 @@ fi
 # `-c` overrides are exported via GIT_CONFIG_PARAMETERS, so they propagate to
 # every nested (recursive) submodule clone too — no edits to .gitmodules or
 # global config. Set WORKTREE_HTTPS=1 to keep the original HTTPS URLs.
+#
+# Submodules are cloned shallow (--depth 1) to keep worktree setup fast. A
+# shallow fetch can miss the recorded gitlink when it is not near the remote
+# tip, so a failed shallow pass is retried at full depth. Set WORKTREE_DEPTH=0
+# to skip the shallow attempt entirely.
+submodule_update() {
+  # $1: extra args before `submodule`; remaining args go after `--recursive`.
+  if [ "${WORKTREE_HTTPS:-0}" = "1" ]; then
+    git -C "$WT_DIR" submodule update --init --recursive "$@" 2>&1
+  else
+    git -C "$WT_DIR" \
+      -c url."git@github.com:".insteadOf="https://github.com/" \
+      -c url."git@github.com:".insteadOf="http://github.com/" \
+      submodule update --init --recursive "$@" 2>&1
+  fi
+}
+
 SUBMODULE_STATUS=0
-if [ "${WORKTREE_HTTPS:-0}" = "1" ]; then
-  SUBMODULE_OUTPUT=$(git -C "$WT_DIR" submodule update --init --recursive 2>&1) \
+SUBMODULE_DEPTH="${WORKTREE_DEPTH:-1}"
+if [ "$SUBMODULE_DEPTH" != "0" ]; then
+  SUBMODULE_OUTPUT=$(submodule_update --depth "$SUBMODULE_DEPTH") \
     || SUBMODULE_STATUS=$?
+  if [ "$SUBMODULE_STATUS" -ne 0 ]; then
+    SUBMODULE_STATUS=0
+    SUBMODULE_OUTPUT=$(submodule_update) || SUBMODULE_STATUS=$?
+  fi
 else
-  SUBMODULE_OUTPUT=$(git -C "$WT_DIR" \
-    -c url."git@github.com:".insteadOf="https://github.com/" \
-    -c url."git@github.com:".insteadOf="http://github.com/" \
-    submodule update --init --recursive 2>&1) \
-    || SUBMODULE_STATUS=$?
+  SUBMODULE_OUTPUT=$(submodule_update) || SUBMODULE_STATUS=$?
 fi
 if [ "$SUBMODULE_STATUS" -ne 0 ]; then
   fail "worktree exists, but recursive submodule initialization failed: $WT_DIR"
