@@ -43,6 +43,9 @@ branch.
 Per this repo's rules, new implementation or audit work does not happen on
 `main` — proceed to Step 1.
 
+**If you are inside a submodule:** do NOT create a worktree here. Isolation for
+cross-repo work belongs at the superproject level — go to Step 1c.
+
 ## Step 1: Create the Worktree
 
 ### 1a. The `worktree` command (preferred)
@@ -73,6 +76,26 @@ git submodule update --init --recursive
 If `git worktree add` fails with a sandbox/permission error, tell the user the
 sandbox blocked worktree creation and you're working in place instead; then run
 setup and baseline tests where you are.
+
+### 1c. Cross-repo work: superproject worktree, submodule branches
+
+For a workflow checkout (a superproject with submodules), the worktree is
+created **once, at the superproject level** — never nested inside a submodule.
+Each submodule you touch gets a plain feature branch in place:
+
+```bash
+worktree <slug>                          # from the workflow folder
+cd worktrees/<slug>
+git -C <submodule> switch -c <slug>      # per submodule you will edit
+```
+
+The branch step is required, not optional: `submodule update` leaves each
+submodule detached at the recorded gitlink, so edits committed without switching
+land on no branch and are easy to lose.
+
+Finish the same way, bottom-up: commit and push each submodule branch, open its
+PR against that submodule's own upstream, then commit the updated gitlinks on
+the superproject branch.
 
 ## Step 2: Project Setup
 
@@ -114,7 +137,8 @@ Ready to implement <feature-name>
 | Situation | Action |
 |-----------|--------|
 | Already in a linked worktree | Skip creation (Step 0) |
-| In a submodule | Treat as a normal repo (Step 0 guard) |
+| In a submodule | Feature branch in place, no worktree (Step 1c) |
+| Cross-repo change | Worktree at the superproject only (Step 1c) |
 | `worktree` command available | Use it (Step 1a) |
 | `worktree` command missing | Raw `git worktree` under `worktrees/` (Step 1b) |
 | Sandbox blocks creation | Work in place, tell the user |
@@ -123,8 +147,10 @@ Ready to implement <feature-name>
 ## Red Flags
 
 **Never:** create a worktree when Step 0 already detects isolation · nest a
-worktree inside a worktree · start new work on `main` · skip baseline
-verification · proceed past failing baseline tests without asking.
+worktree inside a worktree · create a worktree inside a submodule · edit a
+submodule while it is detached at its gitlink · start new work on `main` · skip
+baseline verification · proceed past failing baseline tests without asking.
 
-**Always:** run Step 0 first · prefer the `worktree` command · verify a clean
-baseline before implementing.
+**Always:** run Step 0 first · prefer the `worktree` command · branch each
+submodule you touch before editing it · verify a clean baseline before
+implementing.

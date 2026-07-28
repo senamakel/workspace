@@ -6,6 +6,8 @@
 
 - For any new implementation or audit work, run `worktree <slug>` before editing and work inside the reported `./worktrees/<slug>` path. The command creates or reuses the matching feature branch and initializes recursive submodules. Do not do new work directly on `main`.
 
+- For cross-repo changes in a workflow checkout (a superproject with submodules), create the worktree at the **superproject** level only: run `worktree <slug>` from the workflow folder. Inside each submodule you touch, use a feature branch in place — `git -C <submodule> switch -c <slug>` — because submodules are checked out detached at the recorded gitlink; branch before editing. Never create a nested worktree inside a submodule. Commit and PR each submodule branch to that submodule's own upstream, then commit the updated gitlinks on the superproject branch.
+
 - Commit after every step. As soon as a step is implemented and validated, commit it before starting the next one — do not batch multiple steps into one commit or defer commits to the end. Small, frequent commits are the default, not the exception; when in doubt, commit.
 
 - Always raise PRs against the **upstream** canonical repo (e.g. `tinyhumansai/*`), never a personal fork. `origin` may point at a fork (e.g. `senamakel/*`); when it does, push the branch and open the PR against the `upstream` remote. If the PR's base branch only exists locally/on the fork, push it to upstream first so the PR can target it there.
