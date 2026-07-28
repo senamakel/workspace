@@ -277,7 +277,8 @@ box r1 --takeover
 
 Reclaims the disk space held by finished worktrees. It walks `<root>` (default
 `~/work`, or `$WORKTREE_CLEAN_ROOT`) for repositories with a `worktrees/`
-directory and removes each registered worktree that has nothing left to lose:
+directory — superprojects **and submodules**, whose `.git` is a file rather than
+a directory — and removes each registered worktree that has nothing left to lose:
 no uncommitted changes and no commits missing from a remote — checked both in
 the worktree and in every submodule beneath it, so a submodule feature branch
 that was never pushed keeps its worktree alive. Unsafe worktrees are kept and
@@ -289,6 +290,25 @@ anyway, destroying that uncommitted and unpushed work.
 worktree-clean --dry-run
 worktree-clean
 worktree-clean --root ~/work/medulla --force
+```
+
+### `repo-remotes [--dry-run] [--root <dir>] [--quiet]`
+
+Points every cloned TinyHumans repository at the right pair of remotes: `origin`
+at the `senamakel` fork, `upstream` at the canonical `tinyhumansai` repo. It
+covers both top-level clones and submodules under `<root>` (default `~/work`),
+and `install.sh` runs it on every box so the layout converges everywhere.
+
+A repository with no fork is **reported, never rewritten** — the installer does
+not create repositories on your GitHub account as a side effect. Fork those
+deliberately with `gh-fork-clone tinyhumansai/<name> --clone=false` and re-run.
+Workflow superprojects (`workflow-*`, `*-workflow`), `medulla-v1`, and GitHub
+wiki sidecars (`*.wiki`) are always skipped; wikis cannot be forked at all, and
+the workflow roots coordinate shared gitlinks so they stay on upstream.
+
+```sh
+repo-remotes --dry-run
+repo-remotes
 ```
 
 ### `atomic-commit [--json] "<scoped message>" -- <path>...`

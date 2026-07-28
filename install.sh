@@ -269,6 +269,17 @@ ensure_zshrc_loader() {
 }
 ensure_zshrc_loader
 
+# --- Cloned repository remotes ------------------------------------------------
+# Every TinyHumans clone and submodule should push to my fork and pull from the
+# canonical repo, on every box. Non-fatal: a box with no clones, no network, or
+# no fork for a given repo just reports and moves on.
+echo
+if [ "$DRY_RUN" -eq 1 ]; then
+  "$REPO_ROOT/bin/repo-remotes" --dry-run || echo "[skip] repo remotes could not be checked"
+else
+  "$REPO_ROOT/bin/repo-remotes" || echo "[skip] repo remotes could not be updated"
+fi
+
 echo
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "Dry run complete. Re-run without --dry-run to apply."

@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# repo-remotes — point every cloned TinyHumans repo at my fork.
+#
+# Usage: repo-remotes [--dry-run] [--root <dir>] [--quiet]
+#
+# For each clone and submodule under <root> (default ~/work) whose canonical
+# home is github.com/tinyhumansai/<name>, sets origin to the senamakel fork and
+# upstream to the canonical repo. Repos with no fork are reported, never
+# rewritten — create those deliberately with `gh-fork-clone <owner/repo>
+# --clone=false`. Workflow superprojects and medulla-v1 are always skipped:
+# their gitlinks are shared state, so they are consumed from upstream directly.
+set -euo pipefail
+
+FORK_OWNER="${REPO_REMOTES_FORK_OWNER:-senamakel}"
+CANONICAL_OWNER="${REPO_REMOTES_CANONICAL_OWNER:-tinyhumansai}"
+ROOT="${REPO_REMOTES_ROOT:-$HOME/work}"
+DRY_RUN=0
+QUIET=0
+
+# Repos deliberately left on upstream. Workflow superprojects coordinate
+# gitlinks across machines; medulla-v1 is consumed, not contributed to.
+SKIP_NAMES=(
+  "medulla-v1"
+)
+skip_repo() {
+  local name="$1" skip
+  case "$name" in
+    # Wikis are GitHub-managed sidecars — they cannot be forked.
+    workflow-*|*-workflow|*.wiki) return 0 ;;
+  esac
+  for skip in "${SKIP_NAMES[@]}"; do
+    [ "$name" = "$skip" ] && return 0
+  done
+  return 1
+}
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+say() {
+  [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --quiet)   QUIET=1; shift ;;
+    --root)
+      [ $# -ge 2 ] || { fail "--root requires a directory"; exit 1; }
+      ROOT="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1"; usage; exit 1 ;;
+  esac
+done
+
+command -v git >/dev/null 2>&1 || { fail "missing required tool: git"; exit 1; }
+[ -d "$ROOT" ] || { say "repo-remotes: no such root, nothing to do: $ROOT"; exit 0; }
+ROOT=$(cd "$ROOT" && pwd -P)
+
+# Fork lookups hit the network, so remember the answer per repo name.
+FORK_CACHE_HIT=" "
+FORK_CACHE_MISS=" "
+fork_exists() {
+  local name="$1"
+  case "$FORK_CACHE_HIT" in *" $name "*) return 0 ;; esac
+  case "$FORK_CACHE_MISS" in *" $name "*) return 1 ;; esac
+
+  if git ls-remote --exit-code "git@github.com:$FORK_OWNER/$name.git" HEAD >/dev/null 2>&1; then
+    FORK_CACHE_HIT="$FORK_CACHE_HIT$name "
+    return 0
+  fi
+  FORK_CACHE_MISS="$FORK_CACHE_MISS$name "
+  return 1
+}
+
+# Canonical name from any URL shape: ssh, https, with or without .git/trailing slash.
+canonical_name() {
+  local url="$1"
+  case "$url" in
+    *"github.com:$CANONICAL_OWNER/"*|*"github.com/$CANONICAL_OWNER/"*) ;;
+    *) return 1 ;;
+  esac
+  url="${url##*"$CANONICAL_OWNER/"}"
+  url="${url%/}"
+  url="${url%.git}"
+  [ -n "$url" ] || return 1
+  printf '%s' "$url"
+}
+
+CHANGED=0
+ALREADY=0
+SKIPPED=0
+MISSING=""
+
+rewire() {
+  local repo="$1" origin upstream name
+
+  origin=$(git -C "$repo" remote get-url origin 2>/dev/null || true)
+  upstream=$(git -C "$repo" remote get-url upstream 2>/dev/null || true)
+
+  # The canonical name may already have moved to upstream on a previous run.
+  name=$(canonical_name "$origin" 2>/dev/null || canonical_name "$upstream" 2>/dev/null || true)
+  [ -n "$name" ] || return 0
+
+  if skip_repo "$name"; then
+    SKIPPED=$((SKIPPED + 1))
+    say "[skip] $name — excluded"
+    return 0
+  fi
+
+  local want_origin="git@github.com:$FORK_OWNER/$name.git"
+  local want_upstream="git@github.com:$CANONICAL_OWNER/$name.git"
+
+  if [ "$origin" = "$want_origin" ] && [ "$upstream" = "$want_upstream" ]; then
+    ALREADY=$((ALREADY + 1))
+    return 0
+  fi
+
+  if ! fork_exists "$name"; then
+    SKIPPED=$((SKIPPED + 1))
+    case "$MISSING" in
+      *" $name "*) ;;
+      *) MISSING="$MISSING $name " ;;
+    esac
+    say "[skip] $name — no $FORK_OWNER fork"
+    return 0
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    say "[dry-run] $name — origin -> $FORK_OWNER, upstream -> $CANONICAL_OWNER"
+    CHANGED=$((CHANGED + 1))
+    return 0
+  fi
+
+  git -C "$repo" remote set-url origin "$want_origin"
+  if [ -n "$upstream" ]; then
+    git -C "$repo" remote set-url upstream "$want_upstream"
+  else
+    git -C "$repo" remote add upstream "$want_upstream"
+  fi
+  CHANGED=$((CHANGED + 1))
+  say "[ok]   $name — origin -> $FORK_OWNER, upstream -> $CANONICAL_OWNER"
+}
+
+# Every checkout: top-level clones, then each superproject's submodules.
+while IFS= read -r gitdir; do
+  repo="${gitdir%/.git}"
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || continue
+  rewire "$repo"
+
+  if [ -f "$repo/.gitmodules" ]; then
+    while IFS= read -r sub; do
+      [ -n "$sub" ] && rewire "$sub"
+    done < <(git -C "$repo" submodule foreach --quiet --recursive 'pwd -P' 2>/dev/null || true)
+  fi
+done < <(find "$ROOT" \
+  -maxdepth 4 \
+  \( -name node_modules -o -name target -o -name worktrees \) -prune -o \
+  -maxdepth 4 -name .git -print 2>/dev/null | sort)
+
+say ""
+say "$CHANGED rewired, $ALREADY already correct, $SKIPPED skipped"
+if [ -n "$MISSING" ]; then
+  say "Missing $FORK_OWNER forks — create with:"
+  for name in $MISSING; do
+    say "  gh-fork-clone $CANONICAL_OWNER/$name --clone=false"
+  done
+fi
