@@ -22,11 +22,21 @@ QUIET=0
 SKIP_NAMES=(
   "medulla-v1"
 )
+# Wikis are GitHub-managed sidecars: unforkable, and cloned over https by the
+# .gitmodules that reference them. Touching their remotes at all is wrong.
+leave_alone() {
+  case "$1" in
+    *.wiki) return 0 ;;
+  esac
+  return 1
+}
+
+# Consumed from upstream, never contributed to, so their origin is pinned to
+# the canonical repo on every box.
 skip_repo() {
   local name="$1" skip
   case "$name" in
-    # Wikis are GitHub-managed sidecars — they cannot be forked.
-    workflow-*|*-workflow|*.wiki) return 0 ;;
+    workflow-*|*-workflow) return 0 ;;
   esac
   for skip in "${SKIP_NAMES[@]}"; do
     [ "$name" = "$skip" ] && return 0
@@ -107,7 +117,27 @@ rewire() {
   name=$(canonical_name "$origin" 2>/dev/null || canonical_name "$upstream" 2>/dev/null || true)
   [ -n "$name" ] || return 0
 
+  if leave_alone "$name"; then
+    SKIPPED=$((SKIPPED + 1))
+    say "[skip] $name — untouched"
+    return 0
+  fi
+
+  # Excluded repos are pinned to the canonical remote rather than merely left
+  # alone, so a box that was wired to a fork by hand converges back instead of
+  # staying different from every other box.
   if skip_repo "$name"; then
+    local canonical="git@github.com:$CANONICAL_OWNER/$name.git"
+    if [ "$origin" != "$canonical" ]; then
+      if [ "$DRY_RUN" -eq 1 ]; then
+        say "[dry-run] $name — excluded, would pin origin -> $CANONICAL_OWNER"
+      else
+        git -C "$repo" remote set-url origin "$canonical"
+        say "[pin]  $name — excluded, origin -> $CANONICAL_OWNER"
+      fi
+      CHANGED=$((CHANGED + 1))
+      return 0
+    fi
     SKIPPED=$((SKIPPED + 1))
     say "[skip] $name — excluded"
     return 0
