@@ -152,13 +152,21 @@ clean_repo() {
 REPOS=0
 while IFS= read -r worktrees_dir; do
   repo=$(dirname "$worktrees_dir")
-  # Only act from a main checkout — a linked worktree shares the same registry.
-  [ -d "$repo/.git" ] || continue
+  # A submodule's .git is a file, not a directory, so accept either — that is
+  # what makes this reach worktrees created inside submodules.
+  [ -e "$repo/.git" ] || continue
   git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || continue
+  # Skip linked worktrees: they share the parent's registry, so cleaning from
+  # one would remove the very tree being walked. A submodule compares equal
+  # here (both resolve to .git/modules/<name>) and is therefore cleaned.
+  # rev-parse returns paths relative to the repo, so resolve from inside it.
+  git_dir=$(cd "$repo" && cd "$(git rev-parse --git-dir)" && pwd -P) || continue
+  common_dir=$(cd "$repo" && cd "$(git rev-parse --git-common-dir)" && pwd -P) || continue
+  [ "$git_dir" = "$common_dir" ] || continue
   REPOS=$((REPOS + 1))
   clean_repo "$repo"
 done < <(find "$ROOT" \
-  \( -name .git -o -name node_modules -o -name target \) -prune -o \
+  \( -name node_modules -o -name target -o -name .git \) -prune -o \
   -type d -name worktrees -print 2>/dev/null | sort)
 
 if [ "$REPOS" -eq 0 ]; then

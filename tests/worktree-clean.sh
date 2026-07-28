@@ -69,6 +69,19 @@ build_fixture() {
   git -C "$WORK/repo/worktrees/subwork/sub" commit -q --allow-empty -m "unpushed"
   git -C "$WORK/repo/worktrees/subwork" commit -qm "bump gitlink" -- sub
   git -C "$WORK/repo/worktrees/subwork" push -q origin subwork
+
+  # A worktree created *inside* a submodule: its .git is a file, so a
+  # directory-only scan never reaches it.
+  git -C "$WORK/repo" submodule update --init -q
+  git -C "$WORK/repo/sub" worktree add -q worktrees/nested -b nested
+  git -C "$WORK/repo/sub" push -q origin nested
+}
+
+test_reaches_worktrees_inside_submodules() {
+  local output
+  output="$("$COMMAND" --dry-run --root "$WORK")"
+  assert_contains "$output" "$WORK/repo/sub/worktrees/nested" \
+    "submodule worktree is discovered"
 }
 
 test_dry_run_keeps_everything() {
@@ -121,14 +134,16 @@ test_rejects_bad_arguments() {
 }
 
 build_fixture
+test_reaches_worktrees_inside_submodules
+printf 'ok 1 - recurses into worktrees inside submodules\n'
 test_dry_run_keeps_everything
-printf 'ok 1 - dry run reports without deleting\n'
+printf 'ok 2 - dry run reports without deleting\n'
 test_keeps_unsafe_worktrees
-printf 'ok 2 - keeps dirty, unpushed, and unpushed-submodule worktrees\n'
+printf 'ok 3 - keeps dirty, unpushed, and unpushed-submodule worktrees\n'
 test_second_run_is_idempotent
-printf 'ok 3 - repeated runs are idempotent\n'
+printf 'ok 4 - repeated runs are idempotent\n'
 test_force_removes_everything
-printf 'ok 4 - force removes worktrees but keeps branches\n'
+printf 'ok 5 - force removes worktrees but keeps branches\n'
 test_rejects_bad_arguments
-printf 'ok 5 - rejects invalid arguments\n'
-printf '1..5\n'
+printf 'ok 6 - rejects invalid arguments\n'
+printf '1..6\n'
