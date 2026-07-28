@@ -14,11 +14,11 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
-HOSTS=(
-  "enamakel@dragonfly"
-  "enamakel@mac-mini"
-  "droid@robot1.digital.ocean"
-)
+# bin/box owns the canonical box list, so the two commands cannot drift apart.
+HOSTS=()
+while IFS= read -r host; do
+  [ -n "$host" ] && HOSTS+=("$host")
+done < <("$REPO_ROOT/bin/box" --list)
 REMOTE_PATH="~/work/workspace"
 
 CHECK_ONLY=0

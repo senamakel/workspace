@@ -34,6 +34,11 @@ alias aliases="vim ~/.zshrc"
 alias cleude="claude"
 alias work="cd ~/work"
 
+# Attach to each box's persistent tmux workspace (see bin/box).
+alias df="box dragonfly"
+alias mini="box mac-mini"
+alias r1="box robot1"
+
 rust-clean() {
   local workspace="$HOME/work/"
   local dry_run=0

@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# box — attach to the persistent tmux workspace on one of my boxes.
+#
+# Usage: box [<name>] [--takeover] [--mosh]
+#        box --list
+#
+# Runs the remote `mosh-tmux` helper over ssh, so the session is created on the
+# first attach and reused afterwards. Names match loosely: `box mini` and
+# `box mac-mini` both work. With no name, prints each box and its session state.
+# --takeover detaches other clients first, so the session sizes to this terminal
+# instead of the smallest attached one.
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+# name|ssh target|alternate names
+BOXES=(
+  "dragonfly|enamakel@dragonfly|df"
+  "mac-mini|enamakel@mac-mini|mini mac mm"
+  "robot1|droid@robot1.digital.ocean|do droplet r1"
+)
+
+SERVER="${MOSH_TMUX_SERVER:-mosh}"
+SESSION="${MOSH_TMUX_SESSION:-workspace}"
+
+TARGET=""
+NAME=""
+TAKEOVER=0
+USE_MOSH=0
+
+resolve() {
+  local want="$1" entry name target alts alt
+  for entry in "${BOXES[@]}"; do
+    IFS='|' read -r name target alts <<< "$entry"
+    if [ "$want" = "$name" ] || [ "$want" = "$target" ]; then
+      NAME="$name"; TARGET="$target"; return 0
+    fi
+    for alt in $alts; do
+      if [ "$want" = "$alt" ]; then
+        NAME="$name"; TARGET="$target"; return 0
+      fi
+    done
+  done
+  return 1
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --takeover)
+      TAKEOVER=1
+      shift
+      ;;
+    --mosh)
+      USE_MOSH=1
+      shift
+      ;;
+    --list)
+      for entry in "${BOXES[@]}"; do
+        IFS='|' read -r name target alts <<< "$entry"
+        printf '%s\n' "$target"
+      done
+      exit 0
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown argument: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      resolve "$1" || { fail "unknown box: $1"; usage; exit 1; }
+      shift
+      ;;
+  esac
+done
+
+# No box named: report where a session is waiting, so the next command is obvious.
+if [ -z "$TARGET" ]; then
+  for entry in "${BOXES[@]}"; do
+    IFS='|' read -r name target alts <<< "$entry"
+    state=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$target" \
+      "tmux -L $SERVER ls 2>/dev/null | head -n 1" 2>/dev/null) || state=""
+    printf '%-12s %-28s %s\n' "$name" "$target" "${state:-unreachable or no session}"
+  done
+  printf '\nAttach with: box <name>\n'
+  exit 0
+fi
+
+# Prefer an existing session; fall back to mosh-tmux, which builds the six-pane
+# layout when nothing is running yet.
+if [ "$TAKEOVER" -eq 1 ]; then
+  REMOTE="tmux -L $SERVER attach-session -d -t '=$SESSION' 2>/dev/null || exec \$HOME/bin/mosh-tmux"
+else
+  REMOTE="exec \$HOME/bin/mosh-tmux"
+fi
+
+if [ "$USE_MOSH" -eq 1 ]; then
+  command -v mosh >/dev/null 2>&1 || { fail "mosh is not installed locally"; exit 1; }
+  exec mosh "$TARGET" -- bash -lc "$REMOTE"
+fi
+
+exec ssh -t "$TARGET" "bash -lc \"$REMOTE\""

@@ -254,6 +254,25 @@ worktree fix-auth-timeout
 worktree dependency-audit --json
 ```
 
+### `box [<name>] [--takeover] [--mosh]`
+
+Attaches to the persistent tmux workspace on a remote box over ssh, running the
+remote `mosh-tmux` helper so the six-pane session is built on first attach and
+reused afterwards. Names match loosely — `box mini`, `box mac-mini`, and
+`box mm` all reach the same machine. With no name it lists every box and its
+session state. `--takeover` detaches other clients first, so the session sizes
+to the current terminal rather than the smallest attached one; `--mosh` connects
+over `mosh` instead of `ssh`. `zshrc` adds `df`, `mini`, and `r1` as shorthands.
+
+`box --list` prints the canonical ssh targets, which is where `sync.sh` reads
+the box list from.
+
+```sh
+box                    # who's up, and what's running
+box dragonfly
+box r1 --takeover
+```
+
 ### `worktree-clean [--dry-run] [--force] [--root <dir>]`
 
 Reclaims the disk space held by finished worktrees. It walks `<root>` (default
