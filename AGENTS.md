@@ -31,10 +31,15 @@ their primary checkouts. Preserve any machine-local tracked changes; investigate
 a failed fast-forward instead of resetting or stashing them automatically.
 
 ```sh
-ssh enamakel@dragonfly 'cd ~/work/workspace && git pull --ff-only && ./install.sh'
-ssh enamakel@mac-mini 'cd ~/work/workspace && git pull --ff-only && ./install.sh'
-ssh droid@robot1.digital.ocean 'cd ~/work/workspace && git pull --ff-only && ./install.sh'
+./sync.sh            # all boxes: push if ahead, pull --rebase, ./install.sh
+./sync.sh --check    # report each box's HEAD and dirty files, change nothing
+./sync.sh dragonfly  # one box
 ```
+
+`sync.sh` runs the remote commands through a login shell, because the
+non-interactive `PATH` on some boxes cannot find tools `install.sh` requires
+(`rg`). It pulls with `--rebase` and autostash so machine-local tracked edits
+survive; a genuine conflict still stops that box and is reported.
 
 Use a login-capable remote shell if a host's non-interactive `PATH` cannot find
 standard tools. Confirm each pull and install succeeds before reporting the
