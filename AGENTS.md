@@ -16,6 +16,8 @@ There is no compilation step or centralized test suite. Validate the part you ch
   contribution queue.
 - `tests/open-source-state.sh` and `tests/open-source-agent.sh` exercise the
   open-source pipeline state and launcher.
+- `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
+  repository with dirty, unpushed, and submodule-bearing worktrees.
 - `bash -n install.sh bin/* claude/statusline-command.sh` checks Bash syntax.
 - `zsh -n zshrc` checks the sourced Zsh configuration.
 - `git diff --check` catches whitespace errors before committing.

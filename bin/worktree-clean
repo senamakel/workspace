@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# worktree-clean — remove finished worktrees recursively to reclaim disk space.
+#
+# Usage: worktree-clean [--dry-run] [--force] [--root <dir>]
+#
+# Scans <root> (default ~/work, or $WORKTREE_CLEAN_ROOT) for repositories with a
+# worktrees/ directory and removes each registered worktree that has nothing left
+# to lose: no uncommitted changes and no commits missing from a remote, checked in
+# the worktree and in every submodule under it. Anything unsafe is kept and
+# reported. --force removes kept worktrees anyway (destroys uncommitted and
+# unpushed work); --dry-run reports without deleting.
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+require() {
+  local bin
+  for bin in "$@"; do
+    command -v "$bin" >/dev/null 2>&1 \
+      || { fail "missing required tool: $bin"; exit 1; }
+  done
+}
+
+ROOT="${WORKTREE_CLEAN_ROOT:-$HOME/work}"
+DRY_RUN=0
+FORCE=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --force)
+      FORCE=1
+      shift
+      ;;
+    --root)
+      [ $# -ge 2 ] || { fail "--root requires a directory"; exit 1; }
+      ROOT="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+require git du
+[ -d "$ROOT" ] || { fail "root is not a directory: $ROOT"; exit 1; }
+ROOT=$(cd "$ROOT" && pwd -P)
+
+# A worktree is safe to delete when nothing in it exists only on disk.
+# `git status` reports dirty submodules as changed entries, so a single status
+# call covers the tree; unpushed commits need one check per repository, since a
+# submodule's feature branch has its own remote.
+reasons_to_keep() {
+  local wt="$1" reasons="" sub
+
+  if [ -n "$(git -C "$wt" status --porcelain --ignore-submodules=none 2>/dev/null)" ]; then
+    reasons="uncommitted changes"
+  fi
+
+  if [ -n "$(git -C "$wt" log --oneline HEAD --not --remotes 2>/dev/null | head -n 1)" ]; then
+    reasons="${reasons:+$reasons, }unpushed commits"
+  fi
+
+  while IFS= read -r sub; do
+    [ -n "$sub" ] || continue
+    if [ -n "$(git -C "$sub" log --oneline HEAD --not --remotes 2>/dev/null | head -n 1)" ]; then
+      reasons="${reasons:+$reasons, }unpushed commits in ${sub#"$wt"/}"
+    fi
+  done < <(git -C "$wt" submodule foreach --quiet --recursive 'pwd -P' 2>/dev/null || true)
+
+  printf '%s' "$reasons"
+}
+
+disk_kb() {
+  du -sk "$1" 2>/dev/null | awk '{print $1}'
+}
+
+human_kb() {
+  awk -v kb="$1" 'BEGIN {
+    if (kb >= 1048576) printf "%.1fG", kb / 1048576
+    else if (kb >= 1024) printf "%.0fM", kb / 1024
+    else printf "%dK", kb
+  }'
+}
+
+REMOVED=0
+KEPT=0
+FREED_KB=0
+
+clean_repo() {
+  local repo="$1" wt reasons kb line
+
+  while IFS= read -r line; do
+    wt="${line#worktree }"
+    # The main checkout is listed first; only prune its worktrees/ children.
+    case "$wt" in
+      "$repo"/worktrees/*) ;;
+      *) continue ;;
+    esac
+    [ -d "$wt" ] || continue
+
+    reasons=$(reasons_to_keep "$wt")
+    if [ -n "$reasons" ] && [ "$FORCE" -eq 0 ]; then
+      printf '[keep] %s (%s)\n' "$wt" "$reasons"
+      KEPT=$((KEPT + 1))
+      continue
+    fi
+
+    kb=$(disk_kb "$wt")
+    kb=${kb:-0}
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf '[dry-run] %s (%s)%s\n' "$wt" "$(human_kb "$kb")" \
+        "${reasons:+ — forced over: $reasons}"
+      REMOVED=$((REMOVED + 1))
+      FREED_KB=$((FREED_KB + kb))
+      continue
+    fi
+
+    # --force is passed twice on purpose: the first covers a dirty tree, the
+    # second a worktree whose branch is not merged anywhere.
+    if git -C "$repo" worktree remove --force --force "$wt" 2>/dev/null \
+      || { rm -rf "$wt" && git -C "$repo" worktree prune; }; then
+      printf '[rm] %s (%s)%s\n' "$wt" "$(human_kb "$kb")" \
+        "${reasons:+ — forced over: $reasons}"
+      REMOVED=$((REMOVED + 1))
+      FREED_KB=$((FREED_KB + kb))
+    else
+      fail "could not remove worktree: $wt"
+      KEPT=$((KEPT + 1))
+    fi
+  done < <(git -C "$repo" worktree list --porcelain 2>/dev/null | grep '^worktree ')
+
+  [ "$DRY_RUN" -eq 1 ] || git -C "$repo" worktree prune 2>/dev/null || true
+}
+
+REPOS=0
+while IFS= read -r worktrees_dir; do
+  repo=$(dirname "$worktrees_dir")
+  # Only act from a main checkout — a linked worktree shares the same registry.
+  [ -d "$repo/.git" ] || continue
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || continue
+  REPOS=$((REPOS + 1))
+  clean_repo "$repo"
+done < <(find "$ROOT" \
+  \( -name .git -o -name node_modules -o -name target \) -prune -o \
+  -type d -name worktrees -print 2>/dev/null | sort)
+
+if [ "$REPOS" -eq 0 ]; then
+  printf 'No repositories with worktrees found under %s\n' "$ROOT"
+  exit 0
+fi
+
+printf '\n%d repo(s): %d removed (%s), %d kept\n' \
+  "$REPOS" "$REMOVED" "$(human_kb "$FREED_KB")" "$KEPT"
+if [ "$DRY_RUN" -eq 1 ]; then
+  printf 'Dry run only. Re-run with: worktree-clean\n'
+elif [ "$KEPT" -gt 0 ] && [ "$FORCE" -eq 0 ]; then
+  printf 'Kept worktrees still hold work. Review them, or force with: worktree-clean --force\n'
+fi

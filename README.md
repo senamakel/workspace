@@ -254,6 +254,24 @@ worktree fix-auth-timeout
 worktree dependency-audit --json
 ```
 
+### `worktree-clean [--dry-run] [--force] [--root <dir>]`
+
+Reclaims the disk space held by finished worktrees. It walks `<root>` (default
+`~/work`, or `$WORKTREE_CLEAN_ROOT`) for repositories with a `worktrees/`
+directory and removes each registered worktree that has nothing left to lose:
+no uncommitted changes and no commits missing from a remote — checked both in
+the worktree and in every submodule beneath it, so a submodule feature branch
+that was never pushed keeps its worktree alive. Unsafe worktrees are kept and
+the reason is printed. Branches are never deleted, only their working trees, and
+the worktree registry is pruned afterwards. `--force` removes kept worktrees
+anyway, destroying that uncommitted and unpushed work.
+
+```sh
+worktree-clean --dry-run
+worktree-clean
+worktree-clean --root ~/work/medulla --force
+```
+
 ### `atomic-commit [--json] "<scoped message>" -- <path>...`
 
 Creates a commit from an explicit file list. It rejects directories, unchanged
