@@ -99,39 +99,15 @@ else
   fi
 fi
 
-# Clone GitHub submodules over SSH regardless of the HTTPS URLs in .gitmodules.
-# `-c` overrides are exported via GIT_CONFIG_PARAMETERS, so they propagate to
-# every nested (recursive) submodule clone too — no edits to .gitmodules or
-# global config. Set WORKTREE_HTTPS=1 to keep the original HTTPS URLs.
-#
-# Submodules are cloned shallow (--depth 1) to keep worktree setup fast. A
-# shallow fetch can miss the recorded gitlink when it is not near the remote
-# tip, so a failed shallow pass is retried at full depth. Set WORKTREE_DEPTH=0
-# to skip the shallow attempt entirely.
-submodule_update() {
-  # $1: extra args before `submodule`; remaining args go after `--recursive`.
-  if [ "${WORKTREE_HTTPS:-0}" = "1" ]; then
-    git -C "$WT_DIR" submodule update --init --recursive "$@" 2>&1
-  else
-    git -C "$WT_DIR" \
-      -c url."git@github.com:".insteadOf="https://github.com/" \
-      -c url."git@github.com:".insteadOf="http://github.com/" \
-      submodule update --init --recursive "$@" 2>&1
-  fi
-}
-
+# Shallow, SSH-rewritten, recursive submodule init lives in `submodule-init` so
+# every worktree-creating command shares one implementation. WORKTREE_DEPTH and
+# WORKTREE_HTTPS keep working as this command's own names for it.
 SUBMODULE_STATUS=0
-SUBMODULE_DEPTH="${WORKTREE_DEPTH:-1}"
-if [ "$SUBMODULE_DEPTH" != "0" ]; then
-  SUBMODULE_OUTPUT=$(submodule_update --depth "$SUBMODULE_DEPTH") \
-    || SUBMODULE_STATUS=$?
-  if [ "$SUBMODULE_STATUS" -ne 0 ]; then
-    SUBMODULE_STATUS=0
-    SUBMODULE_OUTPUT=$(submodule_update) || SUBMODULE_STATUS=$?
-  fi
-else
-  SUBMODULE_OUTPUT=$(submodule_update) || SUBMODULE_STATUS=$?
-fi
+SUBMODULE_OUTPUT=$(
+  SUBMODULE_DEPTH="${WORKTREE_DEPTH:-${SUBMODULE_DEPTH:-1}}" \
+  SUBMODULE_HTTPS="${WORKTREE_HTTPS:-${SUBMODULE_HTTPS:-0}}" \
+  "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/submodule-init" "$WT_DIR" 2>&1
+) || SUBMODULE_STATUS=$?
 if [ "$SUBMODULE_STATUS" -ne 0 ]; then
   fail "worktree exists, but recursive submodule initialization failed: $WT_DIR"
   printf '%s\n' "$SUBMODULE_OUTPUT" >&2

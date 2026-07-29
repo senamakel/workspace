@@ -78,7 +78,7 @@ configure_repository() {
 if [ "$DRY_RUN" = "1" ]; then
   printf '[would initialize] recursive submodules in %s\n' "$WORKFLOW"
 else
-  git -C "$WORKFLOW" submodule update --init --recursive
+  "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/submodule-init" "$WORKFLOW"
 fi
 
 configure_repository "$WORKFLOW" 1

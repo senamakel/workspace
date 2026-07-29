@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# submodule-init — initialize recursive submodules shallow, with a safe fallback.
+#
+# Usage: submodule-init [<dir>] [--quiet]
+#
+#   submodule-init                 initialize submodules in the current repo
+#   submodule-init ./worktrees/x   ... in another checkout
+#
+# Submodules are cloned at --depth 1, which is the difference between seconds
+# and minutes on the workflow superprojects. A shallow fetch can miss the
+# recorded gitlink when it is not reachable from a branch tip, so a failed
+# shallow pass is retried at full depth: the checkout is never left half-done
+# to save time. Set SUBMODULE_DEPTH=0 to skip the shallow attempt entirely, or
+# to any other integer to change the depth.
+#
+# GitHub submodules are cloned over SSH regardless of the HTTPS URLs recorded in
+# .gitmodules. The `-c` overrides travel via GIT_CONFIG_PARAMETERS, so they
+# apply to every nested clone too, with no edits to .gitmodules or global
+# config. Set SUBMODULE_HTTPS=1 to keep the original URLs.
+set -euo pipefail
+
+DIR="."
+QUIET=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --quiet)   QUIET=1; shift ;;
+    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*)        printf '[FAIL] unknown argument: %s\n' "$1" >&2; exit 1 ;;
+    *)         DIR="$1"; shift ;;
+  esac
+done
+
+[ -d "$DIR" ] || { printf '[FAIL] not a directory: %s\n' "$DIR" >&2; exit 1; }
+
+# Nothing to do outside a repo, or in one without submodules — stay quiet so
+# callers can invoke this unconditionally.
+git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1 || exit 0
+TOP="$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$DIR")"
+[ -f "$TOP/.gitmodules" ] || exit 0
+
+note() { [ "$QUIET" = "1" ] || printf '%s\n' "$*"; }
+
+update() {
+  if [ "${SUBMODULE_HTTPS:-0}" = "1" ]; then
+    git -C "$DIR" submodule update --init --recursive "$@" 2>&1
+  else
+    git -C "$DIR" \
+      -c url."git@github.com:".insteadOf="https://github.com/" \
+      -c url."git@github.com:".insteadOf="http://github.com/" \
+      submodule update --init --recursive "$@" 2>&1
+  fi
+}
+
+DEPTH="${SUBMODULE_DEPTH:-1}"
+STATUS=0
+if [ "$DEPTH" != "0" ]; then
+  OUTPUT="$(update --depth "$DEPTH")" || STATUS=$?
+  if [ "$STATUS" -ne 0 ]; then
+    note "[submodule] shallow init failed, retrying at full depth"
+    STATUS=0
+    OUTPUT="$(update)" || STATUS=$?
+  fi
+else
+  OUTPUT="$(update)" || STATUS=$?
+fi
+
+if [ "$STATUS" -ne 0 ]; then
+  printf '[FAIL] recursive submodule initialization failed in %s\n' "$DIR" >&2
+  printf '%s\n' "$OUTPUT" >&2
+  exit "$STATUS"
+fi
+
+[ -z "$OUTPUT" ] || note "$OUTPUT"

@@ -24,6 +24,9 @@
 # Conventions follow tinyhumansai/openhuman scripts/shortcuts (review/lib.sh).
 set -euo pipefail
 
+# Resolved before any `cd`, so sibling commands stay reachable from the worktree.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
 # ── Coloured output (disabled when stdout is not a terminal) ───────
 if [ -t 1 ]; then
   _R=$'\033[0;31m' _G=$'\033[0;32m' _Y=$'\033[0;33m' _B=$'\033[1m' _0=$'\033[0m'
@@ -201,7 +204,7 @@ if ! git merge --no-edit "refs/remotes/${REMOTE}/${BASE_BRANCH}"; then
   warn "conflicts detected, continuing:"
   printf '%s\n' "$CONFLICT_FILES"
 fi
-git submodule update --init --recursive 2>/dev/null || true
+"$SCRIPT_DIR/submodule-init" "$WT_DIR" --quiet 2>/dev/null || true
 
 # ── Build prompt and launch agent ──────────────────────────────────
 PROMPT="You are in a git worktree on branch $LOCAL_BRANCH for PR #$PR of $REPO.

@@ -244,15 +244,39 @@ without relying on the harness launch directory.
 Creates branch `<slug>` from the current `HEAD` and checks it out at
 `<repo>/worktrees/<slug>`. If the matching branch and registered worktree
 already exist, the command safely reuses them. It then runs recursive submodule
-initialization — cloning GitHub submodules over **SSH** (`git@github.com`)
-regardless of the HTTPS URLs in `.gitmodules` (set `WORKTREE_HTTPS=1` to keep
-HTTPS) — and returns a stable `WORKTREE_READY` report with the path, branch,
-commit, submodule count, and next `cd` command.
+initialization via `submodule-init` (below) — shallow, over SSH — and returns a
+stable `WORKTREE_READY` report with the path, branch, commit, submodule count,
+and next `cd` command. `WORKTREE_DEPTH` and `WORKTREE_HTTPS` are this command's
+names for `submodule-init`'s two knobs and keep working.
 
 ```sh
 worktree fix-auth-timeout
 worktree dependency-audit --json
 ```
+
+### `submodule-init [<dir>] [--quiet]`
+
+Recursive submodule initialization, shared by every command that prepares a
+checkout — `worktree`, `pr-fix`, `open-source-work`, `workflow-remotes`, and the
+`res` shell function — so the policy lives in one place.
+
+Submodules are cloned at `--depth 1`, which is the difference between seconds and
+minutes on the workflow superprojects. A shallow fetch can miss the recorded
+gitlink when it is not reachable from a branch tip, so a failed shallow pass is
+**retried at full depth**: the checkout is never left half-initialized to save
+time. Set `SUBMODULE_DEPTH=0` to skip the shallow attempt, or to another integer
+to change the depth.
+
+GitHub submodules are cloned over **SSH** (`git@github.com`) regardless of the
+HTTPS URLs in `.gitmodules`; the `-c` overrides travel via
+`GIT_CONFIG_PARAMETERS`, so they apply to every nested clone too, with no edits
+to `.gitmodules` or global config. Set `SUBMODULE_HTTPS=1` to keep the recorded
+URLs. Outside a repo, or in one without `.gitmodules`, it is a silent no-op, so
+callers can run it unconditionally.
+
+`workflow-update` is deliberately excluded: it initializes one submodule at a
+time and then resets it to commits selected from several remotes, which needs
+history a shallow clone would not have.
 
 ### `box [<name>] [--takeover] [--mosh]`
 
@@ -362,9 +386,10 @@ agent decision loops. `--delete-branch` is opt-in.
 Checks a PR out into `<repo>/worktrees/pr-<n>` (preferring the `upstream`
 remote, i.e. the canonical `tinyhumansai/*` repo), merges the base branch in
 (conflicts are left for the agent), wires upstream tracking + `pushRemote`
-to the contributor's fork so `git push` updates the PR, then launches the
-chosen harness (default `claude`) with a fix-the-PR prompt plus any extra
-text. When the harness exits you're asked whether to delete the worktree.
+to the contributor's fork so `git push` updates the PR, initializes submodules
+with `submodule-init` (shallow, full-depth fallback), then launches the chosen
+harness (default `claude`) with a fix-the-PR prompt plus any extra text. When
+the harness exits you're asked whether to delete the worktree.
 Draft PRs are refused by default; set `PR_FIX_ALLOW_DRAFT=1` to work one anyway.
 `PR_FIX_SAFE=1` disables the yolo/bypass flags; `PR_FIX_REPO` overrides repo
 resolution. Conventions follow `tinyhumansai/openhuman/scripts/shortcuts`.

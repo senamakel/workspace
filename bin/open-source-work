@@ -161,7 +161,7 @@ prepare_target() {
     git -C "$clone_path" worktree add -b "$branch" "$worktree" \
       "upstream/$default_branch"
   fi
-  git -C "$worktree" submodule update --init --recursive
+  "$SCRIPT_ROOT/bin/submodule-init" "$worktree"
 
   jq -n \
     --arg repository "$repo" \
