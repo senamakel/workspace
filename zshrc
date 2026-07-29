@@ -17,8 +17,20 @@ ocr() {
 res() {
   local remote=upstream
   git remote get-url upstream >/dev/null 2>&1 || remote=origin
-  git checkout main && git fetch "$remote" && git merge "$remote/main" \
-    && git submodule update --init --recursive && clear
+  git checkout main && git fetch "$remote" && git merge "$remote/main" || return
+  # Shallow submodules — the workflow superprojects carry enough of them that
+  # full history is the slow part of a reset. A depth-1 fetch can miss a gitlink
+  # that is not near a branch tip, so fall back to a full update rather than
+  # leaving submodules unchecked out. Same convention as `worktree`: set
+  # RES_DEPTH=0 to skip the shallow attempt entirely.
+  local depth="${RES_DEPTH:-1}"
+  if [ "$depth" != "0" ]; then
+    git submodule update --init --recursive --depth "$depth" \
+      || git submodule update --init --recursive || return
+  else
+    git submodule update --init --recursive || return
+  fi
+  clear
 }
 
 alias mrg="gf upstream && gm"
