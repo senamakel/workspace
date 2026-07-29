@@ -482,6 +482,74 @@ sentry-resolve MYAPP-9F --in-next-release
 sentry-link MYAPP-9F https://github.com/org/repo/issues/128
 ```
 
+### Langfuse helpers (`langfuse-env`, `langfuse-sessions`, `langfuse-session`, `langfuse-traces`, `langfuse-trace`, `langfuse-transcript`, `langfuse-observation`)
+
+Read-only tools that pull Langfuse sessions, traces and transcripts into a shape
+an agent can work with, for the staging and production instances and for the
+OpenHuman and Medulla workloads. The `langfuse` MCP server covers prompts,
+datasets, scores and evaluators but exposes **no** session/trace/observation
+reads — that gap is what these fill, by calling the Langfuse public API
+(`/api/public/*`) directly. All share `bin/langfuse-lib.sh` and take `--json` for
+structured output.
+
+**Environments** (`--env <alias>`) select the Langfuse instance and key pair, and
+therefore staging vs production. The map lives at `~/.config/langfuse/envs.tsv`
+(override `LANGFUSE_ENVS`), one `alias<TAB>base-url<TAB>public-key<TAB>secret-key`
+per line. A public-key field of `@/path/to/file` instead reads
+`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (and `LANGFUSE_BASE_URL`, when
+base-url is `-`) out of that JSON or dotenv file, so an env can point straight at
+the deployment secrets it already has and no key is copied to a second place.
+Resolution order: `--env` → `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` in the
+environment → `LANGFUSE_ENV` → the `default` alias (or the only entry).
+
+**Projects** (`--project <alias>`) are *not* credentials. One Langfuse project
+holds every workload for an environment — on staging, Medulla's `medulla-session`
+traces sit beside OpenHuman's `agent.turn` and `flow.run:*` — so "which product
+is this" is a trace-name question. `~/.config/langfuse/projects.tsv` (override
+`LANGFUSE_PROJECTS`) maps `alias<TAB>trace-name-regex`; with no map entry the
+alias is used as the regex. The regex is matched after fetching (the API's own
+`name` filter is exact-match only, and one product emits several names), so
+`--project` over-fetches to still satisfy `--limit`. Use `--name` for an exact,
+server-side filter.
+
+- `langfuse-env [--list] [--json]` — resolve and verify environments. Each is
+  probed with `GET /projects`, which reports the Langfuse project and org a key
+  pair really belongs to — the reliable way to tell two envs on one host apart.
+  Secret keys are never printed. Also lists the configured project presets.
+- `langfuse-sessions [--project <a>] [--since 24h] [--environment <e>] [--user <id>] [--limit N]`
+  — recent sessions. With `--project`/`--user` the list is derived from matching
+  traces (sessions themselves carry no name or user), and then also reports each
+  session's trace count, names, user and cost.
+- `langfuse-session <session-id>` — one session's metadata and the traces in it,
+  in one API call and with no observation payloads. The cheap overview.
+- `langfuse-traces [--project <a>] [--name <exact>] [--session <id>] [--user <id>] [--tag <t>] [--since 24h] [--limit N]`
+  — traces with timing, cost, tags, observation counts and clipped input/output.
+- `langfuse-trace <trace-id> [--type GENERATION] [--io] [--max-chars N]` — one
+  trace's observation tree with model, latency, tokens and cost per step;
+  `--io` prints full payloads instead of previews.
+- `langfuse-transcript <session-id|trace-id> [--full] [--max-chars N] [--max-traces N]`
+  — the readable conversation: each trace's user input and final output, plus a
+  one-line summary of the steps between. `--full` adds every generation's
+  messages, system prompts included — what you want when debugging what the
+  model actually saw. The id may be either kind: sessions are tried first and a
+  404 falls back to a trace, since the two look alike in the Langfuse UI.
+- `langfuse-observation <id> | --list [--trace <id>] [--type GENERATION] [--name <n>] [--since 24h]`
+  — the drill-down once a transcript points at one model call: untruncated
+  messages, output, model parameters, tokens and cost.
+
+Payloads are clipped per field with a visible `…[+N more chars]` marker, so an
+agent can always tell truncated data from complete data and re-fetch with a
+larger `--max-chars` (`0` disables clipping on `langfuse-observation`).
+
+```sh
+langfuse-env --list                                   # which envs work, and what they point at
+langfuse-sessions --env staging --project medulla --since 24h
+langfuse-transcript 35cdf638-… --env staging          # read the conversation
+langfuse-transcript 35cdf638-… --env staging --full   # with every prompt the model saw
+langfuse-traces --env prod --project oh --since 7d --json
+langfuse-observation 5cd9db98… --env staging          # one model call, in full
+```
+
 ### `deepcode [claude args...]`
 
 Runs the Claude Code CLI but backed by DeepSeek models through OpenRouter's
@@ -532,3 +600,8 @@ submodule pointers are staged and committed as "Update submodule pointers";
   so update it by re-copying from upstream and rerunning `bin/check-skills`.
 - `worktree/` and `worktrees/` are gitignored — feature branches may live in
   either convention without polluting repository status.
+- The `langfuse-*` and `sentry-*` maps (`~/.config/langfuse/envs.tsv`,
+  `~/.config/langfuse/projects.tsv`, `~/.config/sentry/repos.tsv`) are
+  machine-local and deliberately not synced: they name credentials and local
+  secret paths. Recreate them per box — `langfuse-env --list` and `sentry-repo`
+  report what each machine currently resolves.

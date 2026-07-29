@@ -4,7 +4,7 @@
 
 This repository is the source of truth for personal shell and coding-agent configuration. `install.sh` links managed files into the user’s home directory. Shared workflow rules live in `RULES.md`; shared agent sources live in `agents/<name>/` and are rendered into harness-native files. Shared skills live in `skills/<name>/` and are linked into both Claude and Codex. Other harness-specific configuration is under `claude/`, `codex/`, and `opencode/`. Executable helpers belong in `bin/`, while custom shell aliases and functions live in `zshrc`. Keep every skill self-contained, with `SKILL.md` as its entry point and optional resources inside the same directory.
 
-Do not commit machine-local credentials or generated state. In particular, `~/.codex/config.toml` and the local OpenCode package/config files are intentionally excluded.
+Do not commit machine-local credentials or generated state. In particular, `~/.codex/config.toml` and the local OpenCode package/config files are intentionally excluded, as are the credential maps the `bin/` helpers read (`~/.config/langfuse/envs.tsv`, `~/.config/langfuse/projects.tsv`, `~/.config/sentry/repos.tsv`). Tools may point at existing secret files by path, but must never copy a key into this repository.
 
 ## Build, Test, and Development Commands
 
