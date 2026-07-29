@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# langfuse-trace — one Langfuse trace with its observation tree.
+#
+# Usage: langfuse-trace <trace-id> [--env <alias>] [--json]
+#                       [--type <SPAN|GENERATION|EVENT>] [--max-chars <N>] [--io]
+#
+#   langfuse-trace 6babc639e31aee144ca09d88 --env staging
+#   langfuse-trace 6babc639... --env staging --io --max-chars 2000
+#   langfuse-trace 6babc639... --env staging --type GENERATION --json
+#
+# The default view is the structure — nested observations with model, latency,
+# tokens and cost — plus a clipped preview of each one's input/output. `--io`
+# prints full payloads (still bounded by --max-chars, default 400 / 4000 with
+# --io). Use `langfuse-transcript` instead when you want the conversation rather
+# than the execution tree.
+set -euo pipefail
+# shellcheck source=bin/langfuse-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/langfuse-lib.sh"
+
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"; ENV_ALIAS=""; TRACE=""; TYPE=""; MAXC=""; FULL_IO=0
+BASE=""; PK=""; SK=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)       FORMAT="json"; shift ;;
+    --io)         FULL_IO=1; shift ;;
+    --env)        [ $# -ge 2 ] || { usage; lf_fail "--env needs a value"; }
+                  ENV_ALIAS="$2"; shift 2 ;;
+    --type)       [ $# -ge 2 ] || { usage; lf_fail "--type needs a value"; }
+                  TYPE="$2"; shift 2 ;;
+    --max-chars)  [ $# -ge 2 ] || { usage; lf_fail "--max-chars needs a value"; }
+                  MAXC="$2"; shift 2 ;;
+    --base-url)   [ $# -ge 2 ] || { usage; lf_fail "--base-url needs a value"; }
+                  BASE="$2"; shift 2 ;;
+    --public-key) [ $# -ge 2 ] || { usage; lf_fail "--public-key needs a value"; }
+                  PK="$2"; shift 2 ;;
+    --secret-key) [ $# -ge 2 ] || { usage; lf_fail "--secret-key needs a value"; }
+                  SK="$2"; shift 2 ;;
+    -h|--help)    usage; exit 0 ;;
+    -*)           usage; lf_fail "unknown argument: $1" ;;
+    *)            [ -z "$TRACE" ] || { usage; lf_fail "unexpected argument: $1"; }
+                  TRACE="$1"; shift ;;
+  esac
+done
+[ -n "$TRACE" ] || { usage; lf_fail "no trace id given"; }
+if [ -z "$MAXC" ]; then [ "$FULL_IO" = "1" ] && MAXC=4000 || MAXC=400; fi
+case "$MAXC" in ''|*[!0-9]*) lf_fail "--max-chars must be an integer" ;; esac
+
+lf_require curl jq
+lf_config "$ENV_ALIAS" "$BASE" "$PK" "$SK"
+
+RAW="$(lf_api "/traces/$(lf_urlencode "$TRACE")")"
+
+REPORT="$(jq --arg env "$LF_ENV_R" --arg host "$LF_BASE" --arg type "$TYPE" \
+             --argjson maxc "$MAXC" "
+  $LF_JQ_PRELUDE
+  . as \$t
+  | {
+      env: \$env, host: \$host,
+      id: .id, name: .name, timestamp: .timestamp,
+      sessionId: .sessionId, userId: .userId,
+      environment: (.environment // null),
+      release: (.release // null),
+      tags: (.tags // []),
+      latency: (.latency // null),
+      totalCost: (.totalCost // null),
+      input: ((.input | lftext) | lfclip(\$maxc)),
+      output: ((.output | lftext) | lfclip(\$maxc)),
+      scores: ((.scores // []) | map({name, value: (.value // .stringValue)})),
+      observations: ((.observations // [])
+        | map(select(\$type == \"\" or .type == \$type))
+        | sort_by(.startTime)
+        | map({
+            id, type, name,
+            parentObservationId: (.parentObservationId // null),
+            startTime, endTime,
+            level: (.level // null),
+            statusMessage: (.statusMessage // null),
+            model: (.model // null),
+            latency: (.latency // null),
+            promptTokens: (.promptTokens // null),
+            completionTokens: (.completionTokens // null),
+            totalCost: (.calculatedTotalCost // .totalPrice // null),
+            input: ((.input | lftext) | lfclip(\$maxc)),
+            output: ((.output | lftext) | lfclip(\$maxc))
+          }))
+    }
+  | . + {observationCount: (.observations | length)}" <<<"$RAW")"
+
+if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+
+jq -r --argjson io "$FULL_IO" '
+  "Langfuse trace \(.id) — env \(.env)",
+  "  name: \(.name // "-")  time: \(.timestamp)  environment: \(.environment // "-")",
+  "  session: \(.sessionId // "-")  user: \(.userId // "-")  release: \(.release // "-")",
+  "  latency: \(.latency // "-")  cost: \(.totalCost // "-")  observations: \(.observationCount)\(if (.tags | length) > 0 then "  tags: \(.tags | join(", "))" else "" end)",
+  (if (.scores | length) > 0 then "  scores: \(.scores | map("\(.name)=\(.value)") | join(", "))" else empty end),
+  (if .input  != "" then "", "INPUT", "  \(.input | gsub("\n"; "\n  "))"  else empty end),
+  (if .output != "" then "", "OUTPUT", "  \(.output | gsub("\n"; "\n  "))" else empty end),
+  "",
+  "OBSERVATIONS",
+  (.observations[] |
+    "  [\(.type)] \(.name // "-")\(if .model then "  model: \(.model)" else "" end)  \(.startTime)",
+    "    latency: \(.latency // "-")  tokens: \(.promptTokens // "-")/\(.completionTokens // "-")  cost: \(.totalCost // "-")\(if .level and .level != "DEFAULT" then "  level: \(.level)" else "" end)",
+    (if .statusMessage then "    status: \(.statusMessage)" else empty end),
+    (if $io == 1 then
+       (if .input  != "" then "    in:  \(.input  | gsub("\n"; "\n      "))"  else empty end),
+       (if .output != "" then "    out: \(.output | gsub("\n"; "\n      "))" else empty end)
+     else
+       (if .input  != "" then "    in:  \(.input  | gsub("\n"; " ") | gsub("[[:space:]]+"; " "))"  else empty end),
+       (if .output != "" then "    out: \(.output | gsub("\n"; " ") | gsub("[[:space:]]+"; " "))" else empty end)
+     end),
+    ""
+  )
+' <<<"$REPORT"

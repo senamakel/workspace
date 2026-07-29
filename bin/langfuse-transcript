@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# langfuse-transcript — the readable conversation behind a Langfuse session or trace.
+#
+# Usage: langfuse-transcript <session-id|trace-id> [--env <alias>] [--json]
+#                            [--full] [--max-chars <N>] [--max-traces <N>]
+#
+#   langfuse-transcript 35cdf638-db2d-4f3a-813e-745f6e966658 --env staging
+#   langfuse-transcript 6babc639e31aee144ca09d88 --env staging --full
+#   langfuse-transcript 35cdf638-... --env staging --json --max-chars 8000
+#
+# The id may be either a session or a trace: sessions are tried first, and a
+# 404 falls back to a single trace, because the ids look alike in the Langfuse
+# UI and an agent should not have to know which it copied.
+#
+# Default view is the conversation — each trace's user input and final output,
+# with a one-line summary of the model calls and tools in between. `--full` adds
+# every generation's messages (system prompts included), which is what you want
+# when debugging what the model actually saw. Payloads are clipped to
+# --max-chars (default 1200, or 4000 with --full) per field.
+set -euo pipefail
+# shellcheck source=bin/langfuse-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/langfuse-lib.sh"
+
+usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"; ENV_ALIAS=""; ID=""; FULL=0; MAXC=""; MAXT=20
+BASE=""; PK=""; SK=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)        FORMAT="json"; shift ;;
+    --full)        FULL=1; shift ;;
+    --env)         [ $# -ge 2 ] || { usage; lf_fail "--env needs a value"; }
+                   ENV_ALIAS="$2"; shift 2 ;;
+    --max-chars)   [ $# -ge 2 ] || { usage; lf_fail "--max-chars needs a value"; }
+                   MAXC="$2"; shift 2 ;;
+    --max-traces)  [ $# -ge 2 ] || { usage; lf_fail "--max-traces needs a value"; }
+                   MAXT="$2"; shift 2 ;;
+    --base-url)    [ $# -ge 2 ] || { usage; lf_fail "--base-url needs a value"; }
+                   BASE="$2"; shift 2 ;;
+    --public-key)  [ $# -ge 2 ] || { usage; lf_fail "--public-key needs a value"; }
+                   PK="$2"; shift 2 ;;
+    --secret-key)  [ $# -ge 2 ] || { usage; lf_fail "--secret-key needs a value"; }
+                   SK="$2"; shift 2 ;;
+    -h|--help)     usage; exit 0 ;;
+    -*)            usage; lf_fail "unknown argument: $1" ;;
+    *)             [ -z "$ID" ] || { usage; lf_fail "unexpected argument: $1"; }
+                   ID="$1"; shift ;;
+  esac
+done
+[ -n "$ID" ] || { usage; lf_fail "no session or trace id given"; }
+if [ -z "$MAXC" ]; then [ "$FULL" = "1" ] && MAXC=4000 || MAXC=1200; fi
+case "$MAXC" in ''|*[!0-9]*) lf_fail "--max-chars must be an integer" ;; esac
+case "$MAXT" in ''|*[!0-9]*|0) lf_fail "--max-traces must be a positive integer" ;; esac
+
+lf_require curl jq
+lf_config "$ENV_ALIAS" "$BASE" "$PK" "$SK"
+
+# Resolve the id: session first (the common case), else a single trace.
+KIND="session"
+if SESSION_RAW="$(lf_api "/sessions/$(lf_urlencode "$ID")" 2>/dev/null)"; then
+  TRACE_IDS="$(jq -r '(.traces // []) | sort_by(.timestamp) | .[].id' <<<"$SESSION_RAW")"
+  SESSION_ID="$(jq -r '.id' <<<"$SESSION_RAW")"
+  CREATED="$(jq -r '.createdAt // ""' <<<"$SESSION_RAW")"
+  DEPLOY_ENV="$(jq -r '.environment // ""' <<<"$SESSION_RAW")"
+else
+  KIND="trace"; TRACE_IDS="$ID"; SESSION_ID=""; CREATED=""; DEPLOY_ENV=""
+fi
+[ -n "$TRACE_IDS" ] || lf_fail "no traces found for '$ID' in env '$LF_ENV_R'"
+
+TRUNCATED=0
+COUNT="$(printf '%s\n' "$TRACE_IDS" | wc -l | tr -d ' ')"
+if [ "$COUNT" -gt "$MAXT" ]; then
+  TRACE_IDS="$(printf '%s\n' "$TRACE_IDS" | head -n "$MAXT")"
+  TRUNCATED=$(( COUNT - MAXT ))
+fi
+
+ACC="$(mktemp)"; trap 'rm -f "$ACC"' EXIT
+while IFS= read -r tid; do
+  [ -n "$tid" ] || continue
+  lf_api "/traces/$(lf_urlencode "$tid")" \
+    | jq -c --argjson maxc "$MAXC" "
+      $LF_JQ_PRELUDE
+      {
+        id, name, timestamp, sessionId, userId,
+        environment: (.environment // null),
+        latency: (.latency // null),
+        totalCost: (.totalCost // null),
+        tags: (.tags // []),
+        input: ((.input | lftext) | lfclip(\$maxc)),
+        output: ((.output | lftext) | lfclip(\$maxc)),
+        steps: ((.observations // []) | sort_by(.startTime) | map({
+          type, name,
+          model: (.model // null),
+          level: (.level // null),
+          statusMessage: (.statusMessage // null),
+          latency: (.latency // null),
+          promptTokens: (.promptTokens // null),
+          completionTokens: (.completionTokens // null),
+          messages: (if .type == \"GENERATION\"
+                     then ((.input // []) | if type == \"array\"
+                           then map({role: (.role // \"?\"),
+                                     content: ((.content // .) | lftext | lfclip(\$maxc))})
+                           else [{role: \"input\", content: (lftext | lfclip(\$maxc))}] end)
+                     else [] end),
+          reply: (if .type == \"GENERATION\"
+                  then ((.output | lftext) | lfclip(\$maxc)) else \"\" end)
+        }))
+      }" >>"$ACC"
+done <<<"$TRACE_IDS"
+
+REPORT="$(jq -s --arg env "$LF_ENV_R" --arg host "$LF_BASE" --arg kind "$KIND" \
+              --arg sid "$SESSION_ID" --arg created "$CREATED" \
+              --arg denv "$DEPLOY_ENV" --argjson trunc "$TRUNCATED" '
+  {
+    env: $env, host: $host, kind: $kind,
+    sessionId: (if $sid == "" then null else $sid end),
+    createdAt: (if $created == "" then null else $created end),
+    environment: (if $denv == "" then null else $denv end),
+    traceCount: length,
+    omittedTraces: $trunc,
+    traces: .
+  }' "$ACC")"
+
+if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+
+jq -r --argjson full "$FULL" '
+  "Langfuse transcript — env \(.env)  \(.kind): \(.sessionId // .traces[0].id)",
+  "  traces: \(.traceCount)\(if .createdAt then "  created: \(.createdAt)" else "" end)\(if .environment then "  environment: \(.environment)" else "" end)",
+  (if .omittedTraces > 0 then "  NOTE: \(.omittedTraces) further trace(s) omitted — raise --max-traces" else empty end),
+  (.traces[] |
+    "",
+    "──────────────────────────────────────────────────────────────",
+    "trace \(.id)  \(.name // "-")  \(.timestamp)",
+    "  user: \(.userId // "-")  latency: \(.latency // "-")  cost: \(.totalCost // "-")\(if (.tags | length) > 0 then "  tags: \(.tags | join(", "))" else "" end)",
+    (if .input != "" then "", "USER:", "  \(.input | gsub("\n"; "\n  "))" else empty end),
+    (if $full == 1 then
+      (.steps[] | select(.type == "GENERATION") |
+        "",
+        "  ── generation \(.name // "-")\(if .model then "  [\(.model)]" else "" end)  tokens \(.promptTokens // "-")/\(.completionTokens // "-")",
+        (.messages[] | "    <\(.role)> \(.content | gsub("\n"; "\n      "))"),
+        (if .reply != "" then "    => \(.reply | gsub("\n"; "\n       "))" else empty end)
+      )
+     else
+      (if (.steps | length) > 0 then
+        "",
+        "STEPS:",
+        (.steps[] |
+          "  [\(.type)] \(.name // "-")\(if .model then " (\(.model))" else "" end)\(if .latency then "  \(.latency)s" else "" end)\(if .level and .level != "DEFAULT" then "  level: \(.level)" else "" end)\(if .statusMessage then "  \(.statusMessage)" else "" end)")
+       else empty end)
+     end),
+    (if .output != "" then "", "ASSISTANT:", "  \(.output | gsub("\n"; "\n  "))" else empty end)
+  )
+' <<<"$REPORT"

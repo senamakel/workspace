@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# langfuse-env — show and verify the Langfuse environments the tools can reach.
+#
+# Usage: langfuse-env [--list] [--json] [--env <alias>]
+#                     [--base-url <url>] [--public-key <pk>] [--secret-key <sk>]
+#
+#   langfuse-env                 resolve the default env and verify its credentials
+#   langfuse-env --env prod      verify one configured env
+#   langfuse-env --list          every configured env, each probed for its project
+#   langfuse-env --json          stable JSON for agents
+#
+# Each env is probed with GET /api/public/projects, which reports the Langfuse
+# project and organization a key pair actually belongs to — the reliable way to
+# tell staging from production apart when both live on one host. Secret keys are
+# never printed; public keys are shown truncated.
+set -euo pipefail
+# shellcheck source=bin/langfuse-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/langfuse-lib.sh"
+
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"; LIST=0; ENV_ALIAS=""; BASE=""; PK=""; SK=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list)       LIST=1; shift ;;
+    --json)       FORMAT="json"; shift ;;
+    --env)        [ $# -ge 2 ] || { usage; lf_fail "--env needs a value"; }
+                  ENV_ALIAS="$2"; shift 2 ;;
+    --base-url)   [ $# -ge 2 ] || { usage; lf_fail "--base-url needs a value"; }
+                  BASE="$2"; shift 2 ;;
+    --public-key) [ $# -ge 2 ] || { usage; lf_fail "--public-key needs a value"; }
+                  PK="$2"; shift 2 ;;
+    --secret-key) [ $# -ge 2 ] || { usage; lf_fail "--secret-key needs a value"; }
+                  SK="$2"; shift 2 ;;
+    -h|--help)    usage; exit 0 ;;
+    *)            usage; lf_fail "unknown argument: $1" ;;
+  esac
+done
+
+lf_require curl jq
+
+# probe — one env's resolved identity as a JSON object.
+probe() {
+  local alias="$1" ok project org err=""
+  # Resolve in a subshell first: lf_fail exits, and a bad alias must not kill
+  # the whole --list sweep.
+  if ! err="$( (lf_config "$alias" "$BASE" "$PK" "$SK") 2>&1 )"; then
+    jq -n --arg a "${alias:-(default)}" --arg e "${err#\[FAIL\] }" \
+      '{env: $a, ok: false, error: $e}'
+    return 0
+  fi
+  lf_config "$alias" "$BASE" "$PK" "$SK"
+  local body
+  if body="$(lf_api "/projects" 2>&1)"; then
+    project="$(jq -r '.data[0].name // "?"' <<<"$body" 2>/dev/null)"
+    org="$(jq -r '.data[0].organization.name // "?"' <<<"$body" 2>/dev/null)"
+    ok=true
+  else
+    project=""; org=""; ok=false; err="${body#\[FAIL\] }"
+  fi
+  jq -n --arg a "${LF_ENV_R:-$alias}" --arg base "$LF_BASE" \
+        --arg pk "$(printf '%.14s…' "$LF_PK")" --arg p "$project" \
+        --arg o "$org" --argjson ok "$ok" --arg e "$err" '
+    {env: $a, ok: $ok, baseUrl: $base, publicKey: $pk,
+     project: (if $p == "" then null else $p end),
+     organization: (if $o == "" then null else $o end),
+     error: (if $e == "" then null else $e end)}'
+}
+
+if [ "$LIST" = "1" ]; then
+  ALIASES="$(lf_env_aliases)"
+  [ -n "$ALIASES" ] || lf_fail "no envs configured in $(lf_envs_file)"
+  REPORT="$(while IFS= read -r a; do probe "$a"; done <<<"$ALIASES" | jq -s \
+             --arg f "$(lf_envs_file)" '{envsFile: $f, envs: .}')"
+else
+  REPORT="$(probe "$ENV_ALIAS" | jq --arg f "$(lf_envs_file)" '{envsFile: $f, envs: [.]}')"
+fi
+
+PROJECTS_FILE="$(lf_projects_file)"
+if [ -f "$PROJECTS_FILE" ]; then
+  # Patterns are regexes full of backslashes: let jq do the JSON quoting.
+  PRESETS="$(awk -F'\t' '!/^[[:space:]]*#/ && NF >= 2 && $1 != ""' "$PROJECTS_FILE" \
+    | jq -R -s 'split("\n") | map(select(. != "") | split("\t")
+                 | {alias: .[0], tracePattern: .[1]})')"
+else
+  PRESETS='[]'
+fi
+REPORT="$(jq --argjson p "$PRESETS" --arg pf "$PROJECTS_FILE" \
+             '. + {projectsFile: $pf, projects: $p}' <<<"$REPORT")"
+
+if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+
+jq -r '
+  "Langfuse envs  [map: \(.envsFile)]",
+  (.envs[] |
+    "",
+    "\(.env)  \(if .ok then "OK" else "FAILED" end)",
+    (if .baseUrl then "  host: \(.baseUrl)" else empty end),
+    (if .project then "  project: \(.project)  (org: \(.organization))" else empty end),
+    (if .publicKey then "  key: \(.publicKey)" else empty end),
+    (if .error then "  error: \(.error)" else empty end)
+  ),
+  "",
+  "Project presets  [map: \(.projectsFile)]",
+  (if (.projects | length) == 0
+   then "  (none — --project <x> falls back to matching trace names against /x/)"
+   else (.projects[] | "  \(.alias) -> trace name =~ /\(.tracePattern)/") end)
+' <<<"$REPORT"

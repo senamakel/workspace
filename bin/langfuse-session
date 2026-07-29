@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# langfuse-session — one Langfuse session: its metadata and the traces in it.
+#
+# Usage: langfuse-session <session-id> [--env <alias>] [--json]
+#
+#   langfuse-session 35cdf638-db2d-4f3a-813e-745f6e966658 --env staging
+#   langfuse-session 35cdf638-... --env staging --json
+#
+# This is the cheap overview — one API call, no observation payloads. For the
+# readable conversation use `langfuse-transcript <session-id>`.
+set -euo pipefail
+# shellcheck source=bin/langfuse-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/langfuse-lib.sh"
+
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"; ENV_ALIAS=""; SESSION=""; BASE=""; PK=""; SK=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)       FORMAT="json"; shift ;;
+    --env)        [ $# -ge 2 ] || { usage; lf_fail "--env needs a value"; }
+                  ENV_ALIAS="$2"; shift 2 ;;
+    --base-url)   [ $# -ge 2 ] || { usage; lf_fail "--base-url needs a value"; }
+                  BASE="$2"; shift 2 ;;
+    --public-key) [ $# -ge 2 ] || { usage; lf_fail "--public-key needs a value"; }
+                  PK="$2"; shift 2 ;;
+    --secret-key) [ $# -ge 2 ] || { usage; lf_fail "--secret-key needs a value"; }
+                  SK="$2"; shift 2 ;;
+    -h|--help)    usage; exit 0 ;;
+    -*)           usage; lf_fail "unknown argument: $1" ;;
+    *)            [ -z "$SESSION" ] || { usage; lf_fail "unexpected argument: $1"; }
+                  SESSION="$1"; shift ;;
+  esac
+done
+[ -n "$SESSION" ] || { usage; lf_fail "no session id given"; }
+
+lf_require curl jq
+lf_config "$ENV_ALIAS" "$BASE" "$PK" "$SK"
+
+RAW="$(lf_api "/sessions/$(lf_urlencode "$SESSION")")"
+
+REPORT="$(jq --arg env "$LF_ENV_R" --arg host "$LF_BASE" "
+  $LF_JQ_PRELUDE
+  {
+    env: \$env, host: \$host,
+    id, createdAt, projectId,
+    environment: (.environment // null),
+    traceCount: ((.traces // []) | length),
+    users: ((.traces // []) | map(.userId) | map(select(. != null)) | unique),
+    totalCost: ((.traces // []) | map(.totalCost) | map(select(. != null)) | add),
+    traces: ((.traces // []) | map({
+      id, name, timestamp, userId,
+      latency: (.latency // null),
+      totalCost: (.totalCost // null),
+      tags: (.tags // []),
+      input: ((.input | lftext) | lfline | lfclip(200)),
+      output: ((.output | lftext) | lfline | lfclip(200))
+    }) | sort_by(.timestamp))
+  }" <<<"$RAW")"
+
+if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+
+jq -r '
+  "Langfuse session \(.id) — env \(.env)",
+  "  created: \(.createdAt)  environment: \(.environment // "-")  traces: \(.traceCount)",
+  "  users: \(if (.users | length) > 0 then (.users | join(", ")) else "-" end)  cost: \(.totalCost // "-")",
+  (.traces[] |
+    "",
+    "  \(.timestamp)  \(.name // "(unnamed)")  \(.id)",
+    "    latency: \(.latency // "-")  cost: \(.totalCost // "-")\(if (.tags | length) > 0 then "  tags: \(.tags | join(", "))" else "" end)",
+    (if .input  != "" then "    in:  \(.input)"  else empty end),
+    (if .output != "" then "    out: \(.output)" else empty end)
+  ),
+  "",
+  "Transcript: langfuse-transcript \(.id) --env \(.env)"
+' <<<"$REPORT"

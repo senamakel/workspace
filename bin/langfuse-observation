@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# langfuse-observation — one observation's full payload, or a filtered list.
+#
+# Usage: langfuse-observation <observation-id> [--env <alias>] [--json] [--max-chars <N>]
+#        langfuse-observation --list [--env <alias>] [--trace <id>] [--name <n>]
+#                             [--type <SPAN|GENERATION|EVENT>] [--since <24h|ISO>]
+#                             [--limit <N>] [--json]
+#
+#   langfuse-observation --list --env staging --type GENERATION --since 24h
+#   langfuse-observation --list --env staging --trace 6babc639... --name orchestrate
+#   langfuse-observation 0f2c... --env staging
+#
+# The single-id form is the drill-down after `langfuse-trace`/`langfuse-transcript`
+# point at one model call: it prints that call's untruncated messages, output,
+# model parameters, tokens and cost. Payloads are clipped only by --max-chars
+# (default 8000; 0 disables clipping).
+set -euo pipefail
+# shellcheck source=bin/langfuse-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/langfuse-lib.sh"
+
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"; ENV_ALIAS=""; OBS=""; LIST=0; TRACE=""; NAME=""; TYPE=""
+SINCE=""; LIMIT=20; MAXC=8000; BASE=""; PK=""; SK=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)       FORMAT="json"; shift ;;
+    --list)       LIST=1; shift ;;
+    --env)        [ $# -ge 2 ] || { usage; lf_fail "--env needs a value"; }
+                  ENV_ALIAS="$2"; shift 2 ;;
+    --trace)      [ $# -ge 2 ] || { usage; lf_fail "--trace needs a value"; }
+                  TRACE="$2"; shift 2 ;;
+    --name)       [ $# -ge 2 ] || { usage; lf_fail "--name needs a value"; }
+                  NAME="$2"; shift 2 ;;
+    --type)       [ $# -ge 2 ] || { usage; lf_fail "--type needs a value"; }
+                  TYPE="$2"; shift 2 ;;
+    --since)      [ $# -ge 2 ] || { usage; lf_fail "--since needs a value"; }
+                  SINCE="$2"; shift 2 ;;
+    --limit)      [ $# -ge 2 ] || { usage; lf_fail "--limit needs a value"; }
+                  LIMIT="$2"; shift 2 ;;
+    --max-chars)  [ $# -ge 2 ] || { usage; lf_fail "--max-chars needs a value"; }
+                  MAXC="$2"; shift 2 ;;
+    --base-url)   [ $# -ge 2 ] || { usage; lf_fail "--base-url needs a value"; }
+                  BASE="$2"; shift 2 ;;
+    --public-key) [ $# -ge 2 ] || { usage; lf_fail "--public-key needs a value"; }
+                  PK="$2"; shift 2 ;;
+    --secret-key) [ $# -ge 2 ] || { usage; lf_fail "--secret-key needs a value"; }
+                  SK="$2"; shift 2 ;;
+    -h|--help)    usage; exit 0 ;;
+    -*)           usage; lf_fail "unknown argument: $1" ;;
+    *)            [ -z "$OBS" ] || { usage; lf_fail "unexpected argument: $1"; }
+                  OBS="$1"; shift ;;
+  esac
+done
+case "$MAXC" in ''|*[!0-9]*) lf_fail "--max-chars must be an integer" ;; esac
+case "$LIMIT" in ''|*[!0-9]*|0) lf_fail "--limit must be a positive integer" ;; esac
+[ "$LIST" = "1" ] || [ -n "$OBS" ] || { usage; lf_fail "give an observation id, or --list"; }
+
+lf_require curl jq
+lf_config "$ENV_ALIAS" "$BASE" "$PK" "$SK"
+
+if [ "$LIST" = "1" ]; then
+  Q=""
+  [ -z "$TRACE" ] || Q="$Q&traceId=$(lf_urlencode "$TRACE")"
+  [ -z "$NAME" ]  || Q="$Q&name=$(lf_urlencode "$NAME")"
+  [ -z "$TYPE" ]  || Q="$Q&type=$(lf_urlencode "$TYPE")"
+  [ -z "$SINCE" ] || Q="$Q&fromStartTime=$(lf_urlencode "$(lf_iso "$SINCE")")"
+  RAW="$(lf_api_paged "/observations${Q:+?${Q#&}}" "$LIMIT")"
+  REPORT="$(jq --arg env "$LF_ENV_R" "
+    $LF_JQ_PRELUDE
+    {env: \$env, count: length, observations: map({
+      id, type, name, traceId, startTime,
+      model: (.model // null),
+      latency: (.latency // null),
+      promptTokens: (.promptTokens // null),
+      completionTokens: (.completionTokens // null),
+      level: (.level // null),
+      input: ((.input | lftext) | lfline | lfclip(160)),
+      output: ((.output | lftext) | lfline | lfclip(160))
+    })}" <<<"$RAW")"
+
+  if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+  jq -r '
+    "Langfuse observations — env \(.env)  (\(.count) found)",
+    (.observations[] |
+      "",
+      "\(.id)  [\(.type)] \(.name // "-")\(if .model then "  (\(.model))" else "" end)  \(.startTime)",
+      "  trace: \(.traceId)  latency: \(.latency // "-")  tokens: \(.promptTokens // "-")/\(.completionTokens // "-")",
+      (if .input  != "" then "  in:  \(.input)"  else empty end),
+      (if .output != "" then "  out: \(.output)" else empty end))
+  ' <<<"$REPORT"
+  exit 0
+fi
+
+RAW="$(lf_api "/observations/$(lf_urlencode "$OBS")")"
+REPORT="$(jq --arg env "$LF_ENV_R" --argjson maxc "$MAXC" "
+  $LF_JQ_PRELUDE
+  {
+    env: \$env,
+    id, type, name, traceId,
+    parentObservationId: (.parentObservationId // null),
+    startTime, endTime,
+    model: (.model // null),
+    modelParameters: (.modelParameters // null),
+    promptName: (.promptName // null),
+    promptVersion: (.promptVersion // null),
+    level: (.level // null),
+    statusMessage: (.statusMessage // null),
+    latency: (.latency // null),
+    promptTokens: (.promptTokens // null),
+    completionTokens: (.completionTokens // null),
+    totalCost: (.calculatedTotalCost // .totalPrice // null),
+    messages: ((.input // []) | if type == \"array\"
+               then map({role: (.role // \"?\"),
+                         content: ((.content // .) | lftext | lfclip(\$maxc))})
+               else [{role: \"input\", content: (lftext | lfclip(\$maxc))}] end),
+    output: ((.output | lftext) | lfclip(\$maxc)),
+    metadata: (.metadata // null)
+  }" <<<"$RAW")"
+
+if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+
+jq -r '
+  "Langfuse observation \(.id) — env \(.env)",
+  "  [\(.type)] \(.name // "-")\(if .model then "  model: \(.model)" else "" end)",
+  "  trace: \(.traceId)  parent: \(.parentObservationId // "-")",
+  "  time: \(.startTime) → \(.endTime // "-")  latency: \(.latency // "-")",
+  "  tokens: \(.promptTokens // "-")/\(.completionTokens // "-")  cost: \(.totalCost // "-")\(if .promptName then "  prompt: \(.promptName) v\(.promptVersion // "-")" else "" end)",
+  (if .statusMessage then "  status: \(.level // "") \(.statusMessage)" else empty end),
+  (if (.messages | length) > 0 then "", "MESSAGES", (.messages[] | "  <\(.role)> \(.content | gsub("\n"; "\n    "))") else empty end),
+  (if .output != "" then "", "OUTPUT", "  \(.output | gsub("\n"; "\n  "))" else empty end)
+' <<<"$REPORT"

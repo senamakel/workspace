@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# langfuse-sessions — agent-friendly list of Langfuse sessions.
+#
+# Usage: langfuse-sessions [--env <alias>] [--project <alias>] [--json]
+#                          [--since <24h|7d|ISO>] [--until <ISO>] [--limit <N>]
+#                          [--environment <deployment-env>] [--user <id>]
+#
+#   langfuse-sessions --env staging --since 24h
+#   langfuse-sessions --env staging --project medulla --limit 10
+#   langfuse-sessions --env prod --json
+#
+# `--env` picks the Langfuse instance/credentials (staging vs production);
+# `--environment` filters on the deployment tag inside that project. `--project`
+# and `--user` are trace-level facts, so they are resolved by listing matching
+# traces and grouping them by session — with those flags the report also carries
+# each session's trace names and counts.
+set -euo pipefail
+# shellcheck source=bin/langfuse-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/langfuse-lib.sh"
+
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+
+FORMAT="text"; ENV_ALIAS=""; PROJECT=""; SINCE=""; UNTIL=""; LIMIT=20
+DEPLOY_ENV=""; USER_ID=""; BASE=""; PK=""; SK=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)        FORMAT="json"; shift ;;
+    --env)         [ $# -ge 2 ] || { usage; lf_fail "--env needs a value"; }
+                   ENV_ALIAS="$2"; shift 2 ;;
+    --project)     [ $# -ge 2 ] || { usage; lf_fail "--project needs a value"; }
+                   PROJECT="$2"; shift 2 ;;
+    --since)       [ $# -ge 2 ] || { usage; lf_fail "--since needs a value"; }
+                   SINCE="$2"; shift 2 ;;
+    --until)       [ $# -ge 2 ] || { usage; lf_fail "--until needs a value"; }
+                   UNTIL="$2"; shift 2 ;;
+    --limit)       [ $# -ge 2 ] || { usage; lf_fail "--limit needs a value"; }
+                   LIMIT="$2"; shift 2 ;;
+    --environment) [ $# -ge 2 ] || { usage; lf_fail "--environment needs a value"; }
+                   DEPLOY_ENV="$2"; shift 2 ;;
+    --user)        [ $# -ge 2 ] || { usage; lf_fail "--user needs a value"; }
+                   USER_ID="$2"; shift 2 ;;
+    --base-url)    [ $# -ge 2 ] || { usage; lf_fail "--base-url needs a value"; }
+                   BASE="$2"; shift 2 ;;
+    --public-key)  [ $# -ge 2 ] || { usage; lf_fail "--public-key needs a value"; }
+                   PK="$2"; shift 2 ;;
+    --secret-key)  [ $# -ge 2 ] || { usage; lf_fail "--secret-key needs a value"; }
+                   SK="$2"; shift 2 ;;
+    -h|--help)     usage; exit 0 ;;
+    *)             usage; lf_fail "unknown argument: $1" ;;
+  esac
+done
+case "$LIMIT" in ''|*[!0-9]*|0) lf_fail "--limit must be a positive integer" ;; esac
+
+lf_require curl jq
+lf_config "$ENV_ALIAS" "$BASE" "$PK" "$SK"
+
+Q=""
+[ -z "$SINCE" ]      || Q="$Q&fromTimestamp=$(lf_urlencode "$(lf_iso "$SINCE")")"
+[ -z "$UNTIL" ]      || Q="$Q&toTimestamp=$(lf_urlencode "$(lf_iso "$UNTIL")")"
+[ -z "$DEPLOY_ENV" ] || Q="$Q&environment=$(lf_urlencode "$DEPLOY_ENV")"
+
+if [ -n "$PROJECT" ] || [ -n "$USER_ID" ]; then
+  # Derive sessions from traces so project/user filtering is possible at all.
+  PATTERN="$(lf_project_pattern "$PROJECT")"
+  TQ="$Q"
+  [ -z "$USER_ID" ] || TQ="$TQ&userId=$(lf_urlencode "$USER_ID")"
+  # Over-fetch traces: many traces collapse into one session.
+  TRACES="$(lf_api_paged "/traces?${TQ#&}" $(( LIMIT * 10 )))"
+  SESSIONS="$(jq -c --arg pat "$PATTERN" --argjson limit "$LIMIT" '
+    [ .[]
+      | select($pat == "" or ((.name // "") | test($pat; "i")))
+      | select(.sessionId != null) ]
+    | group_by(.sessionId)
+    | map({
+        id: .[0].sessionId,
+        createdAt: ([ .[].timestamp ] | min),
+        lastAt: ([ .[].timestamp ] | max),
+        environment: (.[0].environment // null),
+        userId: ([ .[].userId ] | map(select(. != null)) | unique | first),
+        traces: length,
+        traceNames: ([ .[].name ] | map(select(. != null)) | unique),
+        totalCost: ([ .[].totalCost ] | map(select(. != null)) | add)
+      })
+    | sort_by(.lastAt) | reverse | .[0:$limit]' <<<"$TRACES")"
+  SOURCE="traces"
+else
+  RAW="$(lf_api_paged "/sessions${Q:+?${Q#&}}" "$LIMIT")"
+  SESSIONS="$(jq -c '[ .[] | {
+      id, createdAt, lastAt: null, environment: (.environment // null),
+      userId: null, traces: null, traceNames: null, totalCost: null } ]' <<<"$RAW")"
+  SOURCE="sessions"
+fi
+
+REPORT="$(jq -n --arg env "$LF_ENV_R" --arg base "$LF_BASE" --arg src "$SOURCE" \
+               --arg project "${PROJECT:-(all)}" --arg since "${SINCE:-(any)}" \
+               --argjson sessions "$SESSIONS" '
+  {env: $env, host: $base, project: $project, since: $since, source: $src,
+   count: ($sessions | length), sessions: $sessions}')"
+
+if [ "$FORMAT" = "json" ]; then jq . <<<"$REPORT"; exit 0; fi
+
+jq -r '
+  "Langfuse sessions — env \(.env)  project \(.project)  since \(.since)  (\(.count) found)",
+  (.sessions[] |
+    "",
+    "\(.id)",
+    "  started: \(.createdAt)\(if .lastAt then "  last: \(.lastAt)" else "" end)\(if .environment then "  environment: \(.environment)" else "" end)",
+    (if .traces then "  traces: \(.traces)  names: \(.traceNames | join(", "))" else empty end),
+    (if .userId then "  user: \(.userId)" else empty end),
+    (if .totalCost then "  cost: \(.totalCost)" else empty end)
+  ),
+  "",
+  "Transcript: langfuse-transcript <session-id> --env \(.env)"
+' <<<"$REPORT"
