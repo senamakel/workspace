@@ -18,6 +18,9 @@ There is no compilation step or centralized test suite. Validate the part you ch
   open-source pipeline state and launcher.
 - `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
   repository with dirty, unpushed, and submodule-bearing worktrees.
+- `tests/langfuse-lib.sh` exercises the Langfuse helpers' offline logic —
+  environment resolution, project presets, time windows, and paging — with a
+  stubbed API and no credentials.
 - `bash -n install.sh bin/* claude/statusline-command.sh` checks Bash syntax.
 - `zsh -n zshrc` checks the sourced Zsh configuration.
 - `git diff --check` catches whitespace errors before committing.
