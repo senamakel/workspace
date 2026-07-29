@@ -636,5 +636,7 @@ submodule pointers are staged and committed as "Update submodule pointers";
 - The `langfuse-*` and `sentry-*` maps (`~/.config/langfuse/envs.tsv`,
   `~/.config/langfuse/projects.tsv`, `~/.config/sentry/repos.tsv`) are
   machine-local and deliberately not synced: they name credentials and local
-  secret paths. Recreate them per box — `langfuse-env --list` and `sentry-repo`
-  report what each machine currently resolves.
+  secret paths. Credentials stay on the primary laptop and are not copied to the
+  remote boxes, so these tools are expected to be unconfigured there — that is
+  the intended state, not a broken install. `sync.sh` distributes code and
+  rules only.
