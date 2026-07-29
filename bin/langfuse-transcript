@@ -23,7 +23,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/langfuse-lib.sh"
 
 usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
 
-FORMAT="text"; ENV_ALIAS=""; ID=""; FULL=0; MAXC=""; MAXT=20
+FORMAT="text"; ENV_ALIAS=""; ID=""; FULL=0; MAXC=""; MAXT=20; MAXS=40
 BASE=""; PK=""; SK=""
 
 while [ $# -gt 0 ]; do
@@ -36,6 +36,8 @@ while [ $# -gt 0 ]; do
                    MAXC="$2"; shift 2 ;;
     --max-traces)  [ $# -ge 2 ] || { usage; lf_fail "--max-traces needs a value"; }
                    MAXT="$2"; shift 2 ;;
+    --max-steps)   [ $# -ge 2 ] || { usage; lf_fail "--max-steps needs a value"; }
+                   MAXS="$2"; shift 2 ;;
     --base-url)    [ $# -ge 2 ] || { usage; lf_fail "--base-url needs a value"; }
                    BASE="$2"; shift 2 ;;
     --public-key)  [ $# -ge 2 ] || { usage; lf_fail "--public-key needs a value"; }
@@ -52,6 +54,7 @@ done
 if [ -z "$MAXC" ]; then [ "$FULL" = "1" ] && MAXC=4000 || MAXC=1200; fi
 case "$MAXC" in ''|*[!0-9]*) lf_fail "--max-chars must be an integer" ;; esac
 case "$MAXT" in ''|*[!0-9]*|0) lf_fail "--max-traces must be a positive integer" ;; esac
+case "$MAXS" in ''|*[!0-9]*|0) lf_fail "--max-steps must be a positive integer" ;; esac
 
 lf_require curl jq
 lf_config "$ENV_ALIAS" "$BASE" "$PK" "$SK"
@@ -79,9 +82,14 @@ ACC="$(mktemp)"; trap 'rm -f "$ACC"' EXIT
 while IFS= read -r tid; do
   [ -n "$tid" ] || continue
   lf_api "/traces/$(lf_urlencode "$tid")" \
-    | jq -c --argjson maxc "$MAXC" "
+    | jq -c --argjson maxc "$MAXC" --argjson maxs "$MAXS" --argjson full "$FULL" "
       $LF_JQ_PRELUDE
-      {
+      # One agent turn can carry thousands of observations; select the steps
+      # worth showing (generations only, in --full) and cap them before mapping,
+      # reporting how many were left out rather than silently dropping them.
+      ((.observations // []) | sort_by(.startTime)) as \$obs
+      | (if \$full == 1 then [ \$obs[] | select(.type == \"GENERATION\") ] else \$obs end) as \$sel
+      | {
         id, name, timestamp, sessionId, userId,
         environment: (.environment // null),
         latency: (.latency // null),
@@ -89,7 +97,9 @@ while IFS= read -r tid; do
         tags: (.tags // []),
         input: ((.input | lftext) | lfclip(\$maxc)),
         output: ((.output | lftext) | lfclip(\$maxc)),
-        steps: ((.observations // []) | sort_by(.startTime) | map({
+        observationCount: (\$obs | length),
+        omittedSteps: ([(\$sel | length) - \$maxs, 0] | max),
+        steps: (\$sel | .[0:\$maxs] | map({
           type, name,
           model: (.model // null),
           level: (.level // null),
@@ -132,7 +142,7 @@ jq -r --argjson full "$FULL" '
     "",
     "──────────────────────────────────────────────────────────────",
     "trace \(.id)  \(.name // "-")  \(.timestamp)",
-    "  user: \(.userId // "-")  latency: \(.latency // "-")  cost: \(.totalCost // "-")\(if (.tags | length) > 0 then "  tags: \(.tags | join(", "))" else "" end)",
+    "  user: \(.userId // "-")  latency: \(.latency // "-")  cost: \(.totalCost // "-")  observations: \(.observationCount)\(if (.tags | length) > 0 then "  tags: \(.tags | join(", "))" else "" end)",
     (if .input != "" then "", "USER:", "  \(.input | gsub("\n"; "\n  "))" else empty end),
     (if $full == 1 then
       (.steps[] | select(.type == "GENERATION") |
@@ -149,6 +159,7 @@ jq -r --argjson full "$FULL" '
           "  [\(.type)] \(.name // "-")\(if .model then " (\(.model))" else "" end)\(if .latency then "  \(.latency)s" else "" end)\(if .level and .level != "DEFAULT" then "  level: \(.level)" else "" end)\(if .statusMessage then "  \(.statusMessage)" else "" end)")
        else empty end)
      end),
+    (if .omittedSteps > 0 then "  … \(.omittedSteps) further step(s) omitted — raise --max-steps" else empty end),
     (if .output != "" then "", "ASSISTANT:", "  \(.output | gsub("\n"; "\n  "))" else empty end)
   )
 ' <<<"$REPORT"

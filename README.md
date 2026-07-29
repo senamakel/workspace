@@ -527,19 +527,27 @@ server-side filter.
 - `langfuse-trace <trace-id> [--type GENERATION] [--io] [--max-chars N]` — one
   trace's observation tree with model, latency, tokens and cost per step;
   `--io` prints full payloads instead of previews.
-- `langfuse-transcript <session-id|trace-id> [--full] [--max-chars N] [--max-traces N]`
+- `langfuse-transcript <session-id|trace-id> [--full] [--max-chars N] [--max-traces N] [--max-steps N]`
   — the readable conversation: each trace's user input and final output, plus a
   one-line summary of the steps between. `--full` adds every generation's
   messages, system prompts included — what you want when debugging what the
   model actually saw. The id may be either kind: sessions are tried first and a
-  404 falls back to a trace, since the two look alike in the Langfuse UI.
+  404 falls back to a trace, since the two look alike in the Langfuse UI. One
+  agent turn can carry thousands of observations (an OpenHuman `agent.turn`
+  routinely exceeds 10k), so steps are capped at `--max-steps` (default 40) and
+  the tool reports how many it left out; `--full` counts generations only.
 - `langfuse-observation <id> | --list [--trace <id>] [--type GENERATION] [--name <n>] [--since 24h]`
   — the drill-down once a transcript points at one model call: untruncated
   messages, output, model parameters, tokens and cost.
 
 Payloads are clipped per field with a visible `…[+N more chars]` marker, so an
 agent can always tell truncated data from complete data and re-fetch with a
-larger `--max-chars` (`0` disables clipping on `langfuse-observation`).
+larger `--max-chars` (`0` disables clipping on `langfuse-observation`). Every
+cap — traces, steps, page size — reports what it dropped rather than silently
+truncating. What a transcript can show still depends on what the service logged:
+Medulla's `medulla-session` traces carry full prompts and replies, while
+OpenHuman's `agent.turn` model spans currently record structure and token counts
+but no input/output.
 
 ```sh
 langfuse-env --list                                   # which envs work, and what they point at
