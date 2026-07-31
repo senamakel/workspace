@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# pr-reply — reply in a pull request review thread and resolve it.
+#
+# Usage: pr-reply <threadId> (--body <text> | --body-file <path>)
+#                 [--no-resolve] [--unresolve] [--dry-run]
+#        pr-reply <threadId> --resolve-only [--dry-run]
+#
+# threadId is the PRRT_… identifier that pr-comments reports for each thread;
+# it is globally unique, so no repository argument is needed. The default is to
+# post the reply and then resolve the thread, which is the normal way to close
+# out a review comment: answer it, then mark it done. --no-resolve replies and
+# leaves the thread open (use when the reply asks the reviewer a question).
+# --resolve-only resolves without replying, and --unresolve reopens a thread
+# after replying. --dry-run prints the mutations without sending them.
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+require() {
+  local bin
+  for bin in "$@"; do
+    command -v "$bin" >/dev/null 2>&1 \
+      || { fail "missing required tool: $bin"; exit 1; }
+  done
+}
+
+THREAD=""
+BODY=""
+HAVE_BODY=0
+RESOLVE=1
+UNRESOLVE=0
+RESOLVE_ONLY=0
+DRY_RUN=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --body)
+      [ $# -ge 2 ] || { fail "--body requires a value"; usage; exit 1; }
+      BODY="$2"
+      HAVE_BODY=1
+      shift 2
+      ;;
+    --body-file)
+      [ $# -ge 2 ] || { fail "--body-file requires a path"; usage; exit 1; }
+      [ -r "$2" ] || { fail "cannot read body file: $2"; exit 1; }
+      BODY=$(cat "$2")
+      HAVE_BODY=1
+      shift 2
+      ;;
+    --no-resolve)
+      RESOLVE=0
+      shift
+      ;;
+    --unresolve)
+      UNRESOLVE=1
+      RESOLVE=0
+      shift
+      ;;
+    --resolve-only)
+      RESOLVE_ONLY=1
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown argument: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      [ -z "$THREAD" ] || { fail "unexpected extra argument: $1"; usage; exit 1; }
+      THREAD="$1"
+      shift
+      ;;
+  esac
+done
+
+[ -n "$THREAD" ] || { fail "a thread id is required"; usage; exit 1; }
+case "$THREAD" in
+  PRRT_*) ;;
+  *) fail "not a review thread id (expected PRRT_…): $THREAD"; exit 1 ;;
+esac
+
+if [ "$RESOLVE_ONLY" -eq 1 ]; then
+  [ "$HAVE_BODY" -eq 0 ] || { fail "--resolve-only cannot be combined with a reply body"; exit 1; }
+  [ "$UNRESOLVE" -eq 0 ] || { fail "--resolve-only cannot be combined with --unresolve"; exit 1; }
+  RESOLVE=1
+else
+  [ "$HAVE_BODY" -eq 1 ] || { fail "a reply needs --body or --body-file"; usage; exit 1; }
+  # An empty reply reads as a bug to the reviewer, not as an answer.
+  [ -n "$(printf '%s' "$BODY" | tr -d '[:space:]')" ] \
+    || { fail "reply body is empty"; exit 1; }
+fi
+
+require gh jq
+
+if [ "$RESOLVE_ONLY" -eq 0 ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '[would reply] %s\n' "$THREAD"
+    printf '%s\n' "$BODY" | sed 's/^/  | /'
+  else
+    REPLY=$(gh api graphql \
+      -f threadId="$THREAD" \
+      -f body="$BODY" \
+      -f query='
+        mutation($threadId: ID!, $body: String!) {
+          addPullRequestReviewThreadReply(
+            input: {pullRequestReviewThreadId: $threadId, body: $body}
+          ) {
+            comment { url }
+          }
+        }
+      ') || { fail "could not post the reply to $THREAD"; exit 1; }
+    printf '[reply] %s\n' \
+      "$(jq -r '.data.addPullRequestReviewThreadReply.comment.url' <<<"$REPLY")"
+  fi
+fi
+
+if [ "$RESOLVE" -eq 1 ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '[would resolve] %s\n' "$THREAD"
+  else
+    gh api graphql \
+      -f threadId="$THREAD" \
+      -f query='
+        mutation($threadId: ID!) {
+          resolveReviewThread(input: {threadId: $threadId}) {
+            thread { isResolved }
+          }
+        }
+      ' >/dev/null || { fail "replied, but could not resolve $THREAD"; exit 1; }
+    printf '[resolve] %s\n' "$THREAD"
+  fi
+fi
+
+if [ "$UNRESOLVE" -eq 1 ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '[would unresolve] %s\n' "$THREAD"
+  else
+    gh api graphql \
+      -f threadId="$THREAD" \
+      -f query='
+        mutation($threadId: ID!) {
+          unresolveReviewThread(input: {threadId: $threadId}) {
+            thread { isResolved }
+          }
+        }
+      ' >/dev/null || { fail "could not unresolve $THREAD"; exit 1; }
+    printf '[unresolve] %s\n' "$THREAD"
+  fi
+fi
