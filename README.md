@@ -14,6 +14,7 @@ the source of truth, so source changes appear in `git diff`.
 | `claude/mcp.json` | `~/.claude/mcp.json` |
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `skills/<name>/` | `~/.claude/skills/<name>`, `~/.codex/skills/<name>` (one canonical source) |
+| `workflows/*.json` | `~/.medulla/workflows/<file>.json` (one link per flow) |
 | `open-source/` | Git-backed repository catalog and per-issue contribution queue shared by every machine |
 | `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
 | `bin/super-review` | `~/super-review.sh` |
@@ -35,6 +36,12 @@ generated cache or installed harness files; edit `agent.json` or
 `skills/<name>/` contains a `SKILL.md` and any optional `scripts/`,
 `references/`, `assets/`, or `agents/openai.yaml` resources. The same directory
 is linked into Claude and Codex.
+
+`workflows/` is the single source of truth for shared Medulla workflow
+definitions. Each `<name>.json` is linked individually into
+`~/.medulla/workflows/`, rather than linking the directory itself, so Medulla
+can keep unmanaged machine-local flows in the same directory. Edit the JSON in
+the repo and the change is live; re-run `install.sh` after adding a new file.
 
 `zshrc` holds only custom functions and aliases. `~/.zshrc` and `~/.zshenv`
 remain local machine-specific files (oh-my-zsh setup, PATH exports, tool

@@ -235,6 +235,15 @@ for d in "$REPO_ROOT"/skills/*/; do
   link "$d" "$HOME/.codex/skills/$(basename "$d")"
 done
 
+# --- Medulla workflows --------------------------------------------------------
+# Workflow definitions are shared like skills and agents: one canonical JSON per
+# flow in workflows/, linked file-by-file into ~/.medulla/workflows so Medulla
+# can still keep unmanaged, machine-local flows in the same directory.
+for f in "$REPO_ROOT"/workflows/*.json; do
+  [ -f "$f" ] || continue
+  link "$f" "$HOME/.medulla/workflows/$(basename "$f")"
+done
+
 # --- tmux --------------------------------------------------------------------
 link "$REPO_ROOT/tmux.conf" "$HOME/.tmux.conf"
 

@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "id": "opencompany-pr-triage-merge",
+  "name": "OpenCompany PR triage and merge",
+  "nodes": [
+    {
+      "id": "start",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Run on demand",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "collect",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "List open PRs and pre-filter",
+      "config": {
+        "slug": "medulla:shell",
+        "args": {
+          "language": "shell",
+          "script": "set -uo pipefail\nROOT=/Users/enamakel/work/tinyhumansai/workflow-opencompany\nBATCH=${OC_TRIAGE_BATCH:-5}\ncd \"$ROOT\"\n\n# Scoped to the opencompany repository only: the operator asked for its PRs and\n# not the sibling submodules (backend, openhuman, dashboard, k8s, landing,\n# opencompany-microservice) or the superproject itself. `origin` is often a\n# personal fork; prefer `upstream` where it exists, because that is where the\n# PRs live.\ndirs=\"opencompany\"\nall=$(mktemp)\nwarn=$(mktemp)\n: > \"$all\"\n\nfor d in $dirs; do\n  url=$(git -C \"$d\" remote get-url upstream 2>/dev/null || git -C \"$d\" remote get-url origin 2>/dev/null) || continue\n  slug=$(printf '%s' \"$url\" | sed 's#.*github.com[:/]##; s#\\.git$##')\n  # Deliberately NOT asking for statusCheckRollup here: on a repo with dozens of\n  # open PRs GitHub's GraphQL endpoint answers with a 504 every time. Check\n  # state is fetched per PR below, only for the ones that could still merge.\n  raw=$(gh pr list -R \"$slug\" --state open --limit 100 \\\n        --json number,title,url,isDraft,author,updatedAt,headRefName,mergeable,reviewDecision 2>/dev/null) || {\n    printf -- '- could not list %s\\n' \"$slug\" >> \"$warn\"; continue; }\n  printf '%s' \"$raw\" | jq --arg slug \"$slug\" --arg dir \"$d\" '[ .[] | select(.isDraft | not) | {\n        repo: $slug, dir: $dir, number, title, url,\n        author: (.author.login // \"?\"), branch: .headRefName,\n        updated: (.updatedAt | split(\"T\")[0]),\n        mergeable: (.mergeable // \"UNKNOWN\"),\n        reviewDecision: (if (.reviewDecision // \"\") == \"\" then \"NONE\" else .reviewDecision end)\n      } ]' >> \"$all\"\ndone\n\n# Probe CI only where it can still change the answer, so the run costs a\n# handful of calls rather than one oversized query per repository.\ncand=$(jq -s '[ .[] | .[] ] | unique_by(.repo + \"#\" + (.number|tostring)) | sort_by(.updated) | reverse' \"$all\")\nprobed=$(printf '%s' \"$cand\" | jq -c '.[]' | while read -r pr; do\n  slug=$(printf '%s' \"$pr\" | jq -r .repo); n=$(printf '%s' \"$pr\" | jq -r .number)\n  m=$(printf '%s' \"$pr\" | jq -r .mergeable); rd=$(printf '%s' \"$pr\" | jq -r .reviewDecision)\n  if [ \"$m\" != \"MERGEABLE\" ] || [ \"$rd\" = \"CHANGES_REQUESTED\" ]; then\n    printf '%s' \"$pr\" | jq -c '. + {failing: [], pending: [], checks: \"unprobed\"}'; continue\n  fi\n  roll=$(gh pr view \"$n\" -R \"$slug\" --json statusCheckRollup 2>/dev/null) || roll='{\"statusCheckRollup\":null}'\n  printf '%s' \"$pr\" | jq -c --argjson r \"$roll\" '. + {\n      failing: [ ($r.statusCheckRollup // [])[] | select(((.conclusion // .state // \"\")|ascii_upcase) | test(\"FAILURE|TIMED_OUT|CANCELLED|ERROR\")) | (.name // .context // \"check\") ],\n      pending: [ ($r.statusCheckRollup // [])[] | select(((.conclusion // .state // \"\")|ascii_upcase) | test(\"^$|PENDING|IN_PROGRESS|QUEUED\")) | (.name // .context // \"check\") ],\n      checks: \"probed\" }'\ndone | jq -s '.')\n\n# Everything a command can decide is decided here, so a harness session is only\n# spent on PRs that could actually merge.\nprintf '%s' \"$probed\" | jq --argjson batch \"$BATCH\" --rawfile warnings \"$warn\" '\n  def ready: .mergeable == \"MERGEABLE\"\n             and (.failing | length) == 0\n             and (.pending | length) == 0\n             and .reviewDecision != \"CHANGES_REQUESTED\";\n  def line: \"- \" + .repo + \"#\" + (.number|tostring) + \" by \" + .author\n            + \" (updated \" + .updated + \", review \" + .reviewDecision + \") \" + .title\n            + \"\\n  \" + .url + \"\\n  local checkout: \" + .dir;\n  { total: length,\n    eligible: [ .[] | select(ready) ],\n    blocked:  [ .[] | select(ready | not) ] }\n  | . + { candidates: (.eligible[0:$batch]) }\n  | . + { count: (.candidates | length),\n          deferred: ((.eligible | length) - (.candidates | length)) }\n  | . + { report:\n      ( \"Open non-draft PRs found in tinyhumansai/opencompany: \" + (.total|tostring)\n        + \"; eligible to review: \" + (.eligible|length|tostring)\n        + \"; in this batch: \" + (.count|tostring)\n        + \"; deferred to a later run: \" + (.deferred|tostring) + \"\\n\\n\"\n        + (if ($warnings | length) > 0 then \"Repositories that could not be listed this run:\\n\" + $warnings + \"\\n\" else \"\" end)\n        + \"REVIEW THESE, AND ONLY THESE:\\n\"\n        + ([ .candidates[] | line ] | join(\"\\n\"))\n        + \"\\n\\nNot in scope this run (conflicting, red or pending checks, or changes requested):\\n\"\n        + ([ .blocked[] | line + \"\\n  mergeable=\" + .mergeable\n             + \" failing=\" + (if .checks == \"unprobed\" then \"unprobed\" elif (.failing|length) == 0 then \"none\" else (.failing|join(\",\")) end)\n             + \" pending=\" + (if .checks == \"unprobed\" then \"unprobed\" elif (.pending|length) == 0 then \"none\" else (.pending|join(\",\")) end) ] | join(\"\\n\")) ) }'\nrm -f \"$all\" \"$warn\"\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "gate",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Anything eligible?",
+      "config": {
+        "field": "=.nodes.collect.item.json.output.count > 0"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "triage",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Review the batch and merge what passes",
+      "config": {
+        "prompt": "=(\"You are triaging pull requests for the tinyhumansai/opencompany repository, checked out at /Users/enamakel/work/tinyhumansai/workflow-opencompany/opencompany. Only PRs in that repository are in scope this run; ignore the sibling submodules and the superproject even if you notice open PRs there.\\n\\nFor each PR in the list below, in order:\\n1. Read it with `gh pr view <n> -R <repo>` and `gh pr diff <n> -R <repo>`, plus its review threads and CI conclusions.\\n2. Review it properly: does the diff do what the title and body claim, is it scoped to one change, does it touch secrets, credentials, destructive migrations, or CI/release plumbing, does it break a public interface, and does it have tests where the repo expects them?\\n3. MERGE it with `gh pr merge <n> -R <repo> --squash` only when all of these hold: the review found nothing that needs changing, checks are green, no unresolved review thread asks for a change, and the base branch is that repository's default branch.\\n4. Otherwise DO NOT MERGE. Leave one review comment on the PR naming precisely what blocks it, and move on.\\n\\nRules: touch only the PRs listed below. Do not push commits, do not amend anyone's branch, do not commit anything in the operator's local checkouts, and do not close a PR. Prefer reading the PR through `gh` over mutating any working tree. If you run out of time, stop cleanly and report the PRs you did not reach.\\n\\nFinish with one line per PR: `<repo>#<number> MERGED` or `<repo>#<number> SKIPPED — <one-line reason>`.\\n\\n\" + .nodes.collect.item.json.output.report)"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "verify",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Confirm what actually merged",
+      "config": {
+        "slug": "medulla:shell",
+        "args": {
+          "language": "shell",
+          "input": "=nodes.collect.item.json.output.candidates",
+          "script": "set -uo pipefail\n# Ask GitHub what happened rather than trusting the session's own summary.\n#\n# Never swallow gh's own stderr here. The 2026-07-30 run merged #196, #195 and\n# #193 and still reported every one of them as UNKNOWN, in 109ms for three\n# network calls — i.e. gh failed instantly (missing binary, missing auth, or a\n# 403) and the discarded stderr was the only thing that said which. A bare\n# UNKNOWN beside a real merge is indistinguishable from a PR genuinely in limbo,\n# so print the reason next to it.\njq -r '.[]? | .repo + \" \" + (.number|tostring)' | while read -r slug n; do\n  err=$(mktemp)\n  state=$(gh pr view \"$n\" -R \"$slug\" --json state --jq .state </dev/null 2>\"$err\") || state=\"\"\n  if [ -n \"$state\" ]; then\n    printf -- '- %s#%s -> %s\\n' \"$slug\" \"$n\" \"$state\"\n  else\n    printf -- '- %s#%s -> UNKNOWN (gh: %s)\\n' \"$slug\" \"$n\" \"$(tr '\\n' ' ' < \"$err\" | sed 's/  */ /g')\"\n  fi\n  rm -f \"$err\"\ndone\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "start",
+      "from_port": "main",
+      "to_node": "collect",
+      "to_port": "main"
+    },
+    {
+      "from_node": "collect",
+      "from_port": "main",
+      "to_node": "gate",
+      "to_port": "main"
+    },
+    {
+      "from_node": "gate",
+      "from_port": "true",
+      "to_node": "triage",
+      "to_port": "main"
+    },
+    {
+      "from_node": "triage",
+      "from_port": "main",
+      "to_node": "verify",
+      "to_port": "main"
+    }
+  ],
+  "description": "Survey every open PR across the workflow-opencompany superproject and its submodules, deterministically drop the ones that cannot merge, then review a batch of the eligible ones on a harness and merge the ones that pass review.",
+  "enabled": true
+}
