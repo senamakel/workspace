@@ -370,6 +370,64 @@ pr-list --include-drafts
 pr-list --repo tinyhumansai/openhuman --limit 20
 ```
 
+### `pr-comments [<number>] [--json] [--all] [--threads-only] [--from <login>]...`
+
+Lists the review feedback on a pull request, defaulting to the PR for the
+current branch. GitHub splits feedback across three channels and review bots
+use all of them, so the report covers each one: inline **threads** (the only
+resolvable kind, each carrying the `threadId` that `pr-reply` needs),
+review-level **reviews** (where `greptile-apps` and `chatgpt-codex-connector`
+post their findings, each carrying the `reviewId` that `pr-review-resolve`
+needs), and top-level **comments** (where `coderabbitai` posts its summary).
+Reading only inline threads silently drops most bot feedback.
+
+Unresolved threads are listed by default; outdated ones are kept because their
+feedback usually still applies. A `CHANGES_REQUESTED` review is reported as
+`blocking` only while it is that reviewer's latest verdict — a later approval
+or dismissal supersedes it. `--all` adds resolved threads and superseded
+reviews, `--threads-only` narrows to the resolvable threads, and `--from`
+filters every section by author. `--json` emits full comment bodies.
+
+```sh
+pr-comments
+pr-comments 123 --json
+pr-comments 123 --from coderabbitai
+pr-comments 123 --threads-only
+```
+
+### `pr-reply <threadId> (--body <text> | --body-file <path>) [--no-resolve]`
+
+Replies in a review thread and resolves it — the normal way to close out a
+review comment: answer it, then mark it done. `threadId` is the `PRRT_…`
+identifier from `pr-comments`; it is globally unique, so no repository argument
+is needed. `--no-resolve` replies and leaves the thread open (use when the reply
+asks the reviewer a question), `--resolve-only` resolves without replying, and
+`--unresolve` reopens a thread. Empty reply bodies are rejected. `--dry-run`
+prints the mutations without sending them.
+
+```sh
+pr-reply PRRT_kwDO… --body "Fixed in 48b0341 — the guard now covers the detached path."
+pr-reply PRRT_kwDO… --body-file reply.md --no-resolve
+pr-reply PRRT_kwDO… --resolve-only
+```
+
+### `pr-review-resolve [<number>] (--list | --approve | --dismiss <reviewId> | --dismiss-all | --re-request)`
+
+Clears the changes-requested verdicts blocking a PR. `--list` reports which
+reviews still block (the same set `pr-comments` counts). After pushing a fix,
+`--re-request` asks those reviewers to re-review — the preferred way to clear a
+verdict. `--dismiss` retires one review and `--dismiss-all` every blocking one;
+both require a `--message` explaining why and repository write access, and both
+are a last resort. `--approve` submits an approving review, which is how a
+reviewer clears their own verdict; GitHub rejects approving your own PR.
+`--dry-run` shows the effect without applying it.
+
+```sh
+pr-review-resolve 123 --list
+pr-review-resolve 123 --re-request
+pr-review-resolve 123 --dismiss-all --message "Addressed in 48b0341; see thread replies."
+```
+
 ### `pr-merge <number> [--dry-run] [--json] [-R|--repo <owner/name>]`
 
 Merges a PR only after a strict preflight: it must be open, out of draft,
