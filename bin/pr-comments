@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 # pr-comments — list the unresolved review feedback on a pull request.
 #
-# Usage: pr-comments [<number>] [--json] [--all] [--include-outdated]
-#                    [-R|--repo <owner/name>]
+# Usage: pr-comments [<number>] [--json] [--all] [--threads-only]
+#                    [--from <login>]... [-R|--repo <owner/name>]
 #
-# Reports every unresolved review thread (file, line, and the full comment
-# chain) plus any review still requesting changes. Each thread carries the
-# threadId that pr-reply needs, and each review the reviewId that
-# pr-review-resolve needs. --all also lists resolved threads and dismissed
-# reviews; outdated threads are included by default because their feedback
-# usually still applies. Human-readable output is the default; --json emits a
-# stable document for agents. The current repository's upstream remote is
-# preferred over origin. PR_COMMENTS_REPO can also override repository lookup.
+# Collects feedback from all three channels GitHub splits it across, so review
+# bots (coderabbitai, chatgpt-codex-connector, greptile-apps) are covered
+# wherever they post:
+#   threads  inline review threads — the only resolvable kind; each carries the
+#            threadId pr-reply needs, and unresolved ones are listed by default
+#   reviews  review-level bodies (summaries and verdicts); each carries the
+#            reviewId pr-review-resolve needs
+#   comments top-level pull request comments
+#
+# Only threads have a resolved state, so reviews and comments are always
+# listed; --threads-only narrows output to the resolvable threads. --all also
+# lists resolved threads and superseded reviews. Outdated threads are included
+# by default because their feedback usually still applies. --from limits every
+# section to the given author and may be repeated. Human-readable output is the
+# default; --json emits full comment bodies for agents. The current
+# repository's upstream remote is preferred over origin. PR_COMMENTS_REPO can
+# also override repository lookup.
 set -euo pipefail
 
 fail() {
@@ -19,7 +28,7 @@ fail() {
 }
 
 usage() {
-  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 require() {
@@ -45,8 +54,10 @@ resolve_repo() {
 
 FORMAT="text"
 INCLUDE_RESOLVED=0
+THREADS_ONLY=0
 PR=""
 REPO="${PR_COMMENTS_REPO:-}"
+AUTHORS="[]"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -58,9 +69,14 @@ while [ $# -gt 0 ]; do
       INCLUDE_RESOLVED=1
       shift
       ;;
-    --include-outdated)
-      # Outdated threads are always included; accepted for explicitness.
+    --threads-only)
+      THREADS_ONLY=1
       shift
+      ;;
+    --from)
+      [ $# -ge 2 ] || { fail "--from requires a login"; usage; exit 1; }
+      AUTHORS=$(jq -c --arg login "$2" '. + [$login]' <<<"$AUTHORS")
+      shift 2
       ;;
     -R|--repo)
       [ $# -ge 2 ] || { fail "$1 requires an owner/name value"; usage; exit 1; }
@@ -105,6 +121,8 @@ esac
 OWNER="${REPO%%/*}"
 NAME="${REPO##*/}"
 
+# Each connection is paginated separately: gh --paginate drives one cursor at a
+# time, and a PR with a busy bot can exceed one page on any of the three.
 THREADS=$(gh api graphql --paginate --slurp \
   -f owner="$OWNER" \
   -f name="$NAME" \
@@ -118,7 +136,6 @@ THREADS=$(gh api graphql --paginate --slurp \
               id
               isResolved
               isOutdated
-              isCollapsed
               path
               line
               originalLine
@@ -163,23 +180,59 @@ REVIEWS=$(gh api graphql --paginate --slurp \
     }
   ') || { fail "could not read reviews for PR #$PR"; exit 1; }
 
+COMMENTS=$(gh api graphql --paginate --slurp \
+  -f owner="$OWNER" \
+  -f name="$NAME" \
+  -F number="$PR" \
+  -f query='
+    query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          comments(first: 50, after: $endCursor) {
+            nodes {
+              id
+              body
+              url
+              createdAt
+              author { login }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }
+    }
+  ') || { fail "could not read pull request comments for PR #$PR"; exit 1; }
+
 REPORT=$(jq -n \
   --arg repository "$REPO" \
   --argjson number "$PR" \
   --argjson includeResolved "$INCLUDE_RESOLVED" \
+  --argjson threadsOnly "$THREADS_ONLY" \
+  --argjson authors "$AUTHORS" \
   --argjson threadPages "$THREADS" \
-  --argjson reviewPages "$REVIEWS" '
+  --argjson reviewPages "$REVIEWS" \
+  --argjson commentPages "$COMMENTS" '
   def compact_text:
     gsub("[[:space:]]+"; " ") | sub("^ "; "") | sub(" $"; "");
+  def summarize:
+    (. // "" | compact_text)
+    | if length == 0 then "(no body)"
+      elif length <= 200 then .
+      else .[0:199] + "…"
+      end;
+  def by_author($login):
+    ($authors | length) == 0 or ($authors | index($login) != null);
 
   [$threadPages[].data.repository.pullRequest.reviewThreads.nodes[]]
     as $allThreads
   | [$reviewPages[].data.repository.pullRequest.reviews.nodes[]]
     as $allReviews
+  | [$commentPages[].data.repository.pullRequest.comments.nodes[]]
+    as $allComments
 
-  # A review only still demands action while it is that reviewer latest
-  # verdict: a later APPROVED or DISMISSED review from the same author
-  # supersedes an earlier CHANGES_REQUESTED.
+  # A review still demands action while it is that reviewer latest verdict: a
+  # later APPROVED or DISMISSED review by the same author supersedes an earlier
+  # CHANGES_REQUESTED.
   | [$allReviews[]
       | select(.state == "CHANGES_REQUESTED")
       | . as $review
@@ -191,6 +244,7 @@ REPORT=$(jq -n \
           | length == 0
         )
     ] as $blockingReviews
+  | ($blockingReviews | map(.id)) as $blockingIds
 
   | {
       repository: $repository,
@@ -200,6 +254,7 @@ REPORT=$(jq -n \
       threads: [
         $allThreads[]
         | select(($includeResolved == 1) or (.isResolved | not))
+        | select(by_author(.comments.nodes[0].author.login // "ghost"))
         | {
             threadId: .id,
             isResolved,
@@ -213,27 +268,47 @@ REPORT=$(jq -n \
                 author: (.author.login // "ghost"),
                 createdAt,
                 body: (.body // ""),
-                summary: ((.body // "") | compact_text
-                  | if length <= 200 then . else .[0:199] + "…" end)
+                summary: (.body | summarize)
               }
             ]
           }
       ],
-      reviews: [
-        (if $includeResolved == 1 then $allReviews[] else $blockingReviews[] end)
+      # Review bodies carry the bot summaries (greptile and codex post their
+      # findings here, not only inline), so they are listed whatever the state.
+      # Empty-bodied reviews are dropped: they are the envelope for inline
+      # comments already reported under threads.
+      reviews: (if $threadsOnly == 1 then [] else [
+        $allReviews[]
+        | select(($includeResolved == 1)
+                 or (.state != "DISMISSED")
+                 and ((.state != "CHANGES_REQUESTED")
+                      or (.id | IN($blockingIds[]))))
+        | select(($includeResolved == 1)
+                 or ((.body // "" | compact_text | length) > 0))
+        | select(by_author(.author.login // "ghost"))
         | {
             reviewId: .id,
             state,
+            blocking: (.id | IN($blockingIds[])),
             author: (.author.login // "ghost"),
             submittedAt,
             url,
             body: (.body // ""),
-            summary: ((.body // "") | compact_text
-              | if length == 0 then "(no review body)"
-                elif length <= 200 then .
-                else .[0:199] + "…" end)
+            summary: (.body | summarize)
           }
-      ]
+      ] end),
+      comments: (if $threadsOnly == 1 then [] else [
+        $allComments[]
+        | select(by_author(.author.login // "ghost"))
+        | {
+            commentId: .id,
+            author: (.author.login // "ghost"),
+            createdAt,
+            url,
+            body: (.body // ""),
+            summary: (.body | summarize)
+          }
+      ] end)
     }
 ') || { fail "could not summarize feedback for PR #$PR"; exit 1; }
 
@@ -246,6 +321,7 @@ jq -r '
   "Repository: \(.repository)",
   "Pull request: #\(.pullRequest)",
   "Unresolved threads: \(.unresolvedThreads); reviews requesting changes: \(.changesRequested)",
+  "Feedback: \(.threads | length) thread(s), \(.reviews | length) review(s), \(.comments | length) comment(s)",
   (if (.threads | length) == 0 then "", "No matching review threads." else empty end),
   (.threads[] |
     "",
@@ -260,7 +336,17 @@ jq -r '
     (.reviews[] |
       "",
       "Review \(.reviewId)",
-      "  \(.state) by \(.author) at \(.submittedAt)",
+      "  \(.state)\(if .blocking then " (blocking)" else "" end) by \(.author) at \(.submittedAt)",
+      "  URL: \(.url)",
+      "  Body: \(.summary)"
+    )
+   end),
+  (if (.comments | length) == 0 then empty else
+    "",
+    "Comments:",
+    (.comments[] |
+      "",
+      "Comment by \(.author) at \(.createdAt)",
       "  URL: \(.url)",
       "  Body: \(.summary)"
     )
