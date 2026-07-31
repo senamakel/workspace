@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+# pr-review-resolve — clear the changes-requested verdicts blocking a pull request.
+#
+# Usage: pr-review-resolve [<number>] --approve [--body <text>]
+#        pr-review-resolve [<number>] --dismiss <reviewId> --message <text>
+#        pr-review-resolve [<number>] --dismiss-all --message <text>
+#        pr-review-resolve [<number>] --re-request
+#        pr-review-resolve [<number>] --list
+#   common: [--dry-run] [-R|--repo <owner/name>]
+#
+# --list reports the reviews still requesting changes (the same set
+# pr-comments shows). --approve submits an approving review, which is how a
+# reviewer clears their own verdict. --dismiss retires one review by its PRR_…
+# id and --dismiss-all retires every blocking one; both need a --message and
+# repository write access, and both are the last resort — prefer answering the
+# feedback and using --re-request so the reviewer re-reviews the fix. GitHub
+# rejects approving your own pull request. With no number, the pull request for
+# the current branch is used. PR_REVIEW_REPO can also override repository lookup.
+set -euo pipefail
+
+fail() {
+  printf '[FAIL] %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+require() {
+  local bin
+  for bin in "$@"; do
+    command -v "$bin" >/dev/null 2>&1 \
+      || { fail "missing required tool: $bin"; exit 1; }
+  done
+}
+
+resolve_repo() {
+  if [ -n "$REPO" ]; then
+    printf '%s\n' "$REPO"
+    return
+  fi
+
+  local url
+  url=$(git remote get-url upstream 2>/dev/null || git remote get-url origin 2>/dev/null) \
+    || { fail "no upstream or origin remote found"; exit 1; }
+  printf '%s\n' "$url" \
+    | sed -E 's#^git@github\.com:##; s#^https?://github\.com/##; s#\.git$##'
+}
+
+ACTION=""
+REVIEW=""
+MESSAGE=""
+BODY=""
+PR=""
+REPO="${PR_REVIEW_REPO:-}"
+DRY_RUN=0
+
+set_action() {
+  [ -z "$ACTION" ] || { fail "choose one of --list, --approve, --dismiss, --dismiss-all, --re-request"; exit 1; }
+  ACTION="$1"
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list)
+      set_action list
+      shift
+      ;;
+    --approve)
+      set_action approve
+      shift
+      ;;
+    --dismiss)
+      [ $# -ge 2 ] || { fail "--dismiss requires a review id"; usage; exit 1; }
+      set_action dismiss
+      REVIEW="$2"
+      shift 2
+      ;;
+    --dismiss-all)
+      set_action dismiss-all
+      shift
+      ;;
+    --re-request)
+      set_action re-request
+      shift
+      ;;
+    --message)
+      [ $# -ge 2 ] || { fail "--message requires a value"; usage; exit 1; }
+      MESSAGE="$2"
+      shift 2
+      ;;
+    --body)
+      [ $# -ge 2 ] || { fail "--body requires a value"; usage; exit 1; }
+      BODY="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -R|--repo)
+      [ $# -ge 2 ] || { fail "$1 requires an owner/name value"; usage; exit 1; }
+      REPO="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      fail "unknown argument: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      [ -z "$PR" ] || { fail "unexpected extra argument: $1"; usage; exit 1; }
+      PR="$1"
+      shift
+      ;;
+  esac
+done
+
+[ -n "$ACTION" ] || { fail "an action is required"; usage; exit 1; }
+
+case "$ACTION" in
+  dismiss)
+    case "$REVIEW" in
+      PRR_*) ;;
+      *) fail "not a review id (expected PRR_…): $REVIEW"; exit 1 ;;
+    esac
+    ;;
+esac
+
+case "$ACTION" in
+  dismiss|dismiss-all)
+    # GitHub requires a dismissal reason, and a blank one tells the reviewer
+    # nothing about why their verdict was retired.
+    [ -n "$(printf '%s' "$MESSAGE" | tr -d '[:space:]')" ] \
+      || { fail "$ACTION requires a non-empty --message explaining the dismissal"; exit 1; }
+    ;;
+esac
+
+require gh jq
+if [ -z "$REPO" ]; then
+  require git
+  git rev-parse --git-dir >/dev/null 2>&1 \
+    || { fail "not inside a git repository; pass --repo owner/name"; exit 1; }
+fi
+REPO=$(resolve_repo)
+
+if [ -z "$PR" ]; then
+  PR=$(gh pr view -R "$REPO" --json number --jq .number 2>/dev/null) \
+    || { fail "no pull request for the current branch; pass a PR number"; exit 1; }
+fi
+case "$PR" in
+  ''|*[!0-9]*) fail "pull request number must be a positive integer"; exit 1 ;;
+esac
+
+# pr-comments owns the definition of "still requesting changes" (a later
+# approval or dismissal by the same reviewer supersedes an earlier verdict);
+# reuse it rather than duplicating that rule here.
+PR_COMMENTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/pr-comments"
+[ -x "$PR_COMMENTS" ] || { fail "cannot find pr-comments next to $0"; exit 1; }
+
+blocking_reviews() {
+  "$PR_COMMENTS" "$PR" --json -R "$REPO" \
+    | jq -c '[.reviews[] | select(.state == "CHANGES_REQUESTED")]'
+}
+
+dismiss_review() {
+  local id="$1" author="${2:-}"
+  local label="$id"
+  [ -z "$author" ] || label="$id (by $author)"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '[would dismiss] %s\n' "$label"
+    return
+  fi
+  gh api graphql \
+    -f reviewId="$id" \
+    -f message="$MESSAGE" \
+    -f query='
+      mutation($reviewId: ID!, $message: String!) {
+        dismissPullRequestReview(
+          input: {pullRequestReviewId: $reviewId, message: $message}
+        ) {
+          pullRequestReview { state }
+        }
+      }
+    ' >/dev/null || { fail "could not dismiss $id (needs write access)"; exit 1; }
+  printf '[dismiss] %s\n' "$label"
+}
+
+case "$ACTION" in
+  list)
+    BLOCKING=$(blocking_reviews) || { fail "could not read reviews for PR #$PR"; exit 1; }
+    jq -r --arg repository "$REPO" --argjson number "$PR" '
+      "Repository: \($repository)",
+      "Pull request: #\($number)",
+      "Reviews requesting changes: \(length)",
+      (.[] |
+        "",
+        "Review \(.reviewId)",
+        "  by \(.author) at \(.submittedAt)",
+        "  URL: \(.url)",
+        "  Body: \(.summary)"
+      )
+    ' <<<"$BLOCKING"
+    ;;
+
+  approve)
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf '[would approve] PR #%s in %s\n' "$PR" "$REPO"
+      exit 0
+    fi
+    if [ -n "$BODY" ]; then
+      gh pr review "$PR" -R "$REPO" --approve --body "$BODY"
+    else
+      gh pr review "$PR" -R "$REPO" --approve
+    fi || { fail "could not approve PR #$PR (GitHub rejects approving your own PR)"; exit 1; }
+    printf '[approve] PR #%s\n' "$PR"
+    ;;
+
+  dismiss)
+    dismiss_review "$REVIEW"
+    ;;
+
+  dismiss-all)
+    BLOCKING=$(blocking_reviews) || { fail "could not read reviews for PR #$PR"; exit 1; }
+    COUNT=$(jq 'length' <<<"$BLOCKING")
+    if [ "$COUNT" -eq 0 ]; then
+      printf 'No reviews requesting changes on PR #%s.\n' "$PR"
+      exit 0
+    fi
+    while IFS=$'\t' read -r id author; do
+      [ -n "$id" ] || continue
+      dismiss_review "$id" "$author"
+    done < <(jq -r '.[] | [.reviewId, .author] | @tsv' <<<"$BLOCKING")
+    ;;
+
+  re-request)
+    BLOCKING=$(blocking_reviews) || { fail "could not read reviews for PR #$PR"; exit 1; }
+    REVIEWERS=$(jq -r '[.[].author] | unique | join(",")' <<<"$BLOCKING")
+    if [ -z "$REVIEWERS" ]; then
+      printf 'No reviews requesting changes on PR #%s.\n' "$PR"
+      exit 0
+    fi
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf '[would re-request] %s on PR #%s\n' "$REVIEWERS" "$PR"
+      exit 0
+    fi
+    gh pr edit "$PR" -R "$REPO" --add-reviewer "$REVIEWERS" \
+      || { fail "could not re-request review from $REVIEWERS"; exit 1; }
+    printf '[re-request] %s on PR #%s\n' "$REVIEWERS" "$PR"
+    ;;
+esac
