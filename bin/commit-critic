@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# commit-critic — summarize the commit that was just made and say whether it
+# should have been several commits.
+#
+# Usage: commit-critic [--rev <commit>] [--hook] [--json]
+#
+#   commit-critic                 critique HEAD in the current repository
+#   commit-critic --rev abc123    critique a specific commit
+#   commit-critic --hook          read a Claude Code PostToolUse event on stdin
+#
+# A CLAUDE.md rule asking for small commits is advisory, and agents drift from
+# it. This is the enforcing half: wired as a PostToolUse hook on Bash, it fires
+# after a commit lands, asks a cheap local model whether the commit is one
+# logical change, and on a bad verdict exits 2 so the harness is told to split
+# it. The commit already exists at that point, so the fix is
+# `git reset --soft HEAD~1` followed by scoped `atomic-commit` calls.
+#
+# Most commits never reach the model: anything at or under COMMIT_CRITIC_MIN_FILES
+# files and COMMIT_CRITIC_MIN_LINES changed lines is too small to be worth
+# splitting and passes immediately, so the common case costs nothing.
+#
+# Overridable:
+#   COMMIT_CRITIC=0             disable entirely (the hook becomes a no-op)
+#   COMMIT_CRITIC_MODEL         model id (default: deepseek/deepseek-v4-flash)
+#   COMMIT_CRITIC_URL           chat-completions endpoint
+#   COMMIT_CRITIC_API_KEY_VAR   env var holding the key (OPENROUTER_API_KEY)
+#   COMMIT_CRITIC_CMD           call this CLI instead of the API; it receives the
+#                               prompt via -p (used by the tests to stub the model)
+#   COMMIT_CRITIC_MIN_FILES     files below which a commit always passes (2)
+#   COMMIT_CRITIC_MIN_LINES     changed lines below which it always passes (80)
+#   COMMIT_CRITIC_MAX_DIFF      bytes of diff sent to the model (60000)
+#   COMMIT_CRITIC_MAX_AGE       seconds; older commits are not the one just made (120)
+#
+# The API key stays on this laptop, so on every remote box this command reports
+# that it skipped and exits 0 rather than failing a commit over a credential
+# that is deliberately not there.
+set -euo pipefail
+
+fail() { printf '[FAIL] %s\n' "$*" >&2; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+
+REV="HEAD"
+HOOK=0
+FORMAT="text"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rev)     REV="${2:-}"; [ -n "$REV" ] || { fail "--rev needs a commit"; exit 1; }; shift 2 ;;
+    --hook)    HOOK=1; shift ;;
+    --json)    FORMAT="json"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *)         fail "unknown argument: $1"; usage; exit 1 ;;
+  esac
+done
+
+[ "${COMMIT_CRITIC:-1}" = "0" ] && exit 0
+
+MIN_FILES="${COMMIT_CRITIC_MIN_FILES:-2}"
+MIN_LINES="${COMMIT_CRITIC_MIN_LINES:-80}"
+MAX_DIFF="${COMMIT_CRITIC_MAX_DIFF:-60000}"
+# Empty by default: the question is one prompt and one answer, so it goes
+# straight to the API. Setting this points at a CLI instead, which is how the
+# tests stub the model out.
+CRITIC_CMD="${COMMIT_CRITIC_CMD:-}"
+MODEL="${COMMIT_CRITIC_MODEL:-deepseek/deepseek-v4-flash}"
+API_URL="${COMMIT_CRITIC_URL:-https://openrouter.ai/api/v1/chat/completions}"
+API_KEY_VAR="${COMMIT_CRITIC_API_KEY_VAR:-OPENROUTER_API_KEY}"
+
+# ── Hook mode ──────────────────────────────────────────────────────
+# PostToolUse fires after every Bash call; only commits are interesting, and the
+# event carries the command that ran. Anything unparseable is not a commit.
+if [ "$HOOK" = "1" ]; then
+  command -v jq >/dev/null 2>&1 || exit 0
+  EVENT="$(cat)"
+  TOOL_COMMAND="$(printf '%s' "$EVENT" | jq -r '.tool_input.command // ""' 2>/dev/null || true)"
+  # The command has to *invoke* a commit, not merely mention one. A substring
+  # test fires on `grep atomic-commit README.md`, so require the word to sit at
+  # a command position: the start of the line or just after a shell operator,
+  # with only environment assignments in between.
+  printf '%s' "$TOOL_COMMAND" | grep -qE \
+    '(^|[;&|(]|&&|\|\||[[:space:]]then|[[:space:]]do)[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*((/[^[:space:]]*/)?git([[:space:]]+-[^[:space:]]+|[[:space:]]+-C[[:space:]]+[^[:space:]]+)*[[:space:]]+commit|(/[^[:space:]]*/)?atomic-commit)([[:space:]]|$)' \
+    || exit 0
+  # A commit that failed leaves HEAD where it was; nothing new to critique.
+  printf '%s' "$EVENT" | jq -e '.tool_response.exit_code // 0 | . == 0' >/dev/null 2>&1 || exit 0
+fi
+
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+SHA="$(git rev-parse --verify "$REV^{commit}" 2>/dev/null)" || {
+  [ "$HOOK" = "1" ] && exit 0
+  fail "not a commit: $REV"
+  exit 1
+}
+
+# ── Loop guard ─────────────────────────────────────────────────────
+# Splitting a commit creates new commits, each firing this hook again. Without a
+# record of what has already been judged, a harness acting on the verdict would
+# be critiqued forever.
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/commit-critic"
+STATE_FILE="$STATE_DIR/seen"
+if [ "$HOOK" = "1" ]; then
+  # The matched command need not have produced a commit — `git commit --dry-run`,
+  # a commit that made no change, a `git -C other-repo commit`. Critiquing
+  # whatever HEAD happens to be then attacks somebody else's already-merged
+  # work. Only a commit made moments ago belongs to the call that just ran.
+  COMMITTED_AT="$(git log -1 --format=%ct "$SHA" 2>/dev/null || echo 0)"
+  NOW="$(date +%s)"
+  if [ "$((NOW - COMMITTED_AT))" -gt "${COMMIT_CRITIC_MAX_AGE:-120}" ]; then
+    exit 0
+  fi
+  if [ -f "$STATE_FILE" ] && grep -qxF "$SHA" "$STATE_FILE" 2>/dev/null; then
+    exit 0
+  fi
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$SHA" >> "$STATE_FILE"
+  # Keep the file from growing without bound.
+  if [ "$(wc -l < "$STATE_FILE" 2>/dev/null || echo 0)" -gt 500 ]; then
+    tail -n 200 "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+  fi
+fi
+
+SUBJECT="$(git log -1 --format=%s "$SHA")"
+FILES="$(git show --pretty=format: --name-only "$SHA" | grep -c . || true)"
+LINES="$(git show --pretty=format: --numstat "$SHA" \
+  | awk '{ a = ($1 == "-" ? 0 : $1); d = ($2 == "-" ? 0 : $2); total += a + d } END { print total + 0 }')"
+
+emit() {
+  local verdict="$1" reason="$2" detail="${3:-}"
+  if [ "$FORMAT" = "json" ]; then
+    jq -n --arg sha "$SHA" --arg subject "$SUBJECT" --arg verdict "$verdict" \
+      --arg reason "$reason" --arg detail "$detail" \
+      --argjson files "$FILES" --argjson lines "$LINES" \
+      '{sha: $sha, subject: $subject, files: $files, lines: $lines,
+        verdict: $verdict, reason: $reason, detail: $detail}'
+  else
+    printf '[%s] %s (%s files, %s lines)\n' \
+      "$(printf '%s' "$verdict" | tr 'a-z' 'A-Z')" "$SUBJECT" "$FILES" "$LINES"
+    [ -z "$reason" ] || printf '  %s\n' "$reason"
+    [ -z "$detail" ] || printf '%s\n' "$detail"
+  fi
+}
+
+# ── Cheap path ─────────────────────────────────────────────────────
+if [ "$FILES" -le "$MIN_FILES" ] && [ "$LINES" -le "$MIN_LINES" ]; then
+  emit ok "below the split threshold; no model call"
+  exit 0
+fi
+
+if [ -n "$CRITIC_CMD" ] && ! command -v "$CRITIC_CMD" >/dev/null 2>&1; then
+  emit skipped "summarizer not available: $CRITIC_CMD"
+  exit 0
+fi
+if [ -z "$CRITIC_CMD" ] && [ -z "${!API_KEY_VAR:-}" ]; then
+  # Deliberate on every machine but this laptop: credentials do not travel, so
+  # the hook goes quiet there instead of failing commits.
+  emit skipped "$API_KEY_VAR is not set"
+  exit 0
+fi
+
+PROMPT="$(cat <<'EOF'
+You are reviewing a single Git commit for scope, not for correctness.
+
+A commit is good when it is ONE logical change: a feature, a fix, a refactor, or
+its own tests and docs. It is bad when it bundles changes that a reader would
+want to review, revert, or bisect separately.
+
+Size alone is not a defect. A large mechanical rename or a generated file is one
+change. Two unrelated small fixes are two changes.
+
+Answer in exactly this format, with no other text:
+
+VERDICT: ok
+SUMMARY: <one sentence describing the change>
+
+or:
+
+VERDICT: split
+SUMMARY: <one sentence describing what the commit contains>
+REASON: <one sentence naming the unrelated concerns>
+SPLIT:
+- <scoped commit message> -- <paths>
+- <scoped commit message> -- <paths>
+
+Commit under review:
+EOF
+)"
+
+BODY="$(
+  printf '%s\n\nSubject: %s\n\nStat:\n%s\n\nDiff:\n%s\n' \
+    "$PROMPT" "$SUBJECT" \
+    "$(git show --stat --pretty=format: "$SHA")" \
+    "$(git show --pretty=format: "$SHA" | head -c "$MAX_DIFF")"
+)"
+
+# One HTTP request with the prompt in it. A full coding harness would boot a
+# whole agent loop, tools and session state included, to answer a single
+# yes-or-no question about a diff.
+ask_openrouter() {
+  local payload
+  payload="$(jq -n --arg model "$MODEL" --arg content "$BODY" \
+    '{model: $model, temperature: 0, max_tokens: 500,
+      messages: [{role: "user", content: $content}]}')"
+  curl -sS --fail-with-body --max-time "${COMMIT_CRITIC_TIMEOUT:-60}" \
+    -H "Authorization: Bearer ${!API_KEY_VAR}" \
+    -H "Content-Type: application/json" \
+    -d "$payload" "$API_URL" \
+    | jq -r '.choices[0].message.content // ""'
+}
+
+RESPONSE=""
+CRITIC_STATUS=0
+if [ -n "$CRITIC_CMD" ]; then
+  RESPONSE="$("$CRITIC_CMD" -p "$BODY" 2>&1)" || CRITIC_STATUS=$?
+else
+  RESPONSE="$(ask_openrouter 2>&1)" || CRITIC_STATUS=$?
+fi
+if [ "$CRITIC_STATUS" -ne 0 ] || [ -z "$RESPONSE" ]; then
+  # A missing credential or an unreachable endpoint must not turn into a failed
+  # commit. Say so and pass.
+  emit skipped "summarizer unavailable (exit $CRITIC_STATUS)"
+  exit 0
+fi
+
+VERDICT="$(printf '%s' "$RESPONSE" | sed -n 's/^VERDICT:[[:space:]]*//p' | head -1 | tr 'A-Z' 'a-z')"
+SUMMARY="$(printf '%s' "$RESPONSE" | sed -n 's/^SUMMARY:[[:space:]]*//p' | head -1)"
+REASON="$(printf '%s' "$RESPONSE" | sed -n 's/^REASON:[[:space:]]*//p' | head -1)"
+SPLIT="$(printf '%s' "$RESPONSE" | sed -n '/^SPLIT:/,$p' | tail -n +2)"
+
+if [ "$VERDICT" != "split" ]; then
+  emit ok "${SUMMARY:-no summary returned}"
+  exit 0
+fi
+
+emit split "${SUMMARY:-}${REASON:+ — $REASON}" "$SPLIT"
+
+# In hook mode the non-zero exit is the whole point: Claude Code feeds stderr
+# back to the harness, which can still unwind the commit it just made.
+if [ "$HOOK" = "1" ]; then
+  {
+    printf 'The commit just made bundles unrelated changes.\n'
+    [ -z "$REASON" ] || printf '%s\n' "$REASON"
+    printf 'Split it before continuing:\n'
+    printf '  git reset --soft HEAD~1 && git restore --staged .\n'
+    [ -z "$SPLIT" ] || printf '%s\n' "$SPLIT"
+    printf 'Then commit each scope with: atomic-commit "<message>" -- <paths...>\n'
+  } >&2
+  exit 2
+fi

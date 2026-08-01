@@ -31,7 +31,17 @@
     ],
     "UserPromptSubmit": [],
     "PreToolUse": [],
-    "PostToolUse": [],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/work/workspace/bin/commit-critic\" --hook"
+          }
+        ]
+      }
+    ],
     "PostToolUseFailure": [],
     "PermissionRequest": []
   },

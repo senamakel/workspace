@@ -18,6 +18,10 @@ There is no compilation step or centralized test suite. Validate the part you ch
   open-source pipeline state and launcher.
 - `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
   repository with dirty, unpushed, and submodule-bearing worktrees.
+- `tests/commit-critic.sh` exercises the commit-size hook's offline logic —
+  thresholds, verdict parsing, which commands count as a commit, the
+  already-judged guard, and its refusal to fail a commit when the model is
+  unreachable — with a stubbed CLI and no credentials.
 - `tests/langfuse-lib.sh` exercises the Langfuse helpers' offline logic —
   environment resolution, project presets, time windows, and paging — with a
   stubbed API and no credentials.

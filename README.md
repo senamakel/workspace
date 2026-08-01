@@ -377,6 +377,40 @@ atomic-commit "bin: add worktree helper" -- bin/worktree .gitignore
 atomic-commit --json "docs: explain setup" -- README.md
 ```
 
+### `commit-critic [--rev <commit>] [--hook] [--json]`
+
+Summarizes the commit just made and says whether it should have been several
+commits. `atomic-commit` controls *what goes into* a commit; this checks whether
+the commit was one logical change, which no amount of explicit pathspecs can
+enforce.
+
+Wired as a `PostToolUse` hook on `Bash` in `claude/settings.json`. On a `split`
+verdict it exits 2, which hands the reason back to the harness along with the
+`git reset --soft HEAD~1` needed to unwind — a rule in `CLAUDE.md` is advisory
+and agents drift from it, a hook is not.
+
+It is deliberately cheap. Anything at or under `COMMIT_CRITIC_MIN_FILES` (2) and
+`COMMIT_CRITIC_MIN_LINES` (80) passes with no model call at all, so ordinary
+small commits cost nothing. Larger ones become **one** HTTPS request to
+OpenRouter with the stat and truncated diff — roughly six seconds — rather than
+booting a whole coding harness to answer a single question about a diff.
+
+Three guards keep it from misfiring. The command must actually *invoke* a commit
+(`grep atomic-commit README.md` mentions one and is ignored); the commit must
+have been made moments ago, so a matched command that produced nothing does not
+put already-merged work under review; and each commit SHA is judged once, so
+acting on a verdict cannot loop.
+
+```sh
+commit-critic                  # critique HEAD here
+commit-critic --rev abc123 --json
+COMMIT_CRITIC=0 git commit …   # bypass for one commit
+```
+
+`OPENROUTER_API_KEY` stays on the laptop, so on the remote boxes this reports
+`[SKIPPED]` and exits 0 rather than failing commits over a credential that is
+deliberately not there.
+
 ### `pr-list [--json] [--limit <count>] [--include-drafts] [-R|--repo <owner/name>]`
 
 Lists open pull requests for the current repository, preferring its
