@@ -33,11 +33,11 @@
     "PreToolUse": [],
     "PostToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/work/workspace/bin/commit-critic\" --hook"
+            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
           }
         ]
       }
