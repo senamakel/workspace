@@ -112,8 +112,22 @@ test_uses_the_generated_subject() {
   stub="$(make_stub subject "add a greeting file")"
   printf 'hello\n' > "$repo/new.txt"
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
-  assert_eq "wip: add a greeting file" "$(git -C "$repo" log -1 --format=%s)" \
-    "the model's subject is used, with the prefix applied"
+  assert_eq "chore: add a greeting file" "$(git -C "$repo" log -1 --format=%s)" \
+    "a non-conventional subject gets the fallback type"
+}
+
+test_keeps_a_conventional_subject_verbatim() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  for stub_subject in "feat: add a greeting file" "fix(parser): handle empty input" "refactor!: drop the old api"; do
+    repo="$(make_repo "conv-$(printf '%s' "$stub_subject" | tr -cd 'a-z')")"
+    state="$(state_dir "conv-$(printf '%s' "$stub_subject" | tr -cd 'a-z')")"
+    stub="$(make_stub "conv$(printf '%s' "$stub_subject" | tr -cd 'a-z')" "$stub_subject")"
+    printf 'hello\n' > "$repo/new.txt"
+    AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+    assert_eq "$stub_subject" "$(git -C "$repo" log -1 --format=%s)" \
+      "an already-conventional subject is not re-prefixed"
+  done
 }
 
 test_falls_back_without_a_model() {
@@ -128,7 +142,7 @@ test_falls_back_without_a_model() {
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$broken" >/dev/null
   # A checkpoint with a dull message beats a lost checkpoint.
   assert_eq 2 "$(count_commits "$repo")" "an unreachable model still commits"
-  assert_contains "$(git -C "$repo" log -1 --format=%s)" "wip:" \
+  assert_contains "$(git -C "$repo" log -1 --format=%s)" "chore:" \
     "the fallback subject is used"
 }
 
@@ -233,6 +247,7 @@ test_disabled_by_environment() {
 
 run_test "commits only every Nth tool call" test_commits_only_every_nth_tool_call
 run_test "uses the generated subject" test_uses_the_generated_subject
+run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim
 run_test "falls back to a plain subject without a model" test_falls_back_without_a_model
 run_test "commits untracked and modified files together" test_commits_untracked_and_modified_together
 run_test "never commits a credential" test_never_commits_a_credential

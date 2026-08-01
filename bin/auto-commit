@@ -37,7 +37,8 @@
 #   AUTO_COMMIT_ALLOW_PROTECTED=1    allow commits on main/master
 #   AUTO_COMMIT_PROTECTED            protected branch names (main master)
 #   AUTO_COMMIT_SKIP                 extra glob(s) never staged, colon-separated
-#   AUTO_COMMIT_PREFIX               subject prefix (default: wip)
+#   AUTO_COMMIT_FALLBACK_TYPE        type used when the model gives none (chore)
+#   AUTO_COMMIT_TYPES                accepted Conventional Commits types
 #   AUTO_COMMIT_MODEL                model id (deepseek/deepseek-v4-flash)
 #   AUTO_COMMIT_URL                  chat-completions endpoint
 #   AUTO_COMMIT_API_KEY_VAR          env var holding the key (OPENROUTER_API_KEY)
@@ -68,7 +69,11 @@ done
 [ "$HOOK" = "1" ] || [ "$NOW" = "1" ] || [ "$DRY" = "1" ] || { usage; exit 1; }
 
 EVERY="${AUTO_COMMIT_EVERY:-3}"
-PREFIX="${AUTO_COMMIT_PREFIX:-wip}"
+# Conventional Commits: the subject is `type(scope): description`. Anything the
+# model returns in another shape gets the fallback type rather than being thrown
+# away, so the log stays parseable without losing a description that read the diff.
+CONVENTIONAL_TYPES="${AUTO_COMMIT_TYPES:-feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert}"
+FALLBACK_TYPE="${AUTO_COMMIT_FALLBACK_TYPE:-chore}"
 MAX_DIFF="${AUTO_COMMIT_MAX_DIFF:-40000}"
 MODEL="${AUTO_COMMIT_MODEL:-deepseek/deepseek-v4-flash}"
 API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
@@ -205,19 +210,24 @@ fallback_subject() {
   where="$(printf '%s\n' "${STAGE[@]}" | xargs -n1 dirname 2>/dev/null \
     | sort -u | head -2 | paste -sd, - || true)"
   if [ "$n" -eq 1 ]; then
-    printf '%s: update %s' "$PREFIX" "${STAGE[0]}"
+    printf '%s: update %s' "$FALLBACK_TYPE" "${STAGE[0]}"
   else
-    printf '%s: update %s files in %s' "$PREFIX" "$n" "${where:-the working tree}"
+    printf '%s: update %s files in %s' "$FALLBACK_TYPE" "$n" "${where:-the working tree}"
   fi
 }
 
 ask_model() {
   local prompt payload
   prompt="$(cat <<EOF
-Write ONE commit subject line for the change below.
+Write ONE Conventional Commits subject line for the change below.
 
 Rules:
-- imperative mood, lower case after the prefix, no trailing period
+- format: type(scope): description — the scope is optional
+- type is one of: feat fix chore docs refactor test perf build ci style revert
+- pick the type from what the change does: a new capability is feat, a bug fix is
+  fix, documentation is docs, restructuring with no behaviour change is refactor,
+  tests are test, and anything else routine is chore
+- imperative mood, lower case description, no trailing period
 - at most 72 characters
 - describe what the change does, not which files moved
 - output the subject line and nothing else
@@ -240,11 +250,13 @@ EOF
     return
   fi
   [ -n "${!API_KEY_VAR:-}" ] || return 1
-  # Generous despite wanting one short line: reasoning models spend this budget
-  # thinking before they emit any content, and a budget sized to the answer
-  # comes back empty every time.
+  # Reasoning off, deliberately. This question does not need deliberation, and
+  # leaving it on doubles the wait (3.3s vs 1.7s measured) while consuming the
+  # token budget before any content is emitted — the reason an answer-sized
+  # budget came back empty every time.
   payload="$(jq -n --arg model "$MODEL" --arg content "$prompt" \
-    '{model: $model, temperature: 0, max_tokens: 400,
+    '{model: $model, temperature: 0, max_tokens: 120,
+      reasoning: {enabled: false},
       messages: [{role: "user", content: $content}]}')"
   curl -sS --fail-with-body --max-time "${AUTO_COMMIT_TIMEOUT:-30}" \
     -H "Authorization: Bearer ${!API_KEY_VAR}" \
@@ -257,11 +269,11 @@ SUBJECT=""
 SUBJECT="$(ask_model 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'"'"']//;s/["'"'"']$//' || true)"
 if [ -z "$SUBJECT" ]; then
   SUBJECT="$(fallback_subject)"
-else
-  case "$SUBJECT" in
-    "$PREFIX":*) ;;
-    *) SUBJECT="$PREFIX: $SUBJECT" ;;
-  esac
+elif ! printf '%s' "$SUBJECT" \
+  | grep -qE "^($CONVENTIONAL_TYPES)(\([^)]+\))?!?: .+"; then
+  # The model answered, but not in Conventional Commits form. Keep what it said —
+  # it read the diff — and give it the routine type rather than discarding it.
+  SUBJECT="$FALLBACK_TYPE: $SUBJECT"
 fi
 SUBJECT="$(printf '%s' "$SUBJECT" | cut -c1-100)"
 
