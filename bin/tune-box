@@ -321,7 +321,10 @@ else
   if [ "$CLEAN" != "1" ]; then
     skip "not deleting (pass --clean-targets); the debug-profile change above invalidates them anyway"
   else
-    BUSY="$(pgrep -f '[c]argo build|[c]argo test|[r]ustc' 2>/dev/null | wc -l | tr -d ' ')"
+    # pgrep exits 1 when nothing matches, and under `set -e` with pipefail that
+    # aborted the whole script precisely when no build was running — the one case
+    # where deleting is safe. The `|| true` is load-bearing.
+    BUSY="$( { pgrep -f '[c]argo build|[c]argo test|[r]ustc' 2>/dev/null || true; } | wc -l | tr -d ' ')"
     if [ "${BUSY:-0}" -gt 0 ]; then
       skip "$BUSY cargo/rustc processes running — refusing to delete a live target dir"
     elif act "delete ${#TARGETS[@]} target dirs"; then
