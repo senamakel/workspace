@@ -429,10 +429,15 @@ transfer, and the CLI override is bounded the same way since macOS ships no
 (5) paths and counting the rest. A subject that arrives late is worthless — the
 next tool call has already raced it — so the commit always wins over the wording.
 
+Committing is **mandatory**: there is deliberately no environment switch to turn
+it off, because a kill switch gets reached for exactly when checkpoints matter
+most. Disabling it takes a visible edit to `claude/settings.json` or
+`codex/hooks.json`. The guards above are not opt-outs — they exist so it never
+commits something it should not.
+
 ```sh
 auto-commit --dry-run          # show the message and files, commit nothing
 auto-commit --now              # checkpoint right now
-AUTO_COMMIT=0 …                # disable
 AUTO_COMMIT_EVERY=10 …         # checkpoint less often
 ```
 

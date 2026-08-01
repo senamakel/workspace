@@ -32,7 +32,12 @@
 #   * commits without a model, and without a network, if it has to
 #
 # Overridable:
-#   AUTO_COMMIT=0                    disable entirely
+# There is deliberately no environment switch to turn this off. A kill switch is
+# the first thing reached for when committing is inconvenient, which is exactly
+# when checkpoints matter most. Disabling it takes a deliberate, visible edit to
+# claude/settings.json or codex/hooks.json. The guards below are not opt-outs:
+# they exist so the command never commits something it should not.
+#
 #   AUTO_COMMIT_EVERY                tool calls between commits (3)
 #   AUTO_COMMIT_ALLOW_PROTECTED=1    allow commits on main/master
 #   AUTO_COMMIT_PROTECTED            protected branch names (main master)
@@ -67,7 +72,6 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ "${AUTO_COMMIT:-1}" = "0" ] && exit 0
 [ "$HOOK" = "1" ] || [ "$NOW" = "1" ] || [ "$DRY" = "1" ] || { usage; exit 1; }
 
 EVERY="${AUTO_COMMIT_EVERY:-3}"

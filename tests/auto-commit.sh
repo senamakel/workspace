@@ -286,17 +286,21 @@ test_dry_run_changes_nothing() {
   assert_contains "$(git -C "$repo" status --porcelain)" "new.txt" "the file stays uncommitted"
 }
 
-test_disabled_by_environment() {
-  local repo state stub
+test_cannot_be_disabled_by_environment() {
+  local repo state stub v
   command -v jq >/dev/null 2>&1 || return 0
-  repo="$(make_repo disabled)"
-  state="$(state_dir disabled)"
-  stub="$(make_stub disabled "change things")"
-  printf 'hello\n' > "$repo/new.txt"
-  jq -n '{session_id: "s", tool_name: "Bash"}' \
-    | (cd "$repo" && AUTO_COMMIT=0 AUTO_COMMIT_EVERY=1 AUTO_COMMIT_CMD="$stub" \
-       XDG_STATE_HOME="$state" "$COMMAND" --hook >/dev/null 2>&1)
-  assert_eq 1 "$(count_commits "$repo")" "AUTO_COMMIT=0 disables the hook"
+  # Committing is mandatory: no environment variable may switch it off, since a
+  # kill switch gets reached for exactly when checkpoints matter most.
+  for v in AUTO_COMMIT AUTO_COMMIT_DISABLE AUTO_COMMIT_ENABLED NO_AUTO_COMMIT; do
+    repo="$(make_repo "mandatory-$v")"
+    state="$(state_dir "mandatory-$v")"
+    stub="$(make_stub "mandatory$v" "chore: add a file")"
+    printf 'hello\n' > "$repo/new.txt"
+    jq -n '{session_id: "s", tool_name: "Bash"}' \
+      | (cd "$repo" && env "$v=0" AUTO_COMMIT_EVERY=1 AUTO_COMMIT_CMD="$stub" \
+         XDG_STATE_HOME="$state" "$COMMAND" --hook >/dev/null 2>&1)
+    assert_eq 2 "$(count_commits "$repo")" "$v=0 must not prevent the commit"
+  done
 }
 
 run_test "commits only every Nth tool call" test_commits_only_every_nth_tool_call
@@ -312,5 +316,5 @@ run_test "refuses a protected branch unless allowed" test_refuses_a_protected_br
 run_test "skips during a merge" test_skips_during_a_merge
 run_test "a clean tree commits nothing" test_clean_tree_commits_nothing
 run_test "dry run changes nothing" test_dry_run_changes_nothing
-run_test "AUTO_COMMIT=0 disables the hook" test_disabled_by_environment
+run_test "cannot be disabled by any environment variable" test_cannot_be_disabled_by_environment
 printf '1..%s\n' "$PASS_COUNT"
