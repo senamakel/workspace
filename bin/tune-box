@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+# tune-box — apply build, memory, and I/O tuning appropriate to this machine.
+#
+# Usage: tune-box [--dry-run] [--clean-targets] [--report]
+#
+#   tune-box                 apply everything this OS supports
+#   tune-box --dry-run       print what would change, touch nothing
+#   tune-box --report        show current state only
+#   tune-box --clean-targets also delete stale cargo target/ dirs (see below)
+#
+# Everything here is sized from the machine's own CPU and RAM rather than
+# hardcoded, because these boxes differ by 3x in cores and RAM. Re-running is
+# safe: existing settings are reported and left alone, never duplicated or
+# overwritten, so a value tuned by hand survives.
+#
+# What it does everywhere:
+#   * installs sccache and points cargo at it, so the many worktrees of a
+#     superproject stop each compiling an identical dependency graph
+#   * caps cargo build parallelism from available RAM, not core count — rustc
+#     wants gigabytes per job, and a core it cannot feed is worse than idle
+#   * drops debug info for dependencies and shrinks it for local crates, which
+#     is the single largest lever on both rustc memory and build write volume
+#   * disables incremental compilation, which writes thousands of small files
+#     per crate and cannot be cached by sccache
+#
+# Additionally on Linux:
+#   * zram — compressed swap in RAM, so swapping costs CPU instead of disk I/O
+#   * vm.swappiness raised to suit zram, since swap no longer means the disk
+#   * a systemd user-slice MemoryHigh/AllowedCPUs cap, so a runaway test suite
+#     degrades throughput instead of taking the machine down
+#   * daily fstrim — a weekly TRIM is far too rare for checkouts that create and
+#     delete multi-gigabyte target/ dirs all day. On one box a six-day backlog
+#     cost 40x random-read throughput and left p99 latency at 759ms.
+#
+# macOS deliberately gets none of those four: it compresses memory natively so
+# zram is redundant, has no swappiness knob, and APFS issues TRIM on its own.
+set -euo pipefail
+
+DRY=0
+CLEAN=0
+REPORT=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run)       DRY=1; shift ;;
+    --clean-targets) CLEAN=1; shift ;;
+    --report)        REPORT=1; shift ;;
+    -h|--help)       sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *)               printf '[FAIL] unknown argument: %s\n' "$1" >&2; exit 1 ;;
+  esac
+done
+
+if [ -t 1 ]; then
+  _G=$'\033[0;32m' _Y=$'\033[0;33m' _B=$'\033[1m' _0=$'\033[0m'
+else
+  _G="" _Y="" _B="" _0=""
+fi
+ok()   { printf '%s[ok]%s   %s\n' "$_G" "$_0" "$*"; }
+skip() { printf '%s[skip]%s %s\n' "$_Y" "$_0" "$*"; }
+head_() { printf '\n%s== %s%s\n' "$_B" "$*" "$_0"; }
+act()  { if [ "$DRY" = "1" ]; then printf '       would: %s\n' "$*"; return 1; fi; return 0; }
+
+# ── Machine facts ──────────────────────────────────────────────────
+OS="$(uname -s)"
+case "$OS" in
+  Darwin)
+    CORES="$(sysctl -n hw.ncpu)"
+    RAM_GB=$(( $(sysctl -n hw.memsize) / 1073741824 ))
+    ;;
+  Linux)
+    CORES="$(nproc)"
+    RAM_GB=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1048576 ))
+    ;;
+  *) printf '[FAIL] unsupported OS: %s\n' "$OS" >&2; exit 1 ;;
+esac
+
+# rustc routinely needs 2-6 GB for a single crate, so RAM is the real limit on
+# parallelism. Reserve headroom for everything else, then never exceed the cores
+# actually present, and keep at least 2 jobs so builds do not crawl.
+JOBS=$(( (RAM_GB - 6) / 4 ))
+[ "$JOBS" -lt 2 ] && JOBS=2
+[ "$JOBS" -gt $((CORES - 2)) ] && JOBS=$((CORES - 2))
+[ "$JOBS" -lt 1 ] && JOBS=1
+
+head_ "machine"
+printf '  %s, %s cores, %s GB RAM  ->  cargo jobs = %s\n' "$OS" "$CORES" "$RAM_GB" "$JOBS"
+
+# ── sccache ────────────────────────────────────────────────────────
+head_ "sccache"
+if command -v sccache >/dev/null 2>&1; then
+  ok "present: $(sccache --version 2>/dev/null | head -1)"
+elif act "install sccache"; then
+  if [ "$OS" = "Darwin" ]; then
+    if ! command -v brew >/dev/null 2>&1; then
+      skip "Homebrew not found; install sccache manually"
+    elif brew install -q sccache >/dev/null 2>&1; then
+      # A formula can be installed in the Cellar yet unlinked, in which case the
+      # binary never reaches PATH and every later check silently reports it
+      # missing. Relinking is cheap and fixes that case.
+      brew link --overwrite sccache >/dev/null 2>&1 || true
+      hash -r 2>/dev/null || true
+      command -v sccache >/dev/null 2>&1 \
+        && ok "installed via brew" || skip "brew installed sccache but it is not on PATH"
+    else
+      skip "brew install sccache failed; run it manually to see why"
+    fi
+  else
+    sudo apt-get update -qq >/dev/null 2>&1 || true
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sccache >/dev/null 2>&1 \
+      && ok "installed via apt" || skip "apt could not install sccache"
+  fi
+fi
+
+SCCACHE_BIN="$(command -v sccache || true)"
+if [ -n "$SCCACHE_BIN" ]; then
+  # A config file, not environment variables: these shells are spawned by tmux,
+  # `zsh -c` snapshots and systemd units, and an env var set in one of those
+  # silently would not apply in the others.
+  if [ -f "$HOME/.config/sccache/config.toml" ]; then
+    ok "cache config already present"
+  elif act "write ~/.config/sccache/config.toml"; then
+    mkdir -p "$HOME/.config/sccache"
+    cat > "$HOME/.config/sccache/config.toml" <<EOF
+[cache.disk]
+dir = "$HOME/.cache/sccache"
+size = 32212254720
+EOF
+    ok "wrote cache config (30 GiB)"
+  fi
+fi
+
+# ── cargo ──────────────────────────────────────────────────────────
+head_ "cargo"
+CARGO_CFG="$HOME/.cargo/config.toml"
+if [ "$REPORT" = "1" ]; then
+  [ -f "$CARGO_CFG" ] && sed 's/^/  /' "$CARGO_CFG" || echo "  (no config)"
+elif act "update $CARGO_CFG"; then
+  mkdir -p "$HOME/.cargo"
+  [ -f "$CARGO_CFG" ] || : > "$CARGO_CFG"
+  [ -s "$CARGO_CFG" ] && cp -a "$CARGO_CFG" "$CARGO_CFG.bak.$(date +%Y%m%d%H%M%S)"
+  LINKER_FLAG=""
+  if [ "$OS" = "Linux" ] && command -v mold >/dev/null 2>&1; then
+    LINKER_FLAG="mold"
+  fi
+  python3 - "$CARGO_CFG" "$JOBS" "$SCCACHE_BIN" "$OS" "$LINKER_FLAG" <<'PY'
+import re, sys
+path, jobs, sccache, osname, linker = sys.argv[1:6]
+text = open(path).read()
+added = []
+
+def has_key(section, key):
+    m = re.search(r'^\[' + re.escape(section) + r'\]$(.*?)(?=^\[|\Z)', text, re.M | re.S)
+    return bool(m and re.search(r'^\s*' + re.escape(key) + r'\s*=', m.group(1), re.M))
+
+def ensure_section(name, lines):
+    """Create a section, or add only the missing keys to an existing one."""
+    global text, added
+    if not re.search(r'^\[' + re.escape(name) + r'\]$', text, re.M):
+        text = (text.rstrip() + "\n\n" if text.strip() else "") + f"[{name}]\n" + "".join(
+            f"{k} = {v}\n" for k, v in lines)
+        added.append(f"[{name}] created")
+        return
+    for k, v in lines:
+        if not has_key(name, k):
+            text = re.sub(r'(^\[' + re.escape(name) + r'\]$\n)', r'\1' + f"{k} = {v}\n",
+                          text, count=1, flags=re.M)
+            added.append(f"{name}.{k}")
+
+build = [("jobs", jobs), ("incremental", "false")]
+if sccache:
+    build.append(("rustc-wrapper", f'"{sccache}"'))
+ensure_section("build", build)
+
+# Keep line tables for usable backtraces in your own crates; dependencies are
+# never stepped into, so their debug info is pure memory and write volume.
+prof = [("debug", '"line-tables-only"')]
+if osname == "Linux":
+    prof.append(("split-debuginfo", '"unpacked"'))
+ensure_section("profile.dev", prof)
+ensure_section("profile.test", prof)
+ensure_section('profile.dev.package."*"', [("debug", "0")])
+ensure_section('profile.test.package."*"', [("debug", "0")])
+
+if linker == "mold":
+    ensure_section("target.x86_64-unknown-linux-gnu",
+                   [("rustflags", '["-C", "link-arg=-fuse-ld=mold"]')])
+
+open(path, "w").write(text)
+print("  " + ("; ".join(added) if added else "already fully configured"))
+PY
+  ok "cargo configured (jobs=$JOBS, incremental off, dep debug off)"
+fi
+
+# ── Linux-only: memory and I/O ─────────────────────────────────────
+if [ "$OS" = "Linux" ] && [ "$REPORT" != "1" ]; then
+  head_ "mold (fast linker)"
+  if command -v mold >/dev/null 2>&1; then
+    ok "present: $(mold --version 2>/dev/null | head -1)"
+  elif act "install mold"; then
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq mold >/dev/null 2>&1 \
+      && ok "installed" || skip "apt could not install mold"
+  fi
+
+  head_ "zram (compressed swap in RAM)"
+  ZRAM_MB=$(( RAM_GB * 1024 / 4 ))
+  if [ -e /dev/zram0 ]; then
+    ok "already active: $(zramctl --output NAME,DISKSIZE,ALGORITHM --noheadings 2>/dev/null | head -1)"
+  elif act "configure ${ZRAM_MB}MB zram at priority 100"; then
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd-zram-generator >/dev/null 2>&1 || true
+    sudo tee /etc/systemd/zram-generator.conf >/dev/null <<EOF
+# Compressed swap in RAM, ahead of any on-disk swap. Node and Rust working sets
+# compress roughly 3-4:1, so this holds far more than its nominal size, and
+# swapping costs CPU cycles instead of disk I/O.
+[zram0]
+zram-size = $ZRAM_MB
+compression-algorithm = zstd
+swap-priority = 100
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl restart systemd-zram-setup@zram0.service 2>/dev/null || true
+    ok "zram0 configured (${ZRAM_MB}MB zstd, priority 100)"
+  fi
+
+  head_ "swappiness"
+  CUR_SWAP="$(cat /proc/sys/vm/swappiness)"
+  # With zram in front, "swapping" means compressing into RAM, so leaning into
+  # it frees uncompressed RAM rather than touching the disk.
+  WANT_SWAP=100
+  [ -e /dev/zram0 ] || WANT_SWAP=10
+  if [ "$CUR_SWAP" = "$WANT_SWAP" ]; then
+    ok "already $CUR_SWAP"
+  elif act "set vm.swappiness=$WANT_SWAP (currently $CUR_SWAP)"; then
+    printf 'vm.swappiness = %s\n' "$WANT_SWAP" | sudo tee /etc/sysctl.d/99-tune-box.conf >/dev/null
+    sudo sysctl -q -w vm.swappiness=$WANT_SWAP
+    ok "vm.swappiness=$WANT_SWAP (was $CUR_SWAP)"
+  fi
+
+  head_ "user slice caps"
+  UID_NUM="$(id -u)"
+  MEM_HIGH=$(( RAM_GB * 3 / 4 ))
+  CPU_CAP=$(( CORES * 3 / 4 )); [ "$CPU_CAP" -lt 2 ] && CPU_CAP=2
+  if [ -f "/etc/systemd/system/user-$UID_NUM.slice.d/50-resource-caps.conf" ]; then
+    ok "already capped: MemoryHigh=$(systemctl show user-$UID_NUM.slice -p MemoryHigh --value) AllowedCPUs=$(systemctl show user-$UID_NUM.slice -p AllowedCPUs --value)"
+  elif act "cap user slice at MemoryHigh=${MEM_HIGH}G AllowedCPUs=0-$((CPU_CAP - 1))"; then
+    sudo mkdir -p "/etc/systemd/system/user-$UID_NUM.slice.d"
+    sudo tee "/etc/systemd/system/user-$UID_NUM.slice.d/50-resource-caps.conf" >/dev/null <<EOF
+# MemoryHigh throttles and reclaims; it deliberately does not kill, because
+# MemoryMax here would reintroduce systemd-oomd killing tmux panes.
+# AllowedCPUs caps how parallel anything believes it can be: Node's
+# os.availableParallelism() and cargo's job default both read the affinity mask,
+# so jest workers and their per-worker databases fall with it.
+[Slice]
+MemoryHigh=${MEM_HIGH}G
+AllowedCPUs=0-$((CPU_CAP - 1))
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl set-property "user-$UID_NUM.slice" \
+      "MemoryHigh=${MEM_HIGH}G" "AllowedCPUs=0-$((CPU_CAP - 1))" 2>/dev/null || true
+    ok "MemoryHigh=${MEM_HIGH}G AllowedCPUs=0-$((CPU_CAP - 1))"
+  fi
+
+  head_ "TRIM"
+  if [ -f /etc/systemd/system/fstrim.timer.d/override.conf ]; then
+    ok "already daily"
+  elif act "set fstrim.timer to daily"; then
+    sudo mkdir -p /etc/systemd/system/fstrim.timer.d
+    printf '[Timer]\nOnCalendar=\nOnCalendar=daily\n' \
+      | sudo tee /etc/systemd/system/fstrim.timer.d/override.conf >/dev/null
+    sudo systemctl daemon-reload
+    sudo systemctl restart fstrim.timer 2>/dev/null || true
+    ok "fstrim.timer set to daily"
+  fi
+elif [ "$OS" = "Darwin" ] && [ "$REPORT" != "1" ]; then
+  head_ "macOS notes"
+  skip "zram, swappiness, fstrim, systemd caps: not applicable"
+  printf '       macOS compresses memory natively and APFS issues TRIM itself.\n'
+fi
+
+# ── Stale target dirs ──────────────────────────────────────────────
+head_ "cargo target dirs"
+TARGETS=()
+while IFS= read -r t; do
+  [ -f "$t/CACHEDIR.TAG" ] || [ -d "$t/debug" ] || [ -d "$t/release" ] || continue
+  TARGETS+=("$t")
+done < <(find "$HOME/work" -maxdepth 7 -type d -name target \
+  -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null || true)
+
+if [ "${#TARGETS[@]}" -eq 0 ]; then
+  ok "none found"
+else
+  TOTAL="$(du -csm "${TARGETS[@]}" 2>/dev/null | tail -1 | cut -f1)"
+  printf '  %s dirs, ~%s GB\n' "${#TARGETS[@]}" "$(( ${TOTAL:-0} / 1024 ))"
+  if [ "$CLEAN" != "1" ]; then
+    skip "not deleting (pass --clean-targets); the debug-profile change above invalidates them anyway"
+  else
+    BUSY="$(pgrep -f '[c]argo build|[c]argo test|[r]ustc' 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${BUSY:-0}" -gt 0 ]; then
+      skip "$BUSY cargo/rustc processes running — refusing to delete a live target dir"
+    elif act "delete ${#TARGETS[@]} target dirs"; then
+      for t in "${TARGETS[@]}"; do rm -rf "$t"; done
+      ok "removed ${#TARGETS[@]} target dirs (~$(( ${TOTAL:-0} / 1024 )) GB)"
+    fi
+  fi
+fi
+
+printf '\n'
+ok "tune-box complete on $(hostname -s) ($OS, $CORES cores, ${RAM_GB}GB)"
