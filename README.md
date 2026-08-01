@@ -416,10 +416,18 @@ Subjects follow Conventional Commits (`type(scope): description`). A reply that
 is not in that form keeps its description and gets `chore:`, so the log stays
 parseable without discarding something that read the diff.
 
-Latency is ~1.5s on the calls that fire and ~0.1s on the rest, which are a
+Latency is ~1.5-3s on the calls that fire and ~0.1s on the rest, which are a
 counter increment and nothing more. Reasoning is explicitly disabled in the
 request: this question does not need deliberation, and leaving it on doubled the
-wait (3.3s against 1.7s measured).
+wait (3.3s against 1.7s measured) while consuming the token budget before any
+content was emitted.
+
+Subject generation is capped at `AUTO_COMMIT_TIMEOUT` (5s), covering connect and
+transfer, and the CLI override is bounded the same way since macOS ships no
+`timeout`. Past the cap it commits anyway with a static
+`chore: files changed a,b,c` naming the first `AUTO_COMMIT_FALLBACK_MAX_FILES`
+(5) paths and counting the rest. A subject that arrives late is worthless — the
+next tool call has already raced it — so the commit always wins over the wording.
 
 ```sh
 auto-commit --dry-run          # show the message and files, commit nothing
