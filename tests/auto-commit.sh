@@ -130,6 +130,43 @@ test_keeps_a_conventional_subject_verbatim() {
   done
 }
 
+test_commits_a_description_body() {
+  local repo state stub body
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo body)"
+  state="$(state_dir body)"
+  stub="$(make_stub body "feat: add a greeting
+
+- adds new.txt with a greeting
+- second bullet describing the change")"
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  assert_eq "feat: add a greeting" "$(git -C "$repo" log -1 --format=%s)" \
+    "the subject is the first line only"
+  body="$(git -C "$repo" log -1 --format=%b)"
+  assert_contains "$body" "adds new.txt with a greeting" "the first bullet is committed"
+  assert_contains "$body" "second bullet" "the second bullet is committed"
+  assert_not_contains "$(git -C "$repo" log -1 --format=%s)" "adds new.txt" \
+    "body content does not leak into the subject"
+}
+
+test_subject_only_reply_still_commits() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  # A model that returns no bullets must not abort the commit — grep filtering an
+  # empty body away used to kill the script under pipefail.
+  repo="$(make_repo nobody)"
+  state="$(state_dir nobody)"
+  stub="$(make_stub nobody "fix: handle empty input")"
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "a subject-only reply still commits"
+  assert_eq "fix: handle empty input" "$(git -C "$repo" log -1 --format=%s)" "subject preserved"
+  assert_contains "$(git -C "$repo" log -1 --format=%b)" "Files changed:" \
+    "the fallback body names the files"
+}
+
 test_falls_back_without_a_model() {
   local repo state broken
   command -v jq >/dev/null 2>&1 || return 0
@@ -306,6 +343,8 @@ test_cannot_be_disabled_by_environment() {
 run_test "commits only every Nth tool call" test_commits_only_every_nth_tool_call
 run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim
+run_test "commits a description body" test_commits_a_description_body
+run_test "a subject-only reply still commits" test_subject_only_reply_still_commits
 run_test "falls back to a plain subject without a model" test_falls_back_without_a_model
 run_test "falls back when the model is slow" test_falls_back_when_the_model_is_slow
 run_test "the fallback names the changed files" test_fallback_names_the_changed_files

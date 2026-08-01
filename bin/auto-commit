@@ -10,8 +10,9 @@
 #
 # Wired as a PostToolUse hook, this keeps work committed continuously instead of
 # relying on an agent to remember. Every AUTO_COMMIT_EVERY tool calls it collects
-# the changed and untracked files, asks a cheap model for one subject line
-# describing them, and commits through `atomic-commit`. It never pushes.
+# the changed and untracked files, asks a cheap model for a subject line and a
+# short description of what changed, and commits through `atomic-commit`. It
+# never pushes.
 #
 # Because the hook does the committing, agents no longer need a rule telling
 # them to commit after every step — which is why RULES.md no longer carries one.
@@ -51,6 +52,7 @@
 #   AUTO_COMMIT_API_KEY_VAR          env var holding the key (OPENROUTER_API_KEY)
 #   AUTO_COMMIT_CMD                  call this CLI instead of the API (tests)
 #   AUTO_COMMIT_MAX_DIFF             bytes of diff sent to the model (40000)
+#   AUTO_COMMIT_BODY_MAX_LINES       description lines kept from the model (6)
 set -euo pipefail
 
 fail() { printf '[FAIL] %s\n' "$*" >&2; }
@@ -81,6 +83,7 @@ EVERY="${AUTO_COMMIT_EVERY:-3}"
 CONVENTIONAL_TYPES="${AUTO_COMMIT_TYPES:-feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert}"
 FALLBACK_TYPE="${AUTO_COMMIT_FALLBACK_TYPE:-chore}"
 FALLBACK_MAX_FILES="${AUTO_COMMIT_FALLBACK_MAX_FILES:-5}"
+BODY_MAX_LINES="${AUTO_COMMIT_BODY_MAX_LINES:-6}"
 # Five seconds is the whole budget for the subject line. Past that the commit
 # matters more than the wording: a checkpoint that arrives late is a checkpoint
 # the next tool call has already raced, so it falls back to naming the files.
@@ -226,6 +229,13 @@ fallback_subject() {
   printf '%s: files changed %s' "$FALLBACK_TYPE" "$list"
 }
 
+# With no model there is nothing to summarise from, so the body just names what
+# was committed — still more use to a reader than an empty description.
+fallback_body() {
+  printf 'Files changed:\n'
+  printf -- '- %s\n' "${STAGE[@]}"
+}
+
 # Run a command with a wall-clock bound. curl bounds itself with --max-time, but
 # an arbitrary AUTO_COMMIT_CMD does not, and macOS ships no `timeout`.
 run_bounded() {
@@ -252,9 +262,15 @@ run_bounded() {
 ask_model() {
   local prompt payload
   prompt="$(cat <<EOF
-Write ONE Conventional Commits subject line for the change below.
+Write a Conventional Commits message for the change below.
 
-Rules:
+Format — a subject line, one blank line, then 1 to $BODY_MAX_LINES bullets:
+
+type(scope): short description
+
+- what changed and why, one bullet per distinct change
+
+Rules for the subject:
 - format: type(scope): description — the scope is optional
 - type is one of: feat fix chore docs refactor test perf build ci style revert
 - pick the type from what the change does: a new capability is feat, a bug fix is
@@ -262,8 +278,14 @@ Rules:
   tests are test, and anything else routine is chore
 - imperative mood, lower case description, no trailing period
 - at most 72 characters
-- describe what the change does, not which files moved
-- output the subject line and nothing else
+
+Rules for the bullets:
+- start each with "- "
+- say what changed and, where it is not obvious, why
+- describe behaviour, not which files moved
+- keep each under 100 characters; omit bullets entirely for a trivial change
+
+Output the message and nothing else — no code fences, no preamble.
 
 Files:
 $(printf '%s\n' "${STAGE[@]}")
@@ -288,7 +310,7 @@ EOF
   # token budget before any content is emitted — the reason an answer-sized
   # budget came back empty every time.
   payload="$(jq -n --arg model "$MODEL" --arg content "$prompt" \
-    '{model: $model, temperature: 0, max_tokens: 120,
+    '{model: $model, temperature: 0, max_tokens: 300,
       reasoning: {enabled: false},
       messages: [{role: "user", content: $content}]}')"
   curl -sS --fail-with-body --max-time "$TIMEOUT" --connect-timeout "$TIMEOUT" \
@@ -298,10 +320,22 @@ EOF
     | jq -r '.choices[0].message.content // ""'
 }
 
-SUBJECT=""
-SUBJECT="$(ask_model 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'"'"']//;s/["'"'"']$//' || true)"
+RESPONSE="$(ask_model 2>/dev/null || true)"
+SUBJECT="$(printf '%s\n' "$RESPONSE" | head -1 \
+  | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'"'"']//;s/["'"'"']$//')"
+# Everything after the subject is the description. Blank lines and any stray code
+# fence are dropped, and it is capped so a chatty model cannot bloat the log.
+# The `|| true` matters: grep exits 1 when it filters everything away — which is
+# exactly what happens when the model returns only a subject line — and pipefail
+# would turn that into a silent exit before anything is committed.
+BODY="$(printf '%s\n' "$RESPONSE" | tail -n +2 \
+  | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+  | { grep -v '^```' || true; } | { grep -v '^$' || true; } \
+  | head -"$BODY_MAX_LINES" || true)"
+
 if [ -z "$SUBJECT" ]; then
   SUBJECT="$(fallback_subject)"
+  BODY="$(fallback_body)"
 elif ! printf '%s' "$SUBJECT" \
   | grep -qE "^($CONVENTIONAL_TYPES)(\([^)]+\))?!?: .+"; then
   # The model answered, but not in Conventional Commits form. Keep what it said —
@@ -309,11 +343,15 @@ elif ! printf '%s' "$SUBJECT" \
   SUBJECT="$FALLBACK_TYPE: $SUBJECT"
 fi
 SUBJECT="$(printf '%s' "$SUBJECT" | cut -c1-100)"
+[ -n "$BODY" ] || BODY="$(fallback_body)"
+
+# Subject, blank line, description — the shape git and every tool expect.
+MESSAGE="$(printf '%s\n\n%s\n' "$SUBJECT" "$BODY")"
 
 FILE_LIST="$(printf '%s\n' "${STAGE[@]}")"
 
 if [ "$DRY" = "1" ]; then
-  emit dry-run "$SUBJECT" "$FILE_LIST"
+  emit dry-run "$SUBJECT" "$(printf '%s\n---\n%s' "$BODY" "$FILE_LIST")"
   exit 0
 fi
 
@@ -328,7 +366,7 @@ if [ ! -x "$ATOMIC" ]; then
   emit skipped "atomic-commit not found beside this command"
   exit 0
 fi
-if ! OUTPUT="$(cd "$TOP" && "$ATOMIC" "$SUBJECT" -- "${STAGE[@]}" 2>&1)"; then
+if ! OUTPUT="$(cd "$TOP" && "$ATOMIC" "$MESSAGE" -- "${STAGE[@]}" 2>&1)"; then
   # A rejected path, a whitespace error, nothing actually staged. Never fatal:
   # the working tree is untouched and the next tick tries again.
   emit skipped "atomic-commit refused: $(printf '%s' "$OUTPUT" | head -2 | tr '\n' ' ')"
