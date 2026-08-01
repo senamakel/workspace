@@ -211,6 +211,16 @@ if [ "$OS" = "Linux" ] && [ "$REPORT" != "1" ]; then
     ok "already active: $(zramctl --output NAME,DISKSIZE,ALGORITHM --noheadings 2>/dev/null | head -1)"
   elif act "configure ${ZRAM_MB}MB zram at priority 100"; then
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd-zram-generator >/dev/null 2>&1 || true
+    # Cloud images (DigitalOcean among them) ship a trimmed kernel whose module
+    # set excludes zram entirely, so the generator succeeds and the device never
+    # appears. The matching linux-modules-extra package supplies it.
+    if ! modinfo zram >/dev/null 2>&1; then
+      skip "zram module absent from kernel $(uname -r); installing linux-modules-extra"
+      sudo apt-get update -qq >/dev/null 2>&1 || true
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+        "linux-modules-extra-$(uname -r)" >/dev/null 2>&1 || true
+    fi
+    sudo modprobe zram 2>/dev/null || true
     sudo tee /etc/systemd/zram-generator.conf >/dev/null <<EOF
 # Compressed swap in RAM, ahead of any on-disk swap. Node and Rust working sets
 # compress roughly 3-4:1, so this holds far more than its nominal size, and
@@ -228,8 +238,15 @@ EOF
       [ -e /dev/zram0 ] && break
       sleep 0.5
     done
-    [ -e /dev/zram0 ] && ZRAM_OK=1
-    ok "zram0 configured (${ZRAM_MB}MB zstd, priority 100)"
+    # Verify rather than assume: the unit exits 0 even when the device was never
+    # created, and reporting success for a device that does not exist is how the
+    # swappiness choice below silently ends up wrong.
+    if [ -e /dev/zram0 ]; then
+      ZRAM_OK=1
+      ok "zram0 active (${ZRAM_MB}MB zstd, priority 100)"
+    else
+      skip "zram0 did not come up — swap stays on disk"
+    fi
   fi
 
   head_ "swappiness"
