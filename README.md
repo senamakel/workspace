@@ -377,39 +377,47 @@ atomic-commit "bin: add worktree helper" -- bin/worktree .gitignore
 atomic-commit --json "docs: explain setup" -- README.md
 ```
 
-### `commit-critic [--rev <commit>] [--hook] [--json]`
+### `auto-commit [--hook] [--now] [--dry-run] [--json]`
 
-Summarizes the commit just made and says whether it should have been several
-commits. `atomic-commit` controls *what goes into* a commit; this checks whether
-the commit was one logical change, which no amount of explicit pathspecs can
-enforce.
+Commits whatever is dirty, with a subject written from the diff. Wired as a
+`PostToolUse` hook on every tool in `claude/settings.json`, it fires once every
+`AUTO_COMMIT_EVERY` tool calls (default 3), so work is checkpointed continuously
+instead of depending on an agent to remember. This is why `RULES.md` no longer
+carries a commit-after-every-step rule — the hook does it, and the rule was
+costing context on every single turn.
 
-Wired as a `PostToolUse` hook on `Bash` in `claude/settings.json`. On a `split`
-verdict it exits 2, which hands the reason back to the harness along with the
-`git reset --soft HEAD~1` needed to unwind — a rule in `CLAUDE.md` is advisory
-and agents drift from it, a hook is not.
+The commit itself goes through `atomic-commit`, which unstages everything else
+first without discarding it, so a file this command declined to touch cannot ride
+along on an index left dirty by something else.
 
-It is deliberately cheap. Anything at or under `COMMIT_CRITIC_MIN_FILES` (2) and
-`COMMIT_CRITIC_MIN_LINES` (80) passes with no model call at all, so ordinary
-small commits cost nothing. Larger ones become **one** HTTPS request to
-OpenRouter with the stat and truncated diff — roughly six seconds — rather than
-booting a whole coding harness to answer a single question about a diff.
+These are working checkpoints, not curated history: they take whatever is dirty
+at that moment, which may span more than one concern. Expect to squash a branch
+built this way. Reach for `atomic-commit` directly when a specific commit matters.
 
-Three guards keep it from misfiring. The command must actually *invoke* a commit
-(`grep atomic-commit README.md` mentions one and is ignored); the commit must
-have been made moments ago, so a matched command that produced nothing does not
-put already-merged work under review; and each commit SHA is judged once, so
-acting on a verdict cannot loop.
+Guards, all deliberate and all tested:
+
+- refuses on `main`/`master` unless `AUTO_COMMIT_ALLOW_PROTECTED=1`, because new
+  work belongs on a feature branch and silently checkpointing onto main would
+  break that several times a minute
+- never stages a path that looks like a credential (`.env`, `*.pem`, `id_rsa*`,
+  `*credentials*`, …) whatever `.gitignore` says, since nobody reviews these
+  files before they are staged; the file is left in the working tree, not lost
+- does nothing during a merge, rebase, cherry-pick, or bisect, or on a detached
+  HEAD
+- commits with a plain `wip:` subject when the model is unreachable — a
+  checkpoint with a dull message beats a lost checkpoint
+- never pushes
+
+The subject comes from one HTTPS request to OpenRouter (~3s) carrying the stat
+and truncated diff. `OPENROUTER_API_KEY` stays on the laptop, so the remote boxes
+fall back to the plain subject rather than failing.
 
 ```sh
-commit-critic                  # critique HEAD here
-commit-critic --rev abc123 --json
-COMMIT_CRITIC=0 git commit …   # bypass for one commit
+auto-commit --dry-run          # show the message and files, commit nothing
+auto-commit --now              # checkpoint right now
+AUTO_COMMIT=0 …                # disable
+AUTO_COMMIT_EVERY=10 …         # checkpoint less often
 ```
-
-`OPENROUTER_API_KEY` stays on the laptop, so on the remote boxes this reports
-`[SKIPPED]` and exits 0 rather than failing commits over a credential that is
-deliberately not there.
 
 ### `pr-list [--json] [--limit <count>] [--include-drafts] [-R|--repo <owner/name>]`
 

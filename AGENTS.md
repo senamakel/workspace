@@ -18,10 +18,10 @@ There is no compilation step or centralized test suite. Validate the part you ch
   open-source pipeline state and launcher.
 - `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
   repository with dirty, unpushed, and submodule-bearing worktrees.
-- `tests/commit-critic.sh` exercises the commit-size hook's offline logic —
-  thresholds, verdict parsing, which commands count as a commit, the
-  already-judged guard, and its refusal to fail a commit when the model is
-  unreachable — with a stubbed CLI and no credentials.
+- `tests/auto-commit.sh` exercises the auto-commit hook's offline logic — the
+  tool-call counter, the protected-branch and in-progress-operation guards,
+  credential filtering, and the subject fallback — with a stubbed model and no
+  credentials.
 - `tests/langfuse-lib.sh` exercises the Langfuse helpers' offline logic —
   environment resolution, project presets, time windows, and paging — with a
   stubbed API and no credentials.
@@ -62,7 +62,7 @@ For installer changes, exercise both dry-run behavior and idempotency; a second 
 
 ## Commit & Pull Request Guidelines
 
-Recent history favors short, scoped, imperative subjects such as `bin: add deepcode wrapper` and `readme: document the deepcode tool`. This repository is the exception to the shared worktree workflow: do not create or use worktrees for workspace-repo changes. Work in the primary checkout on a feature branch instead. Commit with `atomic-commit "<scoped message>" -- <explicit files...>` so unrelated changes remain uncommitted. Describe behavior and validation in the PR, and link relevant issues. Screenshots are only needed for user-visible terminal or status-line changes. Open PRs against the canonical upstream repository, not a personal fork.
+Recent history favors short, scoped, imperative subjects such as `bin: add deepcode wrapper` and `readme: document the deepcode tool`. This repository is the exception to the shared worktree workflow: do not create or use worktrees for workspace-repo changes. Work in the primary checkout on a feature branch instead. The `auto-commit` hook checkpoints the tree as you work; use `atomic-commit "<scoped message>" -- <explicit files...>` when a commit needs a deliberate scope. Describe behavior and validation in the PR, and link relevant issues. Screenshots are only needed for user-visible terminal or status-line changes. Open PRs against the canonical upstream repository, not a personal fork.
 
 Operational updates under `open-source/` are the narrow exception to the PR
 rule: agents may commit and push one validated state file directly to `main` so
