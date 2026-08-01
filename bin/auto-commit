@@ -1,0 +1,294 @@
+#!/usr/bin/env bash
+# auto-commit — commit whatever is dirty, with a message written from the diff.
+#
+# Usage: auto-commit [--hook] [--now] [--dry-run] [--json]
+#
+#   auto-commit --now        commit the working tree right now
+#   auto-commit --dry-run    show the message and the files, commit nothing
+#   auto-commit --hook       read a Claude Code PostToolUse event on stdin and
+#                            commit once every AUTO_COMMIT_EVERY tool calls
+#
+# Wired as a PostToolUse hook, this keeps work committed continuously instead of
+# relying on an agent to remember. Every AUTO_COMMIT_EVERY tool calls it collects
+# the changed and untracked files, asks a cheap model for one subject line
+# describing them, and commits through `atomic-commit`. It never pushes.
+#
+# Because the hook does the committing, agents no longer need a rule telling
+# them to commit after every step — which is why RULES.md no longer carries one.
+#
+# The counter is per session and per repository, so two sessions in two
+# checkouts do not trip each other's commits.
+#
+# These commits are working checkpoints, not curated history: they take whatever
+# is dirty at the moment they fire, which may span more than one concern. Use
+# `atomic-commit` for scoped commits, and expect to squash a branch built this
+# way before review.
+#
+# Guards, all deliberate:
+#   * refuses on a protected branch (main/master) unless allowed, because new
+#     work is supposed to happen on a feature branch
+#   * never stages a path that looks like a credential, whatever .gitignore says
+#   * does nothing during a merge, rebase, cherry-pick, or bisect
+#   * commits without a model, and without a network, if it has to
+#
+# Overridable:
+#   AUTO_COMMIT=0                    disable entirely
+#   AUTO_COMMIT_EVERY                tool calls between commits (3)
+#   AUTO_COMMIT_ALLOW_PROTECTED=1    allow commits on main/master
+#   AUTO_COMMIT_PROTECTED            protected branch names (main master)
+#   AUTO_COMMIT_SKIP                 extra glob(s) never staged, colon-separated
+#   AUTO_COMMIT_PREFIX               subject prefix (default: wip)
+#   AUTO_COMMIT_MODEL                model id (deepseek/deepseek-v4-flash)
+#   AUTO_COMMIT_URL                  chat-completions endpoint
+#   AUTO_COMMIT_API_KEY_VAR          env var holding the key (OPENROUTER_API_KEY)
+#   AUTO_COMMIT_CMD                  call this CLI instead of the API (tests)
+#   AUTO_COMMIT_MAX_DIFF             bytes of diff sent to the model (40000)
+set -euo pipefail
+
+fail() { printf '[FAIL] %s\n' "$*" >&2; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+
+HOOK=0
+NOW=0
+DRY=0
+FORMAT="text"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --hook)    HOOK=1; shift ;;
+    --now)     NOW=1; shift ;;
+    --dry-run) DRY=1; shift ;;
+    --json)    FORMAT="json"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *)         fail "unknown argument: $1"; usage; exit 1 ;;
+  esac
+done
+
+[ "${AUTO_COMMIT:-1}" = "0" ] && exit 0
+[ "$HOOK" = "1" ] || [ "$NOW" = "1" ] || [ "$DRY" = "1" ] || { usage; exit 1; }
+
+EVERY="${AUTO_COMMIT_EVERY:-3}"
+PREFIX="${AUTO_COMMIT_PREFIX:-wip}"
+MAX_DIFF="${AUTO_COMMIT_MAX_DIFF:-40000}"
+MODEL="${AUTO_COMMIT_MODEL:-deepseek/deepseek-v4-flash}"
+API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
+API_KEY_VAR="${AUTO_COMMIT_API_KEY_VAR:-OPENROUTER_API_KEY}"
+CRITIC_CMD="${AUTO_COMMIT_CMD:-}"
+
+note() { [ "$HOOK" = "1" ] || printf '%s\n' "$*"; }
+
+# ── Where are we ───────────────────────────────────────────────────
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+TOP="$(git rev-parse --show-toplevel)"
+GIT_DIR="$(git rev-parse --absolute-git-dir)"
+
+# ── Tool-call counter ──────────────────────────────────────────────
+# PostToolUse fires on every tool call. Only every Nth one does any work, so the
+# other N-1 cost a counter increment and nothing else.
+if [ "$HOOK" = "1" ]; then
+  command -v jq >/dev/null 2>&1 || exit 0
+  EVENT="$(cat)"
+  SESSION="$(printf '%s' "$EVENT" | jq -r '.session_id // "nosession"' 2>/dev/null || echo nosession)"
+  STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/auto-commit"
+  mkdir -p "$STATE_DIR"
+  KEY="$(printf '%s:%s' "$SESSION" "$TOP" | shasum | cut -c1-32)"
+  COUNT_FILE="$STATE_DIR/$KEY"
+  COUNT="$(cat "$COUNT_FILE" 2>/dev/null || echo 0)"
+  COUNT=$((COUNT + 1))
+  if [ "$COUNT" -lt "$EVERY" ]; then
+    printf '%s\n' "$COUNT" > "$COUNT_FILE"
+    exit 0
+  fi
+  printf '0\n' > "$COUNT_FILE"
+fi
+
+emit() {
+  local status="$1" detail="$2" files="${3:-}"
+  if [ "$FORMAT" = "json" ]; then
+    jq -n --arg status "$status" --arg detail "$detail" --arg files "$files" \
+      '{status: $status, detail: $detail, files: ($files | split("\n") | map(select(length > 0)))}'
+  else
+    note "[$(printf '%s' "$status" | tr 'a-z' 'A-Z')] $detail"
+    [ -z "$files" ] || note "$files"
+  fi
+}
+
+# ── Guards ─────────────────────────────────────────────────────────
+for marker in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD BISECT_LOG rebase-merge rebase-apply; do
+  if [ -e "$GIT_DIR/$marker" ]; then
+    emit skipped "a $marker operation is in progress"
+    exit 0
+  fi
+done
+
+BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [ -z "$BRANCH" ]; then
+  emit skipped "detached HEAD"
+  exit 0
+fi
+if [ "${AUTO_COMMIT_ALLOW_PROTECTED:-0}" != "1" ]; then
+  for protected in ${AUTO_COMMIT_PROTECTED:-main master}; do
+    if [ "$BRANCH" = "$protected" ]; then
+      # New work belongs on a feature branch; silently checkpointing onto main
+      # would quietly break that rule several times a minute.
+      emit skipped "on protected branch '$BRANCH' (AUTO_COMMIT_ALLOW_PROTECTED=1 to override)"
+      exit 0
+    fi
+  done
+fi
+
+# ── What changed ───────────────────────────────────────────────────
+# --porcelain omits ignored files, so build artifacts never appear here.
+CHANGED=()
+while IFS= read -r -d '' entry; do
+  path="${entry:3}"
+  # Renames read "R  old -> new"; the new path is what needs staging.
+  case "$entry" in
+    R*|C*) path="${path##* -> }" ;;
+  esac
+  [ -n "$path" ] && CHANGED+=("$path")
+done < <(git status --porcelain -z 2>/dev/null || true)
+
+if [ "${#CHANGED[@]}" -eq 0 ]; then
+  emit clean "nothing to commit"
+  exit 0
+fi
+
+# ── Never stage a credential ───────────────────────────────────────
+# .gitignore is the usual defence, but this command stages files nobody
+# reviewed first, so it keeps its own list rather than trusting the repo's.
+SECRET_GLOBS=(
+  '.env' '.env.*' '*.pem' '*.key' '*.p12' '*.pfx' '*.keystore' '*.jks'
+  'id_rsa*' 'id_ed25519*' '*.ppk' '*credentials*' '*secret*' '*.kdbx'
+  '.npmrc' '.netrc' '*.token'
+)
+# Bash 3.2, which is what macOS ships, treats an empty array as unbound under
+# `set -u`, so the caller's extra globs are appended rather than expanded beside
+# the defaults.
+if [ -n "${AUTO_COMMIT_SKIP:-}" ]; then
+  while IFS= read -r glob; do
+    [ -z "$glob" ] || SECRET_GLOBS+=("$glob")
+  done < <(printf '%s' "$AUTO_COMMIT_SKIP" | tr ':' '\n')
+fi
+
+STAGE=()
+SKIPPED=()
+for path in "${CHANGED[@]}"; do
+  base="$(basename "$path")"
+  secret=0
+  for glob in "${SECRET_GLOBS[@]}"; do
+    [ -n "$glob" ] || continue
+    # shellcheck disable=SC2053
+    if [[ "$base" == $glob || "$path" == $glob ]]; then secret=1; break; fi
+  done
+  if [ "$secret" = "1" ]; then SKIPPED+=("$path"); else STAGE+=("$path"); fi
+done
+
+if [ "${#SKIPPED[@]}" -gt 0 ]; then
+  emit warned "not staging $(printf '%s ' "${SKIPPED[@]}")— looks like a credential"
+fi
+if [ "${#STAGE[@]}" -eq 0 ]; then
+  emit clean "nothing to commit after credential filtering"
+  exit 0
+fi
+
+# ── Write the message ──────────────────────────────────────────────
+STAT="$(git diff HEAD --stat -- "${STAGE[@]}" 2>/dev/null || true)"
+DIFF="$(git diff HEAD -- "${STAGE[@]}" 2>/dev/null | head -c "$MAX_DIFF" || true)"
+# An untracked file has no diff against HEAD; name it so the model still sees it.
+UNTRACKED="$(git ls-files --others --exclude-standard -- "${STAGE[@]}" 2>/dev/null || true)"
+
+# Without a model this still commits — a checkpoint with a dull message beats a
+# lost checkpoint.
+fallback_subject() {
+  local n="${#STAGE[@]}" where
+  where="$(printf '%s\n' "${STAGE[@]}" | xargs -n1 dirname 2>/dev/null \
+    | sort -u | head -2 | paste -sd, - || true)"
+  if [ "$n" -eq 1 ]; then
+    printf '%s: update %s' "$PREFIX" "${STAGE[0]}"
+  else
+    printf '%s: update %s files in %s' "$PREFIX" "$n" "${where:-the working tree}"
+  fi
+}
+
+ask_model() {
+  local prompt payload
+  prompt="$(cat <<EOF
+Write ONE commit subject line for the change below.
+
+Rules:
+- imperative mood, lower case after the prefix, no trailing period
+- at most 72 characters
+- describe what the change does, not which files moved
+- output the subject line and nothing else
+
+Files:
+$(printf '%s\n' "${STAGE[@]}")
+
+Untracked among them:
+${UNTRACKED:-none}
+
+Stat:
+$STAT
+
+Diff:
+$DIFF
+EOF
+)"
+  if [ -n "$CRITIC_CMD" ]; then
+    "$CRITIC_CMD" -p "$prompt"
+    return
+  fi
+  [ -n "${!API_KEY_VAR:-}" ] || return 1
+  # Generous despite wanting one short line: reasoning models spend this budget
+  # thinking before they emit any content, and a budget sized to the answer
+  # comes back empty every time.
+  payload="$(jq -n --arg model "$MODEL" --arg content "$prompt" \
+    '{model: $model, temperature: 0, max_tokens: 400,
+      messages: [{role: "user", content: $content}]}')"
+  curl -sS --fail-with-body --max-time "${AUTO_COMMIT_TIMEOUT:-30}" \
+    -H "Authorization: Bearer ${!API_KEY_VAR}" \
+    -H "Content-Type: application/json" \
+    -d "$payload" "$API_URL" \
+    | jq -r '.choices[0].message.content // ""'
+}
+
+SUBJECT=""
+SUBJECT="$(ask_model 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'"'"']//;s/["'"'"']$//' || true)"
+if [ -z "$SUBJECT" ]; then
+  SUBJECT="$(fallback_subject)"
+else
+  case "$SUBJECT" in
+    "$PREFIX":*) ;;
+    *) SUBJECT="$PREFIX: $SUBJECT" ;;
+  esac
+fi
+SUBJECT="$(printf '%s' "$SUBJECT" | cut -c1-100)"
+
+FILE_LIST="$(printf '%s\n' "${STAGE[@]}")"
+
+if [ "$DRY" = "1" ]; then
+  emit dry-run "$SUBJECT" "$FILE_LIST"
+  exit 0
+fi
+
+# ── Commit ─────────────────────────────────────────────────────────
+# Hand the vetted paths to atomic-commit rather than staging here: it unstages
+# everything else first without discarding it, so a credential this command
+# refused to touch cannot ride along on an index someone else left dirty. Paths
+# came from `git status` and are relative to the top level, so run it there —
+# atomic-commit resolves its arguments against the current prefix.
+ATOMIC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/atomic-commit"
+if [ ! -x "$ATOMIC" ]; then
+  emit skipped "atomic-commit not found beside this command"
+  exit 0
+fi
+if ! OUTPUT="$(cd "$TOP" && "$ATOMIC" "$SUBJECT" -- "${STAGE[@]}" 2>&1)"; then
+  # A rejected path, a whitespace error, nothing actually staged. Never fatal:
+  # the working tree is untouched and the next tick tries again.
+  emit skipped "atomic-commit refused: $(printf '%s' "$OUTPUT" | head -2 | tr '\n' ' ')"
+  exit 0
+fi
+
+emit committed "$SUBJECT" "$FILE_LIST"
+exit 0
