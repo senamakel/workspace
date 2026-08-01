@@ -38,6 +38,8 @@
 #   AUTO_COMMIT_PROTECTED            protected branch names (main master)
 #   AUTO_COMMIT_SKIP                 extra glob(s) never staged, colon-separated
 #   AUTO_COMMIT_FALLBACK_TYPE        type used when the model gives none (chore)
+#   AUTO_COMMIT_FALLBACK_MAX_FILES   files named in the fallback subject (5)
+#   AUTO_COMMIT_TIMEOUT              seconds allowed for the subject line (5)
 #   AUTO_COMMIT_TYPES                accepted Conventional Commits types
 #   AUTO_COMMIT_MODEL                model id (deepseek/deepseek-v4-flash)
 #   AUTO_COMMIT_URL                  chat-completions endpoint
@@ -74,6 +76,11 @@ EVERY="${AUTO_COMMIT_EVERY:-3}"
 # away, so the log stays parseable without losing a description that read the diff.
 CONVENTIONAL_TYPES="${AUTO_COMMIT_TYPES:-feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert}"
 FALLBACK_TYPE="${AUTO_COMMIT_FALLBACK_TYPE:-chore}"
+FALLBACK_MAX_FILES="${AUTO_COMMIT_FALLBACK_MAX_FILES:-5}"
+# Five seconds is the whole budget for the subject line. Past that the commit
+# matters more than the wording: a checkpoint that arrives late is a checkpoint
+# the next tool call has already raced, so it falls back to naming the files.
+TIMEOUT="${AUTO_COMMIT_TIMEOUT:-5}"
 MAX_DIFF="${AUTO_COMMIT_MAX_DIFF:-40000}"
 MODEL="${AUTO_COMMIT_MODEL:-deepseek/deepseek-v4-flash}"
 API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
@@ -206,14 +213,36 @@ UNTRACKED="$(git ls-files --others --exclude-standard -- "${STAGE[@]}" 2>/dev/nu
 # Without a model this still commits — a checkpoint with a dull message beats a
 # lost checkpoint.
 fallback_subject() {
-  local n="${#STAGE[@]}" where
-  where="$(printf '%s\n' "${STAGE[@]}" | xargs -n1 dirname 2>/dev/null \
-    | sort -u | head -2 | paste -sd, - || true)"
-  if [ "$n" -eq 1 ]; then
-    printf '%s: update %s' "$FALLBACK_TYPE" "${STAGE[0]}"
-  else
-    printf '%s: update %s files in %s' "$FALLBACK_TYPE" "$n" "${where:-the working tree}"
+  local n="${#STAGE[@]}" list rest
+  list="$(printf '%s\n' "${STAGE[@]}" | head -"$FALLBACK_MAX_FILES" | paste -sd, - || true)"
+  if [ "$n" -gt "$FALLBACK_MAX_FILES" ]; then
+    rest=$((n - FALLBACK_MAX_FILES))
+    list="$list +$rest more"
   fi
+  printf '%s: files changed %s' "$FALLBACK_TYPE" "$list"
+}
+
+# Run a command with a wall-clock bound. curl bounds itself with --max-time, but
+# an arbitrary AUTO_COMMIT_CMD does not, and macOS ships no `timeout`.
+run_bounded() {
+  local secs="$1"; shift
+  local tmp pid ticks=0
+  tmp="$(mktemp)"
+  ( "$@" >"$tmp" 2>/dev/null ) &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$ticks" -ge "$((secs * 10))" ]; then
+      kill -9 "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rm -f "$tmp"
+      return 1
+    fi
+    sleep 0.1
+    ticks=$((ticks + 1))
+  done
+  wait "$pid" 2>/dev/null || { rm -f "$tmp"; return 1; }
+  cat "$tmp"
+  rm -f "$tmp"
 }
 
 ask_model() {
@@ -246,7 +275,7 @@ $DIFF
 EOF
 )"
   if [ -n "$CRITIC_CMD" ]; then
-    "$CRITIC_CMD" -p "$prompt"
+    run_bounded "$TIMEOUT" "$CRITIC_CMD" -p "$prompt"
     return
   fi
   [ -n "${!API_KEY_VAR:-}" ] || return 1
@@ -258,7 +287,7 @@ EOF
     '{model: $model, temperature: 0, max_tokens: 120,
       reasoning: {enabled: false},
       messages: [{role: "user", content: $content}]}')"
-  curl -sS --fail-with-body --max-time "${AUTO_COMMIT_TIMEOUT:-30}" \
+  curl -sS --fail-with-body --max-time "$TIMEOUT" --connect-timeout "$TIMEOUT" \
     -H "Authorization: Bearer ${!API_KEY_VAR}" \
     -H "Content-Type: application/json" \
     -d "$payload" "$API_URL" \

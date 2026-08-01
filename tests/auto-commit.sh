@@ -142,8 +142,62 @@ test_falls_back_without_a_model() {
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$broken" >/dev/null
   # A checkpoint with a dull message beats a lost checkpoint.
   assert_eq 2 "$(count_commits "$repo")" "an unreachable model still commits"
-  assert_contains "$(git -C "$repo" log -1 --format=%s)" "chore:" \
+  assert_contains "$(git -C "$repo" log -1 --format=%s)" "chore: files changed" \
     "the fallback subject is used"
+}
+
+test_falls_back_when_the_model_is_slow() {
+  local repo state slow started elapsed
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo slow)"
+  state="$(state_dir slow)"
+  slow="$TEST_ROOT/slow-model"
+  printf '#!/usr/bin/env bash\nsleep 30\nprintf "feat: never arrives\\n"\n' > "$slow"
+  chmod +x "$slow"
+  printf 'hello\n' > "$repo/new.txt"
+  printf 'more\n' > "$repo/other.txt"
+
+  started="$(date +%s)"
+  AUTO_COMMIT_EVERY=1 AUTO_COMMIT_TIMEOUT=2 fire "$repo" "$state" "$slow" >/dev/null
+  elapsed=$(( $(date +%s) - started ))
+
+  # The commit is what matters; a subject that arrives late is worthless because
+  # the next tool call has already raced it.
+  [ "$elapsed" -lt 15 ] || fail_test "the slow model was not bounded: took ${elapsed}s"
+  assert_eq 2 "$(count_commits "$repo")" "a slow model still produces a commit"
+  assert_contains "$(git -C "$repo" log -1 --format=%s)" "files changed" \
+    "the static fallback names the files"
+}
+
+test_fallback_names_the_changed_files() {
+  local repo state broken subject
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo naming)"
+  state="$(state_dir naming)"
+  broken="$TEST_ROOT/broken-naming"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$broken"
+  chmod +x "$broken"
+  printf 'a\n' > "$repo/alpha.txt"
+  printf 'b\n' > "$repo/beta.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$broken" >/dev/null
+  subject="$(git -C "$repo" log -1 --format=%s)"
+  assert_contains "$subject" "chore: files changed" "the fallback keeps a conventional type"
+  assert_contains "$subject" "alpha.txt" "the fallback names the first file"
+  assert_contains "$subject" "beta.txt" "the fallback names the second file"
+}
+
+test_fallback_truncates_a_long_file_list() {
+  local repo state broken subject i
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo truncating)"
+  state="$(state_dir truncating)"
+  broken="$TEST_ROOT/broken-trunc"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$broken"
+  chmod +x "$broken"
+  for i in $(seq 1 9); do printf 'x\n' > "$repo/f$i.txt"; done
+  AUTO_COMMIT_EVERY=1 AUTO_COMMIT_FALLBACK_MAX_FILES=3 fire "$repo" "$state" "$broken" >/dev/null
+  subject="$(git -C "$repo" log -1 --format=%s)"
+  assert_contains "$subject" "+6 more" "the remaining files are counted, not listed"
 }
 
 test_commits_untracked_and_modified_together() {
@@ -249,6 +303,9 @@ run_test "commits only every Nth tool call" test_commits_only_every_nth_tool_cal
 run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim
 run_test "falls back to a plain subject without a model" test_falls_back_without_a_model
+run_test "falls back when the model is slow" test_falls_back_when_the_model_is_slow
+run_test "the fallback names the changed files" test_fallback_names_the_changed_files
+run_test "the fallback truncates a long file list" test_fallback_truncates_a_long_file_list
 run_test "commits untracked and modified files together" test_commits_untracked_and_modified_together
 run_test "never commits a credential" test_never_commits_a_credential
 run_test "refuses a protected branch unless allowed" test_refuses_a_protected_branch
