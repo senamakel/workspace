@@ -60,12 +60,28 @@ Shell scripts use `#!/usr/bin/env bash`, two-space indentation, quoted variable 
 
 For installer changes, exercise both dry-run behavior and idempotency; a second run should report existing links without replacing them. For CLI helpers, test argument validation and the safest non-mutating path available. Document any manual verification in the pull request.
 
-## Commit & Pull Request Guidelines
+## Commit Guidelines
 
-Recent history favors short, scoped, imperative subjects such as `bin: add deepcode wrapper` and `readme: document the deepcode tool`. This repository is the exception to the shared worktree workflow: do not create or use worktrees for workspace-repo changes. Work in the primary checkout on a feature branch instead. The `auto-commit` hook checkpoints the tree as you work; use `atomic-commit "<scoped message>" -- <explicit files...>` when a commit needs a deliberate scope. Describe behavior and validation in the PR, and link relevant issues. Screenshots are only needed for user-visible terminal or status-line changes. Open PRs against the canonical upstream repository, not a personal fork.
+Commit subjects follow Conventional Commits — `type(scope): description`, with
+`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`,
+`style`, or `revert`. The `auto-commit` hook writes them in that form, so
+hand-written commits should match.
 
-Operational updates under `open-source/` are the narrow exception to the PR
-rule: agents may commit and push one validated state file directly to `main` so
-other machines can claim work safely. They must pull with rebase before and
-after the state edit, never force-push, and abandon a claim if the same issue
-record conflicts.
+**This repository does not use pull requests.** Commit and push straight to
+`main`; do not open a PR, and do not create a feature branch for it. This is a
+personal configuration repo with a single author, where a PR adds a review round
+trip with no reviewer on the other end. Pull with rebase before pushing, never
+force-push, and keep each commit scoped with
+`atomic-commit "<scoped message>" -- <explicit files...>` when it needs a
+deliberate scope. Everything else in `RULES.md` about raising PRs upstream still
+applies to every *other* repository.
+
+Do not create or use worktrees for workspace-repo changes; work in the primary
+checkout. Validate the part you changed before pushing, and say what you ran in
+the commit message. Screenshots are only needed for user-visible terminal or
+status-line changes.
+
+Operational updates under `open-source/` follow the same direct-to-`main` rule,
+with one extra requirement: agents must pull with rebase before and after the
+state edit and abandon a claim if the same issue record conflicts, so two
+machines cannot claim the same work.
