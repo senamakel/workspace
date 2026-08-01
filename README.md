@@ -267,12 +267,35 @@ Recursive submodule initialization, shared by every command that prepares a
 checkout — `worktree`, `pr-fix`, `open-source-work`, `workflow-remotes`, and the
 `res` shell function — so the policy lives in one place.
 
-Submodules are cloned at `--depth 1`, which is the difference between seconds and
-minutes on the workflow superprojects. A shallow fetch can miss the recorded
-gitlink when it is not reachable from a branch tip, so a failed shallow pass is
-**retried at full depth**: the checkout is never left half-initialized to save
-time. Set `SUBMODULE_DEPTH=0` to skip the shallow attempt, or to another integer
-to change the depth.
+Git stores a linked worktree's submodule git dirs under
+`.git/worktrees/<name>/modules/`, never the shared `.git/modules/`, so a plain
+`submodule update --init --recursive` re-downloads every submodule even though
+the primary checkout already holds the objects. On `workflow-medulla` that was
+~900 MB of network transfer per worktree across 28 nested repositories. This
+command instead **borrows objects locally**: each clone is pointed with
+`--reference` at whichever repository the primary checkout already has, matched
+first by position in the tree and then by `owner/repo` across every configured
+remote — `origin` is routinely a personal fork while `.gitmodules` records the
+canonical upstream, so one key is not enough. Shallow repositories are screened
+out, because Git refuses to borrow from them.
+
+Siblings are initialized concurrently (`SUBMODULE_JOBS`, default 4), since the
+elapsed time is per-repository latency and checkout rather than CPU. Together
+these took a cold `worktree` on `workflow-medulla` from **4m55s to 28s**, with
+the worktree's git dirs down from ~880 MB to 39 MB and identical recursive
+gitlinks. `SUBMODULE_REFERENCE=0` disables borrowing.
+
+Anything with no local source is cloned at `--depth 1`, which is the difference
+between seconds and minutes on the workflow superprojects. A shallow fetch can
+miss the recorded gitlink when it is not reachable from a branch tip, so a failed
+shallow pass is **retried at full depth**: the checkout is never left
+half-initialized to save time. Set `SUBMODULE_DEPTH=0` to skip the shallow
+attempt, or to another integer to change the depth.
+
+Borrowing means the worktree's submodules read objects from the primary
+checkout's `.git/modules`, the same trade-off `git clone --reference` makes.
+Removing a worktree is unaffected; do not delete or aggressively prune the
+primary checkout while worktrees are live.
 
 GitHub submodules are cloned over **SSH** (`git@github.com`) regardless of the
 HTTPS URLs in `.gitmodules`; the `-c` overrides travel via
@@ -281,9 +304,10 @@ to `.gitmodules` or global config. Set `SUBMODULE_HTTPS=1` to keep the recorded
 URLs. Outside a repo, or in one without `.gitmodules`, it is a silent no-op, so
 callers can run it unconditionally.
 
-`workflow-update` is deliberately excluded: it initializes one submodule at a
-time and then resets it to commits selected from several remotes, which needs
-history a shallow clone would not have.
+`workflow-update` uses it only for the **nested** level: it still selects and
+resets each direct submodule itself, from several remotes and at full history,
+then hands the resulting checkout to `submodule-init` so the nested gitlinks
+that moved with it are brought along.
 
 ### `box [<name>] [--takeover] [--mosh]`
 
@@ -683,13 +707,20 @@ ocr review --from main --to feature-branch
 
 ### `workflow-update [--no-commit]`
 
-Synchronizes only first-level submodules (no recursion), selecting
-`upstream/main` when available and falling back to `origin/main`. Each submodule
-is forced onto local `main` at the selected commit, discarding divergent local
-commits and tracked changes while leaving untracked files untouched. The
-superproject itself is not fetched, merged, switched, or reset. Changed
-submodule pointers are staged and committed as "Update submodule pointers";
-`--no-commit` stages them without committing.
+Selects `upstream/main` for each first-level submodule when available, falling
+back to `origin/main`. Each submodule is forced onto local `main` at the selected
+commit, discarding divergent local commits and tracked changes while leaving
+untracked files untouched. The superproject itself is not fetched, merged,
+switched, or reset. Changed submodule pointers are staged and committed as
+"Update submodule pointers"; `--no-commit` stages them without committing.
+
+Moving a submodule to a new commit moves the nested gitlinks it records, so each
+updated submodule is then re-initialized **recursively** through `submodule-init`
+— otherwise the checkout silently keeps the vendored sources the *previous*
+commit named. Only `refs/heads/main` is fetched, which keeps the fetch
+proportional to the branch rather than the whole repository, and fetches run with
+terminal and SSH prompts disabled so a missing credential fails instead of
+hanging forever on input no agent will supply.
 
 ## Notes
 

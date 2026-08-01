@@ -31,6 +31,11 @@ assert_file_missing() {
   [ ! -e "$path" ] || fail_test "$message: found $path"
 }
 
+assert_file_present() {
+  local path="$1" message="$2"
+  [ -e "$path" ] || fail_test "$message: missing $path"
+}
+
 run_test() {
   local name="$1"
   shift
@@ -250,6 +255,34 @@ test_fails_without_overwriting_untracked_obstruction() {
     "untracked obstruction content is preserved"
   assert_eq "$before" "$(git -C "$super" rev-parse HEAD)" \
     "untracked obstruction creates no pointer commit"
+}
+
+test_fails_when_untracked_parent_is_a_tracked_file() {
+  local origin super before status output
+  origin="$(make_remote parent-obstruction-origin)"
+  super="$(make_superproject_with_submodule parent-obstruction-super "$origin")"
+  # Upstream records `obstruction` as a file; locally it is a directory holding
+  # untracked work, so the checkout cannot proceed without destroying it.
+  printf 'remote tracked content\n' > "$TEST_ROOT/parent-obstruction-origin-seed/obstruction"
+  git -C "$TEST_ROOT/parent-obstruction-origin-seed" add obstruction
+  git -C "$TEST_ROOT/parent-obstruction-origin-seed" commit -qm "Add obstructing tracked file"
+  git -C "$TEST_ROOT/parent-obstruction-origin-seed" push -q origin main
+  mkdir -p "$super/modules/alpha/obstruction"
+  printf 'preserve local content\n' > "$super/modules/alpha/obstruction/nested.txt"
+  before="$(git -C "$super" rev-parse HEAD)"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" 2>&1)"
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] || fail_test "untracked parent obstruction must fail"
+  assert_contains "$output" "untracked path obstructs synchronization: obstruction/nested.txt" \
+    "failure identifies the path whose parent is a tracked file"
+  assert_eq "preserve local content" "$(cat "$super/modules/alpha/obstruction/nested.txt")" \
+    "untracked content under the obstructed parent is preserved"
+  assert_eq "$before" "$(git -C "$super" rev-parse HEAD)" \
+    "untracked parent obstruction creates no pointer commit"
 }
 
 test_commits_only_changed_direct_gitlinks() {
@@ -611,8 +644,8 @@ test_rejects_unrelated_repository_with_stale_registration() {
     "stale registration preserves the staged gitlink"
 }
 
-test_does_not_initialize_nested_submodules() {
-  local nested parent super output
+test_initializes_nested_submodules() {
+  local nested parent super output recorded
   nested="$(make_remote nested-child)"
   parent="$(make_remote nested-parent)"
   git -c protocol.file.allow=always -C "$TEST_ROOT/nested-parent-seed" \
@@ -625,10 +658,18 @@ test_does_not_initialize_nested_submodules() {
     "nested submodule starts uninitialized"
   output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
 
-  assert_file_missing "$super/modules/alpha/nested/child/.git" \
-    "workflow update leaves the nested submodule uninitialized"
+  # Forcing the parent onto a new commit moves the nested gitlinks with it, so
+  # leaving them uninitialized hands back a checkout whose vendored sources do
+  # not match the commit the superproject now records.
+  assert_file_present "$super/modules/alpha/nested/child/.git" \
+    "workflow update initializes the nested submodule"
+  recorded="$(git -C "$super/modules/alpha" rev-parse HEAD:nested/child)"
+  assert_eq "$recorded" "$(git -C "$super/modules/alpha/nested/child" rev-parse HEAD)" \
+    "nested submodule matches the gitlink its parent now records"
   assert_contains "$output" "modules/alpha: selected origin/" \
     "direct parent submodule is still processed"
+  assert_contains "$output" "modules/alpha: nested submodules initialized recursively" \
+    "nested initialization is reported"
 }
 
 run_test "validates the command interface" test_interface_validation
@@ -637,6 +678,7 @@ run_test "prefers upstream main and forces local main" test_prefers_upstream_and
 run_test "falls back to origin for every unusable upstream condition" test_origin_fallback_conditions
 run_test "fails when neither remote exposes main" test_fails_without_remote_main
 run_test "fails without overwriting an untracked obstruction" test_fails_without_overwriting_untracked_obstruction
+run_test "fails when an untracked path's parent is a tracked file" test_fails_when_untracked_parent_is_a_tracked_file
 run_test "commits only changed direct gitlinks" test_commits_only_changed_direct_gitlinks
 run_test "supports no-commit and already-current modes" test_no_commit_and_already_current_modes
 run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
@@ -647,5 +689,5 @@ run_test "supports a lagging old-form direct submodule" test_supports_lagging_ol
 run_test "supports spaced submodule names and paths" test_supports_spaced_submodule_names_and_paths
 run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path
 run_test "rejects stale-registered unrelated repository" test_rejects_unrelated_repository_with_stale_registration
-run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
+run_test "initializes nested submodules recursively" test_initializes_nested_submodules
 printf '1..%s\n' "$PASS_COUNT"

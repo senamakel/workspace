@@ -8,8 +8,15 @@ workflow-update [--no-commit]
 
 Update each first-level submodule to upstream/main, falling back to origin/main.
 Each submodule is forced onto local main at the selected remote commit, discarding
-divergent local main commits and tracked changes. Nested submodules are untouched.
-The superproject is not fetched, merged, switched, or reset.
+divergent local main commits and tracked changes. Nested submodules are then
+re-initialized recursively (shallow, borrowing local objects) so they match the
+commit their parent just moved to. The superproject is not fetched, merged,
+switched, or reset.
+
+Only refs/heads/main is fetched from the selected remote, which keeps the fetch
+proportional to the branch rather than to the whole repository. Fetches run with
+terminal and SSH prompts disabled, so a missing credential fails instead of
+hanging forever waiting on input that no agent will supply.
 
 Options:
   --no-commit  stage changed submodule pointers without committing
@@ -26,6 +33,14 @@ pass()  { printf '%s[PASS]%s %s\n' "$_G" "$_0" "$*"; }
 fail()  { printf '%s[FAIL]%s %s\n' "$_R" "$_0" "$*" >&2; }
 warn()  { printf '%s[WARN]%s %s\n' "$_Y" "$_0" "$*" >&2; }
 info()  { printf '%s[INFO]%s %s\n' "$_B" "$_0" "$*"; }
+
+# A fetch that cannot authenticate must fail, not block on a prompt that nothing
+# is there to answer. BatchMode covers SSH remotes, GIT_TERMINAL_PROMPT covers
+# HTTPS ones, and ConnectTimeout bounds an unreachable host.
+export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=15}"
+
+SUBMODULE_INIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/submodule-init"
 
 COMMIT=1
 if [ "$#" -gt 1 ]; then
@@ -166,8 +181,10 @@ select_main() {
       warn "$dir: $candidate is not configured"
       continue
     fi
-    if ! git -C "$dir" fetch "$candidate" --prune; then
-      warn "$dir: failed to fetch $candidate"
+    # Only main is needed to move the pointer. Fetching every ref of a
+    # multi-gigabyte submodule is the single slowest step of this command.
+    if ! git -C "$dir" fetch --prune "$candidate" main; then
+      warn "$dir: failed to fetch $candidate/main"
       continue
     fi
     ref="refs/remotes/$candidate/main"
@@ -183,24 +200,39 @@ select_main() {
   return 1
 }
 
+# The first untracked path that a checkout of <target> would have to overwrite,
+# either directly or because one of its parent directories is a file there.
+#
+# This is a set intersection, done in one pass over two listings. Asking Git per
+# path instead — one `cat-file` for the path and one more for each ancestor —
+# means tens of thousands of subprocesses per submodule, because `ls-files
+# --others` includes ignored files and these checkouts carry large build trees.
+# On workflow-medulla that alone ran for over ten minutes at full CPU.
+obstructing_untracked() {
+  local dir="$1" target="$2"
+  awk -v RS='\0' '
+    NR == FNR { tracked[$0] = 1; next }
+    {
+      if ($0 in tracked) { print; exit }
+      n = split($0, part, "/")
+      acc = ""
+      for (i = 1; i < n; i++) {
+        acc = (i == 1 ? part[1] : acc "/" part[i])
+        if (acc in tracked) { print; exit }
+      }
+    }
+  ' <(git -C "$dir" ls-tree -r -z --name-only "$target") \
+    <(git -C "$dir" ls-files --others -z)
+}
+
 force_local_main() {
-  local dir="$1" commit="$2" current target path ancestor type
+  local dir="$1" commit="$2" current target path
   for target in HEAD "$commit"; do
-    while IFS= read -r -d '' path; do
-      if git -C "$dir" cat-file -e "$target:$path" 2>/dev/null; then
-        fail "$dir: untracked path obstructs synchronization: $path"
-        return 1
-      fi
-      ancestor="$path"
-      while [[ "$ancestor" == */* ]]; do
-        ancestor="${ancestor%/*}"
-        type="$(git -C "$dir" cat-file -t "$target:$ancestor" 2>/dev/null || true)"
-        if [ -n "$type" ] && [ "$type" != "tree" ]; then
-          fail "$dir: untracked path obstructs synchronization: $path"
-          return 1
-        fi
-      done
-    done < <(git -C "$dir" ls-files --others -z)
+    path="$(obstructing_untracked "$dir" "$target")"
+    if [ -n "$path" ]; then
+      fail "$dir: untracked path obstructs synchronization: $path"
+      return 1
+    fi
   done
 
   git -C "$dir" reset --hard HEAD
@@ -221,8 +253,8 @@ while IFS= read -r -d '' SM_CONFIG_ENTRY; do
   SM_NAME="${SM_NAME%.path}"
   RECORDED="$(git rev-parse "HEAD:$SM_PATH")"
   if [ ! -d "$SM_PATH/.git" ] && [ ! -f "$SM_PATH/.git" ]; then
-    git submodule sync -- "$SM_PATH"
-    git submodule update --init -- "$SM_PATH"
+    git submodule sync --recursive -- "$SM_PATH"
+    "$SUBMODULE_INIT" --quiet .
   fi
   [ -d "$SM_PATH/.git" ] || [ -f "$SM_PATH/.git" ] \
     || { fail "$SM_PATH: submodule was not initialized"; exit 1; }
@@ -232,6 +264,21 @@ while IFS= read -r -d '' SM_CONFIG_ENTRY; do
   select_main "$SM_PATH"
   force_local_main "$SM_PATH" "$SELECTED_COMMIT"
   info "$SM_PATH: selected $SELECTED_REMOTE/$SELECTED_COMMIT"
+
+  # The reset above moved this submodule's tree, and with it every nested
+  # gitlink it records. Without this pass the nested submodules stay at the
+  # commits the *previous* parent commit named, which is the difference between
+  # a workflow checkout that builds and one that silently uses stale vendored
+  # sources. Shallow and object-borrowing, so it costs seconds.
+  if [ -f "$SM_PATH/.gitmodules" ]; then
+    git -C "$SM_PATH" submodule sync --recursive >/dev/null
+    if ! NESTED_OUTPUT="$("$SUBMODULE_INIT" --quiet "$SM_PATH" 2>&1)"; then
+      fail "$SM_PATH: nested submodule initialization failed"
+      printf '%s\n' "$NESTED_OUTPUT" >&2
+      exit 1
+    fi
+    info "$SM_PATH: nested submodules initialized recursively"
+  fi
 
   if [ "$RECORDED" = "$SELECTED_COMMIT" ]; then
     info "$SM_PATH: superproject pointer unchanged"
