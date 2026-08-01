@@ -187,7 +187,10 @@ if linker == "mold":
 open(path, "w").write(text)
 print("  " + ("; ".join(added) if added else "already fully configured"))
 PY
-  ok "cargo configured (jobs=$JOBS, incremental off, dep debug off)"
+  # Report what the file actually says, not what was computed: an existing value
+  # is deliberately preserved, so those two differ whenever a box was hand-tuned.
+  ACTUAL_JOBS="$(awk -F'=' '/^jobs[[:space:]]*=/{gsub(/ /,"",$2); print $2; exit}' "$CARGO_CFG")"
+  ok "cargo configured (jobs=${ACTUAL_JOBS:-$JOBS}, incremental off, dep debug off)"
 fi
 
 # ── Linux-only: memory and I/O ─────────────────────────────────────
@@ -202,7 +205,9 @@ if [ "$OS" = "Linux" ] && [ "$REPORT" != "1" ]; then
 
   head_ "zram (compressed swap in RAM)"
   ZRAM_MB=$(( RAM_GB * 1024 / 4 ))
+  ZRAM_OK=0
   if [ -e /dev/zram0 ]; then
+    ZRAM_OK=1
     ok "already active: $(zramctl --output NAME,DISKSIZE,ALGORITHM --noheadings 2>/dev/null | head -1)"
   elif act "configure ${ZRAM_MB}MB zram at priority 100"; then
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq systemd-zram-generator >/dev/null 2>&1 || true
@@ -217,15 +222,22 @@ swap-priority = 100
 EOF
     sudo systemctl daemon-reload
     sudo systemctl restart systemd-zram-setup@zram0.service 2>/dev/null || true
+    # The unit returns before the device node appears, so the swappiness choice
+    # below would otherwise race it and pick the no-zram value.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      [ -e /dev/zram0 ] && break
+      sleep 0.5
+    done
+    [ -e /dev/zram0 ] && ZRAM_OK=1
     ok "zram0 configured (${ZRAM_MB}MB zstd, priority 100)"
   fi
 
   head_ "swappiness"
   CUR_SWAP="$(cat /proc/sys/vm/swappiness)"
   # With zram in front, "swapping" means compressing into RAM, so leaning into
-  # it frees uncompressed RAM rather than touching the disk.
-  WANT_SWAP=100
-  [ -e /dev/zram0 ] || WANT_SWAP=10
+  # it frees uncompressed RAM rather than touching the disk. Without zram, swap
+  # means a slow disk and the opposite is correct.
+  if [ "$ZRAM_OK" = "1" ]; then WANT_SWAP=100; else WANT_SWAP=10; fi
   if [ "$CUR_SWAP" = "$WANT_SWAP" ]; then
     ok "already $CUR_SWAP"
   elif act "set vm.swappiness=$WANT_SWAP (currently $CUR_SWAP)"; then
