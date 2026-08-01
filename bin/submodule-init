@@ -1,17 +1,33 @@
 #!/usr/bin/env bash
-# submodule-init — initialize recursive submodules shallow, with a safe fallback.
+# submodule-init — initialize recursive submodules cheaply, with a safe fallback.
 #
 # Usage: submodule-init [<dir>] [--quiet]
 #
 #   submodule-init                 initialize submodules in the current repo
 #   submodule-init ./worktrees/x   ... in another checkout
 #
-# Submodules are cloned at --depth 1, which is the difference between seconds
-# and minutes on the workflow superprojects. A shallow fetch can miss the
-# recorded gitlink when it is not reachable from a branch tip, so a failed
-# shallow pass is retried at full depth: the checkout is never left half-done
-# to save time. Set SUBMODULE_DEPTH=0 to skip the shallow attempt entirely, or
-# to any other integer to change the depth.
+# In a linked worktree, Git stores submodule git dirs under
+# .git/worktrees/<name>/modules/, never the shared .git/modules/, so a plain
+# `submodule update --init --recursive` re-clones every submodule over the
+# network even though the main checkout already holds the objects. This command
+# instead points each top-level clone at the main checkout's copy with
+# `--reference-if-able`, and sets submodule.alternateLocation=superproject so
+# nested clones inherit the same alternate. Object transfer becomes a local
+# read: seconds instead of gigabytes.
+#
+# Alternates borrow objects rather than copying them, so a submodule initialized
+# this way depends on the main checkout's .git/modules/<name> staying present.
+# That is the same trade-off `git clone --reference` makes; worktree removal is
+# unaffected, but do not delete or aggressively prune the primary checkout while
+# worktrees are live.
+#
+# Where no local reference exists (a fresh clone, an unregistered submodule)
+# cloning is shallow at --depth 1, which is the difference between seconds and
+# minutes on the workflow superprojects. A shallow fetch can miss the recorded
+# gitlink when it is not reachable from a branch tip, so a failed shallow pass
+# is retried at full depth: the checkout is never left half-done to save time.
+# Set SUBMODULE_DEPTH=0 to skip the shallow attempt entirely, or to any other
+# integer to change the depth. SUBMODULE_REFERENCE=0 disables object borrowing.
 #
 # GitHub submodules are cloned over SSH regardless of the HTTPS URLs recorded in
 # .gitmodules. The `-c` overrides travel via GIT_CONFIG_PARAMETERS, so they
@@ -24,7 +40,7 @@ QUIET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --quiet)   QUIET=1; shift ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)        printf '[FAIL] unknown argument: %s\n' "$1" >&2; exit 1 ;;
     *)         DIR="$1"; shift ;;
   esac
@@ -40,29 +56,236 @@ TOP="$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$DIR"
 
 note() { [ "$QUIET" = "1" ] || printf '%s\n' "$*"; }
 
-update() {
-  if [ "${SUBMODULE_HTTPS:-0}" = "1" ]; then
-    git -C "$DIR" submodule update --init --recursive "$@" 2>&1
-  else
-    git -C "$DIR" \
-      -c url."git@github.com:".insteadOf="https://github.com/" \
-      -c url."git@github.com:".insteadOf="http://github.com/" \
-      submodule update --init --recursive "$@" 2>&1
+# The shared git dir of the primary checkout. In a linked worktree this is the
+# main .git; in the primary checkout it is that checkout's own .git, where the
+# reference and the destination coincide and borrowing is a harmless no-op.
+COMMON_DIR="$(git -C "$DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+MODULES_DIR=""
+[ -n "$COMMON_DIR" ] && [ -d "$COMMON_DIR/modules" ] && MODULES_DIR="$COMMON_DIR/modules"
+
+# `git -c` overrides shared by every clone this command drives.
+common_config() {
+  if [ "${SUBMODULE_HTTPS:-0}" != "1" ]; then
+    printf '%s\0' \
+      -c "url.git@github.com:.insteadOf=https://github.com/" \
+      -c "url.git@github.com:.insteadOf=http://github.com/"
   fi
+  # A borrowed top-level submodule records its alternate; `superproject` tells
+  # each nested clone to look for <alternate>/modules/<name> beside it, so the
+  # saving cascades all the way down without naming every nested repository.
+  if [ "${SUBMODULE_REFERENCE:-1}" != "0" ]; then
+    printf '%s\0' \
+      -c "submodule.alternateLocation=superproject" \
+      -c "submodule.alternateErrorStrategy=info"
+  fi
+}
+
+update() {
+  local args=()
+  while IFS= read -r -d '' arg; do args+=("$arg"); done < <(common_config)
+  git -C "$DIR" "${args[@]}" submodule update --init --recursive "$@" 2>&1
+}
+
+# Non-recursive sibling of update(), against an arbitrary checkout. A --reference
+# belongs to one repository, so it must not be handed to nested clones; those get
+# their own, chosen by init_tree as it walks down.
+update_one() {
+  local repo="$1"; shift
+  local args=()
+  while IFS= read -r -d '' arg; do args+=("$arg"); done < <(common_config)
+  git -C "$repo" "${args[@]}" submodule update --init "$@" 2>&1
 }
 
 DEPTH="${SUBMODULE_DEPTH:-1}"
 STATUS=0
+OUTPUT=""
+
+# An index of every repository the primary checkout already holds, keyed by
+# "owner/repo". Nesting means the same repository appears at several paths —
+# openhuman is both a top-level submodule and a vendored dependency of
+# medulla-public — so matching on name or path alone misses the largest wins.
+declare -a REF_KEYS=() REF_DIRS=()
+
+repo_key() {
+  local url="${1%.git}"
+  url="${url%/}"
+  case "$url" in
+    */*) printf '%s\n' "$(printf '%s' "$url" | tr 'A-Z' 'a-z' | sed 's#.*[:/]\([^/][^/]*/[^/][^/]*\)$#\1#')" ;;
+    *)   printf '%s\n' "" ;;
+  esac
+}
+
+reference_for() {
+  local key="$1" i
+  [ -n "$key" ] || return 1
+  for i in "${!REF_KEYS[@]}"; do
+    if [ "${REF_KEYS[$i]}" = "$key" ]; then
+      printf '%s\n' "${REF_DIRS[$i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Git refuses to borrow from a shallow repository, and a checkout initialized by
+# an older version of this command is full of them. Screening here turns a
+# guaranteed clone failure and retry into a straight fall-through to cloning.
+usable_reference() {
+  local dir="$1"
+  [ -n "$dir" ] && [ -d "$dir/objects" ] && [ ! -f "$dir/shallow" ]
+}
+
+index_repo() {
+  local dir="$1" url key
+  usable_reference "$dir" || return 0
+  # Every remote, not just origin: `origin` is routinely a personal fork while
+  # .gitmodules records the canonical upstream, so a key built from one of them
+  # silently fails to match the very submodule it should serve.
+  while IFS= read -r url; do
+    key="$(repo_key "$url")"
+    [ -n "$key" ] || continue
+    reference_for "$key" >/dev/null && continue
+    REF_KEYS+=("$key")
+    REF_DIRS+=("$dir")
+  done < <(git config -f "$dir/config" --get-regexp '^remote\..*\.url$' 2>/dev/null | cut -d' ' -f2-)
+}
+
+build_reference_index() {
+  local config
+  while IFS= read -r config; do
+    index_repo "${config%/config}"
+    # Pruning objects/ and refs/ keeps this walk to the handful of directories
+    # that can hold a git config, instead of every loose object in 3+ GB.
+  done < <(find "$MODULES_DIR" -maxdepth 12 \
+    \( -type d \( -name objects -o -name refs -o -name logs -o -name hooks -o -name info \) -prune \) \
+    -o \( -type f -name config -print \) 2>/dev/null | sort)
+}
+
+# Recursively initialize one checkout, one submodule at a time, so each clone can
+# be pointed at whichever local repository already holds its objects. Git's own
+# --recursive cannot do this: it takes a single --reference for the whole tree.
+#
+# Sibling submodules are processed concurrently, since almost all of the elapsed
+# time is per-repository latency and working-tree checkout rather than CPU. URL
+# registration is done serially first, by `submodule init`, so the parallel work
+# only clones and checks out and never contends on the superproject's config.
+init_tree() {
+  local repo="$1" mirror="$2" entry name path rc pid
+  local -a pids=()
+  local jobs="${SUBMODULE_JOBS:-4}"
+  [ -f "$repo/.gitmodules" ] || return 0
+  git -C "$repo" submodule init >/dev/null 2>&1 || true
+  while IFS= read -r -d '' entry; do
+    name="${entry%%$'\n'*}"
+    path="${entry#*$'\n'}"
+    name="${name#submodule.}"
+    name="${name%.path}"
+    [ -n "$path" ] || continue
+
+    # Bound the fan-out so a deep tree cannot open dozens of connections at once.
+    while [ "$(jobs -pr | wc -l)" -ge "$jobs" ]; do wait -n 2>/dev/null || break; done
+
+    init_one "$repo" "$mirror" "$name" "$path" &
+    pids+=("$!")
+  done < <(git config -z -f "$repo/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null || true)
+
+  rc=0
+  for pid in "${pids[@]}"; do
+    wait "$pid" || rc=$?
+  done
+  return "$rc"
+}
+
+# One submodule: choose the cheapest source for it, clone it, then descend. Runs
+# as a background job, so it reports through its exit status and prints directly
+# rather than accumulating into OUTPUT, which a subshell could not export back.
+init_one() {
+  local repo="$1" mirror="$2" name="$3" path="$4" url key ref out rc
+
+  if [ ! -e "$repo/$path/.git" ]; then
+    url="$(git config -f "$repo/.gitmodules" --get "submodule.$name.url" 2>/dev/null || true)"
+    key="$(repo_key "$url")"
+    ref=""
+    if [ "${SUBMODULE_REFERENCE:-1}" != "0" ]; then
+      # The primary checkout mirrors this exact position in the tree, so prefer
+      # it: the same path means the same submodule, whatever its remotes are
+      # named. The URL index is the fallback for repositories that moved or are
+      # vendored somewhere new.
+      if usable_reference "$mirror/$name"; then
+        ref="$mirror/$name"
+      else
+        ref="$(reference_for "$key" || true)"
+      fi
+    fi
+
+    rc=0
+    if [ -n "$ref" ]; then
+      note "[submodule] $path borrows from $ref"
+      # No --depth alongside a reference: the objects come off local disk, and
+      # a shallow clone cannot borrow the history it deliberately omits.
+      out="$(update_one "$repo" --reference "$ref" -- "$path")" || rc=$?
+      if [ "$rc" -ne 0 ]; then
+        note "[submodule] could not borrow $key for $path, cloning instead"
+        [ -z "$out" ] || note "$out"
+        rc=0
+        out="$(clone_fresh "$repo" "$path")" || rc=$?
+      fi
+    else
+      out="$(clone_fresh "$repo" "$path")" || rc=$?
+    fi
+    if [ "$rc" -ne 0 ]; then
+      printf '%s\n' "$out" >&2
+      return "$rc"
+    fi
+    [ -z "$out" ] || note "$out"
+  fi
+
+  if [ -n "$mirror" ] && [ -d "$mirror/$name/modules" ]; then
+    init_tree "$repo/$path" "$mirror/$name/modules"
+  else
+    init_tree "$repo/$path" ""
+  fi
+}
+
+# A single submodule with no local source: shallow first, full depth on failure,
+# because a recorded gitlink is not always reachable from a branch tip.
+clone_fresh() {
+  local repo="$1" path="$2" out rc=0
+  if [ "$DEPTH" != "0" ]; then
+    out="$(update_one "$repo" --depth "$DEPTH" -- "$path")" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      note "[submodule] shallow init of $path failed, retrying at full depth"
+      rc=0
+      out="$(update_one "$repo" -- "$path")" || rc=$?
+    fi
+  else
+    out="$(update_one "$repo" -- "$path")" || rc=$?
+  fi
+  printf '%s' "$out"
+  return "$rc"
+}
+
+if [ -n "$MODULES_DIR" ] && [ "${SUBMODULE_REFERENCE:-1}" != "0" ]; then
+  build_reference_index
+  init_tree "$TOP" "$MODULES_DIR" || STATUS=$?
+  # Not authoritative: the recursive pass below is what decides success, and it
+  # can still place anything this walk stumbled over.
+  STATUS=0
+fi
+
+# Whatever the per-submodule pass could not place — and the no-reference case —
+# still goes through Git's own recursive update.
 if [ "$DEPTH" != "0" ]; then
-  OUTPUT="$(update --depth "$DEPTH")" || STATUS=$?
+  REST="$(update --depth "$DEPTH")" || STATUS=$?
   if [ "$STATUS" -ne 0 ]; then
     note "[submodule] shallow init failed, retrying at full depth"
     STATUS=0
-    OUTPUT="$(update)" || STATUS=$?
+    REST="$(update)" || STATUS=$?
   fi
 else
-  OUTPUT="$(update)" || STATUS=$?
+  REST="$(update)" || STATUS=$?
 fi
+OUTPUT="${OUTPUT}${REST}"
 
 if [ "$STATUS" -ne 0 ]; then
   printf '[FAIL] recursive submodule initialization failed in %s\n' "$DIR" >&2
