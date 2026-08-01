@@ -255,8 +255,13 @@ EOF
   # it frees uncompressed RAM rather than touching the disk. Without zram, swap
   # means a slow disk and the opposite is correct.
   if [ "$ZRAM_OK" = "1" ]; then WANT_SWAP=100; else WANT_SWAP=10; fi
+  [ -n "${TUNE_BOX_SWAPPINESS:-}" ] && WANT_SWAP="$TUNE_BOX_SWAPPINESS"
   if [ "$CUR_SWAP" = "$WANT_SWAP" ]; then
     ok "already $CUR_SWAP"
+  elif [ -f /etc/sysctl.d/99-tune-box.conf ] && [ -z "${TUNE_BOX_SWAPPINESS:-}" ]; then
+    # Deliberately not fought over: once this box has a value, a later opinion
+    # about it belongs to whoever set it. Same rule as cargo's jobs.
+    ok "leaving hand-set vm.swappiness=$CUR_SWAP (pass TUNE_BOX_SWAPPINESS to change)"
   elif act "set vm.swappiness=$WANT_SWAP (currently $CUR_SWAP)"; then
     printf 'vm.swappiness = %s\n' "$WANT_SWAP" | sudo tee /etc/sysctl.d/99-tune-box.conf >/dev/null
     sudo sysctl -q -w vm.swappiness=$WANT_SWAP
