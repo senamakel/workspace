@@ -1,5 +1,15 @@
 {
   "hooks": {
-    "PostToolUse": []
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
+          }
+        ]
+      }
+    ]
   }
 }
