@@ -412,6 +412,15 @@ The subject comes from one HTTPS request to OpenRouter (~3s) carrying the stat
 and truncated diff. `OPENROUTER_API_KEY` stays on the laptop, so the remote boxes
 fall back to the plain subject rather than failing.
 
+Subjects follow Conventional Commits (`type(scope): description`). A reply that
+is not in that form keeps its description and gets `chore:`, so the log stays
+parseable without discarding something that read the diff.
+
+Latency is ~1.5s on the calls that fire and ~0.1s on the rest, which are a
+counter increment and nothing more. Reasoning is explicitly disabled in the
+request: this question does not need deliberation, and leaving it on doubled the
+wait (3.3s against 1.7s measured).
+
 ```sh
 auto-commit --dry-run          # show the message and files, commit nothing
 auto-commit --now              # checkpoint right now
