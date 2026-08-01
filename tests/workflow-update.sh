@@ -257,6 +257,34 @@ test_fails_without_overwriting_untracked_obstruction() {
     "untracked obstruction creates no pointer commit"
 }
 
+test_fails_when_untracked_parent_is_a_tracked_file() {
+  local origin super before status output
+  origin="$(make_remote parent-obstruction-origin)"
+  super="$(make_superproject_with_submodule parent-obstruction-super "$origin")"
+  # Upstream records `obstruction` as a file; locally it is a directory holding
+  # untracked work, so the checkout cannot proceed without destroying it.
+  printf 'remote tracked content\n' > "$TEST_ROOT/parent-obstruction-origin-seed/obstruction"
+  git -C "$TEST_ROOT/parent-obstruction-origin-seed" add obstruction
+  git -C "$TEST_ROOT/parent-obstruction-origin-seed" commit -qm "Add obstructing tracked file"
+  git -C "$TEST_ROOT/parent-obstruction-origin-seed" push -q origin main
+  mkdir -p "$super/modules/alpha/obstruction"
+  printf 'preserve local content\n' > "$super/modules/alpha/obstruction/nested.txt"
+  before="$(git -C "$super" rev-parse HEAD)"
+
+  set +e
+  output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" 2>&1)"
+  status=$?
+  set -e
+
+  [ "$status" -ne 0 ] || fail_test "untracked parent obstruction must fail"
+  assert_contains "$output" "untracked path obstructs synchronization: obstruction/nested.txt" \
+    "failure identifies the path whose parent is a tracked file"
+  assert_eq "preserve local content" "$(cat "$super/modules/alpha/obstruction/nested.txt")" \
+    "untracked content under the obstructed parent is preserved"
+  assert_eq "$before" "$(git -C "$super" rev-parse HEAD)" \
+    "untracked parent obstruction creates no pointer commit"
+}
+
 test_commits_only_changed_direct_gitlinks() {
   local origin super selected before output committed_paths staged_paths
   origin="$(make_remote commit-mode-origin)"
@@ -650,6 +678,7 @@ run_test "prefers upstream main and forces local main" test_prefers_upstream_and
 run_test "falls back to origin for every unusable upstream condition" test_origin_fallback_conditions
 run_test "fails when neither remote exposes main" test_fails_without_remote_main
 run_test "fails without overwriting an untracked obstruction" test_fails_without_overwriting_untracked_obstruction
+run_test "fails when an untracked path's parent is a tracked file" test_fails_when_untracked_parent_is_a_tracked_file
 run_test "commits only changed direct gitlinks" test_commits_only_changed_direct_gitlinks
 run_test "supports no-commit and already-current modes" test_no_commit_and_already_current_modes
 run_test "initializes an uninitialized direct submodule" test_initializes_uninitialized_direct_submodule
