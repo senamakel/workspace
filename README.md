@@ -436,6 +436,42 @@ AUTO_COMMIT=0 …                # disable
 AUTO_COMMIT_EVERY=10 …         # checkpoint less often
 ```
 
+### `tune-box [--dry-run] [--clean-targets] [--report]`
+
+Applies build, memory, and I/O tuning appropriate to the machine it runs on.
+Every value is derived from that box's own cores and RAM rather than hardcoded,
+because these machines differ by roughly 3x in both. Re-running is safe:
+existing settings are reported and left alone, never duplicated or overwritten,
+so anything tuned by hand survives.
+
+Everywhere it installs `sccache` and points cargo at it — the worktrees of a
+superproject otherwise each compile an identical dependency graph — caps cargo
+parallelism from **RAM rather than core count** (rustc wants gigabytes per job,
+and a core it cannot feed is worse than an idle one), drops debug info for
+dependencies, and disables incremental compilation, which writes thousands of
+small files per crate and cannot be cached by sccache.
+
+On Linux it additionally configures **zram** (compressed swap in RAM, so
+swapping costs CPU instead of disk I/O), raises `vm.swappiness` to suit it, caps
+the systemd user slice with `MemoryHigh`/`AllowedCPUs` so a runaway test suite
+degrades throughput instead of taking the box down, and sets **fstrim to daily**
+— a weekly TRIM is far too rare for checkouts that create and delete
+multi-gigabyte `target/` dirs; on one box a six-day backlog cost 40x random-read
+throughput and left p99 latency at 759 ms.
+
+macOS deliberately gets none of those four: it compresses memory natively, has
+no swappiness knob, and APFS issues TRIM itself.
+
+`MemoryHigh` is used rather than `MemoryMax` on purpose — the former throttles
+and reclaims, the latter kills, and this fleet has already had systemd-oomd
+killing tmux panes once.
+
+```sh
+tune-box --dry-run        # show what would change
+tune-box                  # apply
+tune-box --clean-targets  # also delete stale cargo target dirs
+```
+
 ### `pr-list [--json] [--limit <count>] [--include-drafts] [-R|--repo <owner/name>]`
 
 Lists open pull requests for the current repository, preferring its
