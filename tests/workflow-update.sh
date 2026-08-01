@@ -31,6 +31,11 @@ assert_file_missing() {
   [ ! -e "$path" ] || fail_test "$message: found $path"
 }
 
+assert_file_present() {
+  local path="$1" message="$2"
+  [ -e "$path" ] || fail_test "$message: missing $path"
+}
+
 run_test() {
   local name="$1"
   shift
@@ -611,8 +616,8 @@ test_rejects_unrelated_repository_with_stale_registration() {
     "stale registration preserves the staged gitlink"
 }
 
-test_does_not_initialize_nested_submodules() {
-  local nested parent super output
+test_initializes_nested_submodules() {
+  local nested parent super output recorded
   nested="$(make_remote nested-child)"
   parent="$(make_remote nested-parent)"
   git -c protocol.file.allow=always -C "$TEST_ROOT/nested-parent-seed" \
@@ -625,10 +630,18 @@ test_does_not_initialize_nested_submodules() {
     "nested submodule starts uninitialized"
   output="$(cd "$super" && GIT_ALLOW_PROTOCOL=file "$COMMAND" --no-commit 2>&1)"
 
-  assert_file_missing "$super/modules/alpha/nested/child/.git" \
-    "workflow update leaves the nested submodule uninitialized"
+  # Forcing the parent onto a new commit moves the nested gitlinks with it, so
+  # leaving them uninitialized hands back a checkout whose vendored sources do
+  # not match the commit the superproject now records.
+  assert_file_present "$super/modules/alpha/nested/child/.git" \
+    "workflow update initializes the nested submodule"
+  recorded="$(git -C "$super/modules/alpha" rev-parse HEAD:nested/child)"
+  assert_eq "$recorded" "$(git -C "$super/modules/alpha/nested/child" rev-parse HEAD)" \
+    "nested submodule matches the gitlink its parent now records"
   assert_contains "$output" "modules/alpha: selected origin/" \
     "direct parent submodule is still processed"
+  assert_contains "$output" "modules/alpha: nested submodules initialized recursively" \
+    "nested initialization is reported"
 }
 
 run_test "validates the command interface" test_interface_validation
@@ -647,5 +660,5 @@ run_test "supports a lagging old-form direct submodule" test_supports_lagging_ol
 run_test "supports spaced submodule names and paths" test_supports_spaced_submodule_names_and_paths
 run_test "rejects an unrelated repository at a submodule path" test_rejects_unrelated_repository_at_submodule_path
 run_test "rejects stale-registered unrelated repository" test_rejects_unrelated_repository_with_stale_registration
-run_test "does not initialize nested submodules" test_does_not_initialize_nested_submodules
+run_test "initializes nested submodules recursively" test_initializes_nested_submodules
 printf '1..%s\n' "$PASS_COUNT"
