@@ -299,11 +299,16 @@ fallback_subject() {
   printf '%s: files changed %s' "$FALLBACK_TYPE" "$list"
 }
 
-# With no model there is nothing to summarise from, so the body just names what
-# was committed — still more use to a reader than an empty description.
+# With no model there is nothing to summarise from, so the description just says
+# what was committed — still more use to a reader than an empty body.
 fallback_body() {
-  printf 'Files changed:\n'
-  printf -- '- %s\n' "${STAGE[@]}"
+  local n="${#STAGE[@]}"
+  if [ "$n" -eq 1 ]; then
+    printf 'Checkpoint of work in progress, touching %s.\n' "${STAGE[0]}"
+  else
+    printf 'Checkpoint of work in progress, touching %s files: %s.\n' \
+      "$n" "$(printf '%s\n' "${STAGE[@]}" | paste -sd, - || true)"
+  fi
 }
 
 # Run a command with a wall-clock bound. curl bounds itself with --max-time, but
@@ -334,11 +339,12 @@ ask_model() {
   prompt="$(cat <<EOF
 Write a Conventional Commits message for the change below.
 
-Format — a subject line, one blank line, then 1 to $BODY_MAX_LINES bullets:
+Format — a subject line, one blank line, then a short prose description:
 
 type(scope): short description
 
-- what changed and why, one bullet per distinct change
+A sentence or two of plain prose saying what changed and why it was
+done, written as continuous text rather than a list.
 
 Rules for the subject:
 - format: type(scope): description — the scope is optional
@@ -349,11 +355,12 @@ Rules for the subject:
 - imperative mood, lower case description, no trailing period
 - at most 72 characters
 
-Rules for the bullets:
-- start each with "- "
+Rules for the description:
+- plain prose, no bullets, no dashes, no numbered list
+- at most $BODY_MAX_LINES lines and no more than three sentences
 - say what changed and, where it is not obvious, why
 - describe behaviour, not which files moved
-- keep each under 100 characters; omit bullets entirely for a trivial change
+- omit the description entirely for a trivial change
 
 Output the message and nothing else — no code fences, no preamble.
 

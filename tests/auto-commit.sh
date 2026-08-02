@@ -185,8 +185,8 @@ test_subject_only_reply_still_commits() {
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq 2 "$(count_commits "$repo")" "a subject-only reply still commits"
   assert_eq "fix: handle empty input" "$(git -C "$repo" log -1 --format=%s)" "subject preserved"
-  assert_contains "$(git -C "$repo" log -1 --format=%b)" "Files changed:" \
-    "the fallback body names the files"
+  assert_contains "$(git -C "$repo" log -1 --format=%b)" "Checkpoint of work in progress" \
+    "the fallback description says what was committed"
 }
 
 test_falls_back_without_a_model() {
