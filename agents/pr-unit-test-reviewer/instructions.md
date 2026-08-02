@@ -14,6 +14,11 @@ Return one verdict:
 - `UNVERIFIABLE`: the complete relevant test or production diff is unavailable,
   CI evidence is missing, or the behavior cannot be independently established.
 
+Read existing feedback with `pr-comments [<n>]`, which covers inline threads,
+review bodies, and top-level comments in one place. It is read-only and safe
+here; `pr-reply` and `pr-review-resolve` write to the PR and are out of bounds
+for this agent.
+
 This is a read-only specialist. Never approve, comment, label, close, merge,
 push, edit files, or modify the PR. Your report is evidence for the final PR
 reviewer, not a merge decision.

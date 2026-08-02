@@ -97,9 +97,15 @@ current`.
 For approval, submit:
 
 ```bash
-gh pr review PR_NUMBER -R OWNER/REPO --approve \
+pr-review-resolve PR_NUMBER -R OWNER/REPO --approve \
   --body "Automated technical review: approved for the inspected head commit."
 ```
+
+`pr-review-resolve --approve` is preferred over raw `gh pr review`: it is the same
+command used to clear a changes-requested verdict, so approving and unblocking go
+through one path. `--list` first shows whether any review still requests changes.
+GitHub rejects approving your own pull request, so this only applies to someone
+else's.
 
 For a PR that is not approvable, submit one concise review comment:
 

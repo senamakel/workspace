@@ -219,7 +219,15 @@ fi
 PROMPT="$PROMPT
 Then fix the PR: address review comments and make sure it builds and tests
 pass. Upstream tracking and pushRemote are configured, so a plain 'git push'
-updates the PR."
+updates the PR.
+Work the review feedback with the pr-* helpers rather than raw gh api calls:
+'pr-comments' lists every unresolved thread plus the review bodies and top-level
+comments, so bot feedback on all three channels is covered — reading only inline
+threads silently drops most of it. Answer each thread with
+'pr-reply <threadId> --body \"<reply>\"', which replies in-thread and resolves in
+one step; pass --no-resolve when the reply asks the reviewer a question. Never
+resolve a thread you have not actually addressed. For a changes-requested
+verdict use 'pr-review-resolve --list' and, after pushing the fix, --re-request."
 [ -n "$EXTRA" ] && PROMPT="$PROMPT
 
 Additional instructions: $EXTRA"

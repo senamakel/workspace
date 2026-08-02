@@ -167,17 +167,37 @@ after a well-supported reply establishes that it is no longer actionable.
 Never delete comments, dismiss reviews, hide unresolved disagreement, or
 resolve a thread solely because it is inconvenient.
 
-**Review-bot recipes (CodeRabbit · Codex · Greptile).** Triage all three review
-bots, not just one. Fetch review and issue comments each loop (every bot posts to
-both):
+**Review feedback: use the `pr-*` helpers, not raw `gh api`.** GitHub splits pull
+request feedback across three channels and the helpers cover all of them:
 
 ```bash
-gh api repos/<owner/repo>/pulls/<PR#>/comments --paginate     # inline review comments
-gh api repos/<owner/repo>/issues/<PR#>/comments --paginate    # issue-level comments
+pr-comments [<PR#>] [--json]        # every unresolved thread + review bodies + top-level comments
+pr-reply <threadId> --body "<text>" # reply in-thread AND resolve, in one step
+pr-review-resolve [<PR#>] --list    # which reviews still request changes
 ```
 
-Filter for the review bots by `author.login` (also check the current PR's actual
-comment authors, since app logins can vary):
+Read the feedback with `pr-comments` each loop. It reports the resolvable inline
+threads with the `PRRT_…` `threadId` that `pr-reply` needs, the review-level
+bodies with the `PRR_…` `reviewId` that `pr-review-resolve` needs, and the
+top-level comments. Reading only inline threads silently drops most bot feedback,
+because the review bots post their summaries and verdicts as review bodies —
+that is the single most common way a blocking objection gets missed. `--json`
+feeds another step; `--from <login>` narrows to one reviewer; `--all` also shows
+resolved threads.
+
+Answer every thread with `pr-reply <threadId> --body "<reply>"`, which posts the
+reply **inside the existing thread** and resolves it. Pass `--no-resolve` when the
+reply asks the reviewer a question rather than closing the point. Never post via
+`POST /pulls/<PR#>/reviews` — that opens a new thread instead of answering the
+existing one, leaving the original unresolved.
+
+Do not hand-roll the GraphQL. The helpers paginate internally, which removes a
+real footgun: `reviewThreads` caps at 100 per page, so a hand-written query that
+ignores `pageInfo.hasNextPage` silently drops every thread past the first page and
+the loop exits believing it is done.
+
+Triage all three review bots, not just one — check the PR's actual comment authors
+too, since app logins vary:
 
 - **CodeRabbit** → `coderabbitai[bot]`
 - **Codex** → `chatgpt-codex-connector[bot]`
@@ -185,27 +205,13 @@ comment authors, since app logins can vary):
 
 ...plus human reviewers. Treat each bot's findings on their merits and consolidate
 duplicates across bots (they frequently flag the same issue) — one fix and one
-threaded reply can satisfy several. Reply **inside the existing thread** — never
-via `POST /pulls/<PR#>/reviews`, which opens a new thread:
+threaded reply can satisfy several.
 
-```bash
-gh api repos/<owner/repo>/pulls/comments/<comment_id>/replies \
-  -X POST -f body='**Dismissed:** <reason>'   # <comment_id> = top-level review-comment id
-```
-
-Resolve threads via GraphQL after the fix is pushed or the dismissal posted:
-
-```bash
-gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<threadId>
-```
-
-List thread ids **paginated** — `reviewThreads` caps at 100/page, so loop on
-`pageInfo.hasNextPage`/`endCursor` (feed back as `$cursor`) or threads past page 1
-silently slip past your exit condition:
-
-```bash
-gh api graphql -f query='query($owner:String!,$repo:String!,$num:Int!,$cursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$num){reviewThreads(first:100, after:$cursor){pageInfo{hasNextPage endCursor} nodes{id isResolved comments(first:1){nodes{author{login} body}}}}}}}' -F owner=<owner> -F repo=<repo> -F num=<PR#> -F cursor=
-```
+For a changes-requested verdict, clear it by fixing it: `pr-review-resolve --list`
+shows which reviews still block, and after pushing the fix `--re-request` asks the
+reviewer to look again. `--dismiss <reviewId>` and `--dismiss-all` require a
+`--message`, are the last resort, and must never retire feedback that is still
+valid.
 
 ## CI: Drive Every Check to Green (no matter what)
 

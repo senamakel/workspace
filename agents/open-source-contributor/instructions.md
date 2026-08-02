@@ -161,7 +161,9 @@ Update the issue record to `pr_open` with PR number, URL, head SHA, and
 
 Dispatch `pr-babysitter` in the same target worktree. Across CI/review cycles:
 
-- refresh the full head OID, checks, reviews, comments, and unresolved threads;
+- refresh the full head OID and checks, and read every channel of feedback with
+  `pr-comments` — inline threads, review bodies, and top-level comments — since
+  reading only inline threads drops most bot feedback;
 - validate bot/human feedback against the code before implementing it;
 - fix root causes through native subagents, commit atomically, and push;
 - never skip hooks or force-push;

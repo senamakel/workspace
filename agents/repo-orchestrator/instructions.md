@@ -104,6 +104,14 @@ subagent to change code, tell it which worktree to work in.
   the head SHA so a concurrent push can't slip past. A blocked PR exits status 2
   and lists every blocker. Always `pr-merge <n> --dry-run` first. Squash default;
   `--merge`/`--rebase` to change; `--delete-branch` is opt-in.
+- **`pr-comments [<n>] [--json]` / `pr-reply <threadId> --body <text>` /
+  `pr-review-resolve [<n>] --list|--re-request`** — the PR feedback trio. GitHub
+  splits feedback across inline threads, review bodies, and top-level comments;
+  `pr-comments` returns all three, so bot verdicts posted as review bodies are not
+  missed. `pr-reply` answers inside the existing thread and resolves it in one
+  step. Prefer these over raw `gh api`, which paginates at 100 threads and
+  silently drops the rest. Never resolve a thread whose feedback was not actually
+  addressed.
 - **`gh issue list` / `gh issue view <n>` / `gh pr view <n>` / `gh pr checks <n>`**
   — the issue census and detail inspection, and PR detail beyond what `pr-list`
   carries. Use paginated read-only calls. (`gh issue list --json
