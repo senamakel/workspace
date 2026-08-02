@@ -82,6 +82,28 @@ fire() {
 
 count_commits() { git -C "$1" rev-list --count HEAD; }
 
+test_commits_on_every_tool_call_by_default() {
+  local repo state stub before
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo default-cadence)"
+  state="$(state_dir default-cadence)"
+  stub="$(make_stub defaultcadence "chore: add a greeting")"
+  before="$(count_commits "$repo")"
+
+  # No AUTO_COMMIT_EVERY set: the default must checkpoint on the very first call.
+  printf 'hello\n' > "$repo/new.txt"
+  fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq "$((before + 1))" "$(count_commits "$repo")" "commits on the first tool call"
+
+  printf 'more\n' >> "$repo/new.txt"
+  fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq "$((before + 2))" "$(count_commits "$repo")" "commits again on the next call"
+
+  # A call that changed nothing must not produce an empty commit.
+  fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq "$((before + 2))" "$(count_commits "$repo")" "a clean tree adds no commit"
+}
+
 test_commits_only_every_nth_tool_call() {
   local repo state stub before
   command -v jq >/dev/null 2>&1 || return 0
@@ -91,16 +113,16 @@ test_commits_only_every_nth_tool_call() {
   printf 'hello\n' > "$repo/new.txt"
   before="$(count_commits "$repo")"
 
-  fire "$repo" "$state" "$stub" >/dev/null
+  AUTO_COMMIT_EVERY=3 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq "$before" "$(count_commits "$repo")" "no commit on the first tool call"
-  fire "$repo" "$state" "$stub" >/dev/null
+  AUTO_COMMIT_EVERY=3 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq "$before" "$(count_commits "$repo")" "no commit on the second tool call"
-  fire "$repo" "$state" "$stub" >/dev/null
+  AUTO_COMMIT_EVERY=3 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq "$((before + 1))" "$(count_commits "$repo")" "commits on the third tool call"
 
   # The counter resets, so the next commit is another three calls away.
   printf 'more\n' >> "$repo/new.txt"
-  fire "$repo" "$state" "$stub" >/dev/null
+  AUTO_COMMIT_EVERY=3 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq "$((before + 1))" "$(count_commits "$repo")" "counter restarts after a commit"
 }
 
@@ -340,7 +362,8 @@ test_cannot_be_disabled_by_environment() {
   done
 }
 
-run_test "commits only every Nth tool call" test_commits_only_every_nth_tool_call
+run_test "commits on every tool call by default" test_commits_on_every_tool_call_by_default
+run_test "commits only every Nth tool call when configured" test_commits_only_every_nth_tool_call
 run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim
 run_test "commits a description body" test_commits_a_description_body

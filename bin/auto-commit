@@ -6,10 +6,11 @@
 #   auto-commit --now        commit the working tree right now
 #   auto-commit --dry-run    show the message and the files, commit nothing
 #   auto-commit --hook       read a Claude Code PostToolUse event on stdin and
-#                            commit once every AUTO_COMMIT_EVERY tool calls
+#                            commit once every AUTO_COMMIT_EVERY tool calls (1)
 #
 # Wired as a PostToolUse hook, this keeps work committed continuously instead of
-# relying on an agent to remember. Every AUTO_COMMIT_EVERY tool calls it collects
+# relying on an agent to remember. Every AUTO_COMMIT_EVERY tool calls (1 by
+# default, so every call) it collects
 # the changed and untracked files, asks a cheap model for a subject line and a
 # short description of what changed, and commits through `atomic-commit`. It
 # never pushes.
@@ -39,7 +40,7 @@
 # claude/settings.json or codex/hooks.json. The guards below are not opt-outs:
 # they exist so the command never commits something it should not.
 #
-#   AUTO_COMMIT_EVERY                tool calls between commits (3)
+#   AUTO_COMMIT_EVERY                tool calls between commits (1 = every call)
 #   AUTO_COMMIT_ALLOW_PROTECTED=1    allow commits on main/master
 #   AUTO_COMMIT_PROTECTED            protected branch names (main master)
 #   AUTO_COMMIT_SKIP                 extra glob(s) never staged, colon-separated
@@ -76,7 +77,10 @@ done
 
 [ "$HOOK" = "1" ] || [ "$NOW" = "1" ] || [ "$DRY" = "1" ] || { usage; exit 1; }
 
-EVERY="${AUTO_COMMIT_EVERY:-3}"
+# Every tool call by default. This is cheaper than it sounds: a call that changed
+# nothing exits at the `git status` check without a model call, so the cost tracks
+# how often files actually change rather than how many tools run.
+EVERY="${AUTO_COMMIT_EVERY:-1}"
 # Conventional Commits: the subject is `type(scope): description`. Anything the
 # model returns in another shape gets the fallback type rather than being thrown
 # away, so the log stays parseable without losing a description that read the diff.

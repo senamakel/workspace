@@ -380,9 +380,15 @@ atomic-commit --json "docs: explain setup" -- README.md
 ### `auto-commit [--hook] [--now] [--dry-run] [--json]`
 
 Commits whatever is dirty, with a subject written from the diff. Wired as a
-`PostToolUse` hook on every tool in `claude/settings.json`, it fires once every
-`AUTO_COMMIT_EVERY` tool calls (default 3), so work is checkpointed continuously
-instead of depending on an agent to remember. This is why `RULES.md` no longer
+`PostToolUse` hook on every tool in `claude/settings.json` and `codex/hooks.json`,
+it fires on **every tool call** by default (`AUTO_COMMIT_EVERY=1`), so work is
+checkpointed continuously instead of depending on an agent to remember.
+
+That is cheaper than it sounds: a tool call that changed nothing exits at the
+`git status` check without a model call, costing about 0.1s. Only calls that
+actually dirty the tree pay for a commit, so the cost tracks how often files
+change rather than how many tools run. Raise `AUTO_COMMIT_EVERY` to checkpoint
+less often. This is why `RULES.md` no longer
 carries a commit-after-every-step rule — the hook does it, and the rule was
 costing context on every single turn.
 
@@ -448,7 +454,7 @@ commits something it should not.
 ```sh
 auto-commit --dry-run          # show the message and files, commit nothing
 auto-commit --now              # checkpoint right now
-AUTO_COMMIT_EVERY=10 …         # checkpoint less often
+AUTO_COMMIT_EVERY=10 …         # checkpoint every 10th tool call instead
 ```
 
 ### `codex-trust-hooks [--list] [--dry-run]`
