@@ -408,6 +408,16 @@ Guards, all deliberate and all tested:
 - never stages a path that looks like a credential (`.env`, `*.pem`, `id_rsa*`,
   `*credentials*`, …) whatever `.gitignore` says, since nobody reviews these
   files before they are staged; the file is left in the working tree, not lost
+- **scans the content it is about to commit**, because the commoner leak is a key
+  pasted into ordinary source that no filename rule would catch. Only the lines
+  this commit would *add* are checked, against high-signal shapes a provider
+  issues and that cannot plausibly occur by accident — AWS, OpenAI/Anthropic,
+  OpenRouter, GitHub, Slack, Google, Stripe keys, PEM private-key blocks, JWTs.
+  A matching file is withheld while the rest of the commit proceeds, and in hook
+  mode the command exits 2 so the harness is told which file and which pattern —
+  **never the matched value**, which must not reach a log or scrollback.
+  `AUTO_COMMIT_SCAN_CONTENT=0` disables it; `AUTO_COMMIT_SECRET_PATTERNS` adds
+  `name|regex` pairs
 - does nothing during a merge, rebase, cherry-pick, or bisect, or on a detached
   HEAD
 - commits with a plain `wip:` subject when the model is unreachable — a

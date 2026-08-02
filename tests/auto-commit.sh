@@ -293,6 +293,68 @@ test_never_commits_a_credential() {
   assert_contains "$(git -C "$repo" status --porcelain)" ".env" "the skipped file survives"
 }
 
+test_never_commits_a_key_pasted_into_source() {
+  local repo state stub committed status err
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo content-secret)"
+  state="$(state_dir content-secret)"
+  stub="$(make_stub contentsecret "chore: add config")"
+  # An ordinary filename the glob guard would happily pass, with a key inside.
+  printf 'AWS_KEY = "AKIA1234567890ABCDEF"\n' > "$repo/settings.py"
+  printf 'def add(a, b):\n    return a + b\n' > "$repo/safe.py"
+
+  # `fire` already folds stderr into stdout, so capture it directly.
+  set +e
+  err="$(AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub")"
+  status=$?
+  set -e
+
+  committed="$(git -C "$repo" show --pretty=format: --name-only HEAD)"
+  assert_contains "$committed" "safe.py" "the safe file is still committed"
+  assert_not_contains "$committed" "settings.py" "the file holding a key is not committed"
+  assert_contains "$(git -C "$repo" status --porcelain)" "settings.py" "it stays in the working tree"
+  assert_eq 2 "$status" "the hook reports the withheld file rather than failing silently"
+  assert_contains "$err" "settings.py" "the report names the file"
+  assert_contains "$err" "aws-access-key" "the report names the pattern"
+  assert_not_contains "$err" "AKIA1234567890ABCDEF" "the secret value is never echoed"
+}
+
+test_content_scan_covers_common_key_shapes() {
+  local repo state stub n=0 secret
+  command -v jq >/dev/null 2>&1 || return 0
+  for secret in \
+    'sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' \
+    'ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' \
+    'xoxb-1234567890-ABCDEFGHIJ' \
+    'AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' \
+    '-----BEGIN RSA PRIVATE KEY-----'; do
+    n=$((n + 1))
+    repo="$(make_repo "shape-$n")"
+    state="$(state_dir "shape-$n")"
+    stub="$(make_stub "shape$n" "chore: add config")"
+    printf 'token = "%s"\n' "$secret" > "$repo/app.py"
+    set +e
+    AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null 2>&1
+    set -e
+    assert_eq 1 "$(count_commits "$repo")" "a $n-th key shape must not be committed"
+  done
+}
+
+test_ordinary_code_is_not_flagged() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo nofalsepositive)"
+  state="$(state_dir nofalsepositive)"
+  stub="$(make_stub nofalsepositive "feat: add helpers")"
+  # Things that superficially look secret-ish but must not trip the scan.
+  printf 'API_KEY = os.environ["API_KEY"]\npassword = get_password()\nsecret_name = "prod"\n' \
+    > "$repo/config.py"
+  printf 'const token = await auth.getToken();\n' > "$repo/auth.js"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null 2>&1
+  assert_eq 2 "$(count_commits "$repo")" "ordinary code commits normally"
+  assert_eq "" "$(git -C "$repo" status --porcelain)" "nothing was withheld"
+}
+
 test_refuses_a_protected_branch() {
   local repo state stub output
   command -v jq >/dev/null 2>&1 || return 0
@@ -374,6 +436,9 @@ run_test "the fallback names the changed files" test_fallback_names_the_changed_
 run_test "the fallback truncates a long file list" test_fallback_truncates_a_long_file_list
 run_test "commits untracked and modified files together" test_commits_untracked_and_modified_together
 run_test "never commits a credential" test_never_commits_a_credential
+run_test "never commits a key pasted into source" test_never_commits_a_key_pasted_into_source
+run_test "the content scan covers common key shapes" test_content_scan_covers_common_key_shapes
+run_test "ordinary code is not flagged" test_ordinary_code_is_not_flagged
 run_test "refuses a protected branch unless allowed" test_refuses_a_protected_branch
 run_test "skips during a merge" test_skips_during_a_merge
 run_test "a clean tree commits nothing" test_clean_tree_commits_nothing

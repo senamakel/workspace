@@ -44,6 +44,8 @@
 #   AUTO_COMMIT_ALLOW_PROTECTED=1    allow commits on main/master
 #   AUTO_COMMIT_PROTECTED            protected branch names (main master)
 #   AUTO_COMMIT_SKIP                 extra glob(s) never staged, colon-separated
+#   AUTO_COMMIT_SCAN_CONTENT=0       skip the credential content scan
+#   AUTO_COMMIT_SECRET_PATTERNS      extra "name|regex" pairs, colon-separated
 #   AUTO_COMMIT_FALLBACK_TYPE        type used when the model gives none (chore)
 #   AUTO_COMMIT_FALLBACK_MAX_FILES   files named in the fallback subject (5)
 #   AUTO_COMMIT_TIMEOUT              seconds allowed for the subject line (5)
@@ -194,8 +196,61 @@ if [ -n "${AUTO_COMMIT_SKIP:-}" ]; then
   done < <(printf '%s' "$AUTO_COMMIT_SKIP" | tr ':' '\n')
 fi
 
+# A filename guard only catches secrets that live in obviously-named files. The
+# commoner leak is a key pasted into ordinary source, so the content about to be
+# committed is scanned too. Patterns are deliberately high-signal — shapes that
+# are issued by a provider and effectively cannot occur by accident — because a
+# false positive here silently withholds a file from every future commit.
+SECRET_PATTERNS=(
+  'aws-access-key|AKIA[0-9A-Z]{16}'
+  'openai-or-anthropic-key|sk-(ant-)?[A-Za-z0-9_-]{24,}'
+  'openrouter-key|sk-or-v1-[A-Za-z0-9]{16,}'
+  'github-token|gh[pousr]_[A-Za-z0-9]{30,}'
+  'slack-token|xox[baprs]-[A-Za-z0-9-]{10,}'
+  'google-api-key|AIza[0-9A-Za-z_-]{35}'
+  'stripe-key|[sr]k_live_[A-Za-z0-9]{16,}'
+  'private-key-block|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  'json-web-token|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}'
+)
+if [ -n "${AUTO_COMMIT_SECRET_PATTERNS:-}" ]; then
+  while IFS= read -r extra; do
+    [ -z "$extra" ] || SECRET_PATTERNS+=("$extra")
+  done < <(printf '%s' "$AUTO_COMMIT_SECRET_PATTERNS" | tr ':' '\n')
+fi
+
+# What this commit would actually add: new lines for a tracked file, the whole
+# file for an untracked one. Only additions matter — content already in history
+# is not this commit's doing.
+added_content() {
+  local f="$1"
+  if git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+    git diff HEAD -- "$f" 2>/dev/null | grep '^+' || true
+  else
+    head -c 1000000 "$f" 2>/dev/null || true
+  fi
+}
+
+# Prints the name of the first pattern the file's additions match, if any.
+credential_in() {
+  local f="$1" content entry name regex
+  content="$(added_content "$f")"
+  [ -n "$content" ] || return 1
+  for entry in "${SECRET_PATTERNS[@]}"; do
+    name="${entry%%|*}"
+    regex="${entry#*|}"
+    # -e is required, not stylistic: the private-key pattern begins with "-----"
+    # and grep would otherwise parse it as options and never match.
+    if printf '%s' "$content" | LC_ALL=C grep -qaE -e "$regex"; then
+      printf '%s' "$name"
+      return 0
+    fi
+  done
+  return 1
+}
+
 STAGE=()
 SKIPPED=()
+LEAKS=()
 for path in "${CHANGED[@]}"; do
   base="$(basename "$path")"
   secret=0
@@ -204,7 +259,18 @@ for path in "${CHANGED[@]}"; do
     # shellcheck disable=SC2053
     if [[ "$base" == $glob || "$path" == $glob ]]; then secret=1; break; fi
   done
-  if [ "$secret" = "1" ]; then SKIPPED+=("$path"); else STAGE+=("$path"); fi
+  if [ "$secret" = "1" ]; then
+    SKIPPED+=("$path")
+    continue
+  fi
+  if [ "${AUTO_COMMIT_SCAN_CONTENT:-1}" != "0" ] && hit="$(credential_in "$path")"; then
+    # Never echo the match itself — naming the file and the pattern is enough to
+    # act on, and the value must not reach a log or a terminal scrollback.
+    LEAKS+=("$path ($hit)")
+    SKIPPED+=("$path")
+    continue
+  fi
+  STAGE+=("$path")
 done
 
 if [ "${#SKIPPED[@]}" -gt 0 ]; then
@@ -378,4 +444,18 @@ if ! OUTPUT="$(cd "$TOP" && "$ATOMIC" "$MESSAGE" -- "${STAGE[@]}" 2>&1)"; then
 fi
 
 emit committed "$SUBJECT" "$FILE_LIST"
+
+# A withheld credential must not pass silently. In hook mode `note` prints
+# nothing, so the file would simply never be committed and no one would know;
+# exit 2 puts the reason in front of the harness instead. The commit above still
+# stands — the safe files are saved, only the offending one is held back.
+if [ "${#LEAKS[@]}" -gt 0 ]; then
+  {
+    printf 'auto-commit withheld %s file(s): a credential-shaped string was found in content about to be committed.\n' "${#LEAKS[@]}"
+    printf '  %s\n' "${LEAKS[@]}"
+    printf 'Remove the secret from the file (move it to an env var or an ignored file) before it can be committed.\n'
+    printf 'If it is a fixture and not a real credential, set AUTO_COMMIT_SCAN_CONTENT=0 for this repo or narrow the pattern.\n'
+  } >&2
+  exit 2
+fi
 exit 0
