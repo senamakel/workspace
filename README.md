@@ -443,13 +443,16 @@ failure up to a configurable number of attempts with a delay between tries.
 This supports more resilient operations without duplicating retry logic.
 ```
 
-`OPENROUTER_API_KEY` is exported from `~/.zshrc` on every box, and agents are
-launched from an interactive shell, so the hook inherits it and generates real
-messages everywhere. The one case that falls back is an agent started from a
-context that never sources `.zshrc` — a cron job, a systemd unit, a bare
-`ssh host cmd` — where the commit still happens with the `Checkpoint of work in
-progress…` description. Note that `zsh -lc` is login but *not* interactive and so
-does not source `.zshrc`; checking for the key that way reports a false absence.
+`OPENROUTER_API_KEY` is exported from `~/.zshenv` on every machine, so real
+messages are generated everywhere. It lives in `.zshenv` rather than `.zshrc`
+deliberately: zsh sources `.zshrc` **only for interactive shells**, so a hook
+launched from cron, a systemd unit, or a bare `ssh host cmd` would never see the
+key and would silently fall back. `.zshenv` is sourced for every invocation.
+
+The same asymmetry makes the key easy to misdiagnose as missing — `zsh -lc` is a
+login shell but *not* an interactive one, so checking that way reported a false
+absence. Each machine's key was already present locally; nothing was copied
+between machines.
 
 Latency is ~1.5-3s on the calls that fire and ~0.1s on the rest, which are a
 counter increment and nothing more. Reasoning is explicitly disabled in the
