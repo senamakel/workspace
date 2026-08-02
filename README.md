@@ -443,9 +443,13 @@ failure up to a configurable number of attempts with a delay between tries.
 This supports more resilient operations without duplicating retry logic.
 ```
 
-**The description only appears where the model is reachable.** `OPENROUTER_API_KEY`
-lives on the laptop only, so on the remote boxes every commit takes the fallback
-subject and a `Checkpoint of work in progress…` description instead.
+`OPENROUTER_API_KEY` is exported from `~/.zshrc` on every box, and agents are
+launched from an interactive shell, so the hook inherits it and generates real
+messages everywhere. The one case that falls back is an agent started from a
+context that never sources `.zshrc` — a cron job, a systemd unit, a bare
+`ssh host cmd` — where the commit still happens with the `Checkpoint of work in
+progress…` description. Note that `zsh -lc` is login but *not* interactive and so
+does not source `.zshrc`; checking for the key that way reports a false absence.
 
 Latency is ~1.5-3s on the calls that fire and ~0.1s on the rest, which are a
 counter increment and nothing more. Reasoning is explicitly disabled in the
