@@ -103,10 +103,20 @@ fi
 # every worktree-creating command shares one implementation. WORKTREE_DEPTH and
 # WORKTREE_HTTPS keep working as this command's own names for it.
 SUBMODULE_STATUS=0
+# --branch puts every submodule on a branch named after the slug, at the commit
+# the superproject already records. Submodules are otherwise checked out detached,
+# so edits made in one belong to no branch and are easy to lose; this is the step
+# the workflow rules otherwise ask you to remember by hand for each submodule.
+# Set WORKTREE_SUBMODULE_BRANCH=0 to leave them detached.
+SUBMODULE_BRANCH_ARGS=()
+if [ "${WORKTREE_SUBMODULE_BRANCH:-1}" != "0" ]; then
+  SUBMODULE_BRANCH_ARGS=(--branch "$SLUG")
+fi
 SUBMODULE_OUTPUT=$(
   SUBMODULE_DEPTH="${WORKTREE_DEPTH:-${SUBMODULE_DEPTH:-1}}" \
   SUBMODULE_HTTPS="${WORKTREE_HTTPS:-${SUBMODULE_HTTPS:-0}}" \
-  "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/submodule-init" "$WT_DIR" 2>&1
+  "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/submodule-init" \
+    "${SUBMODULE_BRANCH_ARGS[@]}" "$WT_DIR" 2>&1
 ) || SUBMODULE_STATUS=$?
 if [ "$SUBMODULE_STATUS" -ne 0 ]; then
   fail "worktree exists, but recursive submodule initialization failed: $WT_DIR"

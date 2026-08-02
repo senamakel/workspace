@@ -37,9 +37,12 @@ set -euo pipefail
 
 DIR="."
 QUIET=0
+BRANCH_NAME="${SUBMODULE_BRANCH:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --quiet)   QUIET=1; shift ;;
+    --branch)  BRANCH_NAME="${2:-}"; [ -n "$BRANCH_NAME" ] \
+                 || { printf '[FAIL] --branch needs a name\n' >&2; exit 1; }; shift 2 ;;
     -h|--help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)        printf '[FAIL] unknown argument: %s\n' "$1" >&2; exit 1 ;;
     *)         DIR="$1"; shift ;;
@@ -294,3 +297,41 @@ if [ "$STATUS" -ne 0 ]; then
 fi
 
 [ -z "$OUTPUT" ] || note "$OUTPUT"
+
+# ── Put every submodule on a working branch ────────────────────────
+# `submodule update` leaves each submodule detached at the recorded gitlink, so
+# any edit made there is on no branch at all and is trivially lost. Branching
+# them up front is the step the workflow rules otherwise ask you to remember for
+# every submodule you touch.
+#
+# The branch is created at the commit the superproject records, so nothing moves:
+# this only gives that commit a name. An existing branch of the same name is
+# checked out rather than recreated, which makes re-running safe.
+if [ -n "$BRANCH_NAME" ]; then
+  BRANCHED=0
+  FAILED=""
+  while IFS= read -r sm; do
+    [ -n "$sm" ] || continue
+    [ -e "$TOP/$sm/.git" ] || continue
+    if [ "$(git -C "$TOP/$sm" symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "$BRANCH_NAME" ]; then
+      BRANCHED=$((BRANCHED + 1))
+      continue
+    fi
+    if git -C "$TOP/$sm" rev-parse --verify --quiet "refs/heads/$BRANCH_NAME" >/dev/null 2>&1; then
+      if git -C "$TOP/$sm" switch --quiet "$BRANCH_NAME" 2>/dev/null; then
+        BRANCHED=$((BRANCHED + 1))
+      else
+        FAILED="$FAILED $sm"
+      fi
+    elif git -C "$TOP/$sm" switch --quiet -c "$BRANCH_NAME" 2>/dev/null; then
+      BRANCHED=$((BRANCHED + 1))
+    else
+      # A submodule that will not branch is not fatal — the checkout is still
+      # usable, it just stays detached and must be branched by hand.
+      FAILED="$FAILED $sm"
+    fi
+  done < <(git -C "$TOP" submodule foreach --recursive --quiet 'printf "%s\n" "$displaypath"' 2>/dev/null || true)
+
+  [ "$BRANCHED" -eq 0 ] || note "[submodule] $BRANCHED submodule(s) on branch '$BRANCH_NAME'"
+  [ -z "$FAILED" ] || note "[submodule] could not branch:$FAILED (left detached)"
+fi
