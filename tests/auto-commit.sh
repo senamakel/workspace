@@ -80,6 +80,15 @@ fire() {
        "$COMMAND" --hook 2>&1)
 }
 
+# Feeds an event whose tool ran in a different checkout from the harness cwd.
+fire_from() {
+  local launch_repo="$1" work_repo="$2" state="$3" stub="${4:-}"
+  jq -n --arg s "session-fixed" --arg workdir "$work_repo" \
+    '{session_id: $s, cwd: $workdir, tool_name: "Bash", tool_input: {command: "ls", workdir: $workdir}}' \
+    | (cd "$launch_repo" && AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$state" \
+       "$COMMAND" --hook 2>&1)
+}
+
 count_commits() { git -C "$1" rev-list --count HEAD; }
 
 test_commits_on_every_tool_call_by_default() {
@@ -102,6 +111,27 @@ test_commits_on_every_tool_call_by_default() {
   # A call that changed nothing must not produce an empty commit.
   fire "$repo" "$state" "$stub" >/dev/null
   assert_eq "$((before + 2))" "$(count_commits "$repo")" "a clean tree adds no commit"
+}
+
+test_commits_the_tool_worktree_not_the_launch_checkout() {
+  local launch_repo work_repo state stub before
+  command -v jq >/dev/null 2>&1 || return 0
+  launch_repo="$(make_repo launch-checkout)"
+  work_repo="$(make_repo tool-worktree)"
+  state="$(state_dir tool-worktree)"
+  stub="$(make_stub toolworktree "chore: checkpoint the active worktree")"
+  git -C "$launch_repo" switch -q main
+  printf 'worktree change\n' > "$work_repo/new.txt"
+  before="$(count_commits "$work_repo")"
+
+  fire_from "$launch_repo" "$work_repo" "$state" "$stub" >/dev/null
+
+  assert_eq "$((before + 1))" "$(count_commits "$work_repo")" \
+    "the checkout named by the tool event is committed"
+  assert_eq "" "$(git -C "$work_repo" status --porcelain)" \
+    "the active worktree is clean afterwards"
+  assert_eq 1 "$(count_commits "$launch_repo")" \
+    "the protected launch checkout is untouched"
 }
 
 test_commits_only_every_nth_tool_call() {
@@ -482,6 +512,7 @@ test_cannot_be_disabled_by_environment() {
 }
 
 run_test "commits on every tool call by default" test_commits_on_every_tool_call_by_default
+run_test "commits the tool worktree instead of the launch checkout" test_commits_the_tool_worktree_not_the_launch_checkout
 run_test "commits only every Nth tool call when configured" test_commits_only_every_nth_tool_call
 run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim

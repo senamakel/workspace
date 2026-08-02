@@ -109,6 +109,23 @@ note() { [ "$HOOK" = "1" ] || printf '%s\n' "$*"; }
 # about it means work quietly stops being saved for the rest of the session.
 speak() { printf '[auto-commit] %s\n' "$*" >&2; }
 
+# Hooks are launched in the harness's session directory, which can differ from
+# the checkout a tool actually edited (Medulla commonly starts on `main`, then
+# the agent works under `worktrees/<slug>`). Prefer the tool's explicit working
+# directory, then the hook event's cwd, so repository discovery follows the
+# work rather than the long-lived harness process.
+EVENT=""
+if [ "$HOOK" = "1" ]; then
+  command -v jq >/dev/null 2>&1 || exit 0
+  EVENT="$(cat)"
+  EVENT_CWD="$(printf '%s' "$EVENT" \
+    | jq -r '((.tool_input | objects | .workdir // .cwd) // .cwd // empty)' 2>/dev/null \
+    || true)"
+  if [ -n "$EVENT_CWD" ] && [ -d "$EVENT_CWD" ]; then
+    cd -- "$EVENT_CWD"
+  fi
+fi
+
 # ── Where are we ───────────────────────────────────────────────────
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 TOP="$(git rev-parse --show-toplevel)"
@@ -118,8 +135,6 @@ GIT_DIR="$(git rev-parse --absolute-git-dir)"
 # PostToolUse fires on every tool call. Only every Nth one does any work, so the
 # other N-1 cost a counter increment and nothing else.
 if [ "$HOOK" = "1" ]; then
-  command -v jq >/dev/null 2>&1 || exit 0
-  EVENT="$(cat)"
   SESSION="$(printf '%s' "$EVENT" | jq -r '.session_id // "nosession"' 2>/dev/null || echo nosession)"
   STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/auto-commit"
   mkdir -p "$STATE_DIR"
