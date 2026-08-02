@@ -428,6 +428,16 @@ Guards, all deliberate and all tested:
   **never the matched value**, which must not reach a log or scrollback.
   `AUTO_COMMIT_SCAN_CONTENT=0` disables it; `AUTO_COMMIT_SECRET_PATTERNS` adds
   `name|regex` pairs
+- **bails on any merge conflict.** An unmerged index is checked *before* the
+  in-progress markers, because a conflicting `git stash pop` leaves unmerged
+  paths with no `MERGE_HEAD` at all — a case the marker check misses entirely,
+  and one that happened on these machines. Files still carrying `<<<<<<<` /
+  `>>>>>>>` markers count too, since markers survive `git add` and git then stops
+  calling the file unmerged. Both bail on the *whole* commit rather than
+  checkpointing the untouched files around a half-resolved merge, and both are
+  announced on stderr even in hook mode — a conflict blocks every future
+  checkpoint, so failing silently would mean work quietly stops being saved.
+  Prose mentioning a single marker is not mistaken for a conflict
 - does nothing during a merge, rebase, cherry-pick, or bisect, or on a detached
   HEAD
 - commits with a plain `wip:` subject when the model is unreachable — a

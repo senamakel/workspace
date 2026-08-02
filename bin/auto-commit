@@ -30,6 +30,8 @@
 #   * refuses on a protected branch (main/master) unless allowed, because new
 #     work is supposed to happen on a feature branch
 #   * never stages a path that looks like a credential, whatever .gitignore says
+#   * bails on any merge conflict — an unmerged index or leftover conflict
+#     markers — rather than checkpointing a half-resolved merge
 #   * does nothing during a merge, rebase, cherry-pick, or bisect
 #   * commits without a model, and without a network, if it has to
 #
@@ -102,6 +104,11 @@ CRITIC_CMD="${AUTO_COMMIT_CMD:-}"
 
 note() { [ "$HOOK" = "1" ] || printf '%s\n' "$*"; }
 
+# Some refusals must be heard even in hook mode, where `note` is silent. A
+# conflict stops every future checkpoint until it is resolved, so staying quiet
+# about it means work quietly stops being saved for the rest of the session.
+speak() { printf '[auto-commit] %s\n' "$*" >&2; }
+
 # ── Where are we ───────────────────────────────────────────────────
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 TOP="$(git rev-parse --show-toplevel)"
@@ -139,8 +146,21 @@ emit() {
 }
 
 # ── Guards ─────────────────────────────────────────────────────────
+# An unmerged index means a conflict is sitting there half-resolved. The markers
+# above do not catch all of these: a conflicting `git stash pop` leaves unmerged
+# paths with no MERGE_HEAD at all, which is how a conflicted file nearly got
+# checkpointed on one of these machines. Bail entirely rather than committing the
+# other files, because a checkpoint taken mid-conflict is worse than none.
+CONFLICTED="$(git diff --name-only --diff-filter=U 2>/dev/null || true)"
+if [ -n "$CONFLICTED" ]; then
+  speak "not committing: unresolved merge conflict in $(printf '%s' "$CONFLICTED" | tr '\n' ' ')"
+  emit skipped "unresolved merge conflict"
+  exit 0
+fi
+
 for marker in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD BISECT_LOG rebase-merge rebase-apply; do
   if [ -e "$GIT_DIR/$marker" ]; then
+    speak "not committing: a $marker operation is in progress"
     emit skipped "a $marker operation is in progress"
     exit 0
   fi
@@ -248,9 +268,21 @@ credential_in() {
   return 1
 }
 
+# Conflict markers survive `git add`, at which point git stops calling the file
+# unmerged and would happily commit it. Both the opening and closing markers are
+# required so that prose *about* conflicts is not mistaken for one.
+has_conflict_markers() {
+  local f="$1" content
+  content="$(added_content "$f")"
+  [ -n "$content" ] || return 1
+  printf '%s' "$content" | LC_ALL=C grep -qE '^\+?<<<<<<< ' \
+    && printf '%s' "$content" | LC_ALL=C grep -qE '^\+?>>>>>>> '
+}
+
 STAGE=()
 SKIPPED=()
 LEAKS=()
+CONFLICTS=()
 for path in "${CHANGED[@]}"; do
   base="$(basename "$path")"
   secret=0
@@ -263,6 +295,10 @@ for path in "${CHANGED[@]}"; do
     SKIPPED+=("$path")
     continue
   fi
+  if [ "${AUTO_COMMIT_SCAN_CONTENT:-1}" != "0" ] && has_conflict_markers "$path"; then
+    CONFLICTS+=("$path")
+    continue
+  fi
   if [ "${AUTO_COMMIT_SCAN_CONTENT:-1}" != "0" ] && hit="$(credential_in "$path")"; then
     # Never echo the match itself — naming the file and the pattern is enough to
     # act on, and the value must not reach a log or a terminal scrollback.
@@ -272,6 +308,15 @@ for path in "${CHANGED[@]}"; do
   fi
   STAGE+=("$path")
 done
+
+# Markers mean a merge is still being resolved, so bail on the whole commit
+# rather than checkpointing the untouched files around it — the same reasoning as
+# the unmerged-index guard above.
+if [ "${#CONFLICTS[@]}" -gt 0 ]; then
+  speak "not committing: conflict markers still in $(printf '%s ' "${CONFLICTS[@]}")— resolve the merge first"
+  emit skipped "conflict markers present"
+  exit 0
+fi
 
 if [ "${#SKIPPED[@]}" -gt 0 ]; then
   emit warned "not staging $(printf '%s ' "${SKIPPED[@]}")— looks like a credential"

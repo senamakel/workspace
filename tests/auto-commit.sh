@@ -374,6 +374,63 @@ test_refuses_a_protected_branch() {
   assert_eq 2 "$(count_commits "$repo")" "AUTO_COMMIT_ALLOW_PROTECTED=1 permits it"
 }
 
+test_bails_on_an_unmerged_index() {
+  local repo state stub out
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo unmerged)"
+  state="$(state_dir unmerged)"
+  stub="$(make_stub unmerged "chore: change things")"
+
+  # A real conflict: two branches editing the same line, merged.
+  printf 'one\n' > "$repo/conflict.txt"
+  git -C "$repo" add -A >/dev/null 2>&1
+  git -C "$repo" commit -q -m "chore: add conflict.txt"
+  git -C "$repo" switch -q -c other HEAD~1 2>/dev/null || git -C "$repo" switch -q -c other
+  printf 'two\n' > "$repo/conflict.txt"
+  git -C "$repo" add -A >/dev/null 2>&1
+  git -C "$repo" commit -q -m "chore: other side"
+  git -C "$repo" switch -q feature >/dev/null 2>&1
+  git -C "$repo" merge other >/dev/null 2>&1 || true
+
+  [ -n "$(git -C "$repo" diff --name-only --diff-filter=U)" ] \
+    || fail_test "test setup produced no conflict"
+  before="$(count_commits "$repo")"
+  out="$(AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub")"
+  assert_eq "$before" "$(count_commits "$repo")" "nothing is committed mid-conflict"
+  assert_contains "$out" "conflict" "the reason names the conflict"
+}
+
+test_bails_on_conflict_markers_in_a_file() {
+  local repo state stub out before
+  command -v jq >/dev/null 2>&1 || return 0
+  # Markers survive `git add`, after which git no longer calls the file unmerged
+  # and would otherwise commit it happily.
+  repo="$(make_repo markers)"
+  state="$(state_dir markers)"
+  stub="$(make_stub markers "chore: change things")"
+  printf 'start\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\nend\n' > "$repo/merged.txt"
+  printf 'fine\n' > "$repo/other.txt"
+  before="$(count_commits "$repo")"
+
+  out="$(AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub")"
+  assert_eq "$before" "$(count_commits "$repo")" "nothing is committed while markers remain"
+  assert_contains "$out" "merged.txt" "the reason names the file"
+  assert_contains "$out" "resolve the merge first" "the reason says what to do"
+}
+
+test_prose_about_conflicts_is_not_mistaken_for_one() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  # Documentation may legitimately mention a marker; only both ends together
+  # indicate a real conflict.
+  repo="$(make_repo conflictdocs)"
+  state="$(state_dir conflictdocs)"
+  stub="$(make_stub conflictdocs "docs: explain conflicts")"
+  printf 'When git conflicts it writes a <<<<<<< marker at the top.\n' > "$repo/GUIDE.md"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null 2>&1
+  assert_eq 2 "$(count_commits "$repo")" "prose mentioning one marker still commits"
+}
+
 test_skips_during_a_merge() {
   local repo state stub
   command -v jq >/dev/null 2>&1 || return 0
@@ -440,6 +497,9 @@ run_test "never commits a key pasted into source" test_never_commits_a_key_paste
 run_test "the content scan covers common key shapes" test_content_scan_covers_common_key_shapes
 run_test "ordinary code is not flagged" test_ordinary_code_is_not_flagged
 run_test "refuses a protected branch unless allowed" test_refuses_a_protected_branch
+run_test "bails on an unmerged index" test_bails_on_an_unmerged_index
+run_test "bails on conflict markers in a file" test_bails_on_conflict_markers_in_a_file
+run_test "prose about conflicts is not mistaken for one" test_prose_about_conflicts_is_not_mistaken_for_one
 run_test "skips during a merge" test_skips_during_a_merge
 run_test "a clean tree commits nothing" test_clean_tree_commits_nothing
 run_test "dry run changes nothing" test_dry_run_changes_nothing
