@@ -267,6 +267,16 @@ Recursive submodule initialization, shared by every command that prepares a
 checkout — `worktree`, `pr-fix`, `open-source-work`, `workflow-remotes`, and the
 `res` shell function — so the policy lives in one place.
 
+Every submodule is also put on a branch named after the slug, recursively, at the
+commit the superproject already records — so nothing moves, the commit simply
+gains a name. Submodules are otherwise checked out **detached**, which means an
+edit made in one belongs to no branch and is easy to lose; this is the step the
+workflow rules used to ask you to remember by hand for each submodule you
+touched. An existing branch of that name is checked out rather than recreated, so
+re-running is safe, and a submodule that refuses to branch is reported and left
+detached rather than failing the whole checkout. `WORKTREE_SUBMODULE_BRANCH=0`
+opts out.
+
 Git stores a linked worktree's submodule git dirs under
 `.git/worktrees/<name>/modules/`, never the shared `.git/modules/`, so a plain
 `submodule update --init --recursive` re-downloads every submodule even though
