@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# codex-trust-hooks — enable the shared Codex hooks on this machine.
+#
+# Usage: codex-trust-hooks [--list] [--dry-run]
+#
+# Codex records every hook it discovers in ~/.codex/config.toml as a state entry
+# keyed by "<path>:<event>:<group>:<index>", carrying a trusted_hash of the hook
+# and an `enabled` flag that defaults to false. Hooks therefore do nothing until
+# something flips that flag — normally an interactive prompt, which never
+# appears on a headless box and blocks `codex exec` when it tries.
+#
+# codex/hooks.json is shared through this repo, so every machine computes the
+# same trusted_hash; only the enable flag is machine-local, which is why it
+# cannot simply be synced. Run this once per box, and again whenever
+# codex/hooks.json changes, because editing it invalidates the recorded hash.
+#
+# Only entries whose path points at the repo's own hooks.json are touched;
+# anything else Codex has registered is left alone.
+set -euo pipefail
+
+LIST=0
+DRY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list)    LIST=1; shift ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) printf '[FAIL] unknown argument: %s\n' "$1" >&2; exit 1 ;;
+  esac
+done
+
+CONFIG="$HOME/.codex/config.toml"
+if [ ! -f "$CONFIG" ]; then
+  printf '[skip] no %s — Codex has not run on this machine\n' "$CONFIG"
+  exit 0
+fi
+
+[ "$DRY" = "1" ] || [ "$LIST" = "1" ] || cp -a "$CONFIG" "$CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+
+python3 - "$CONFIG" "$LIST" "$DRY" <<'PY'
+import re, sys
+config, list_only, dry = sys.argv[1], sys.argv[2] == "1", sys.argv[3] == "1"
+text = open(config).read()
+
+# Each state entry is a table header followed by its keys, up to the next table.
+pattern = re.compile(
+    r'(\[hooks\.state\."(?P<key>[^"]*hooks\.json:[^"]*)"\]\n)(?P<body>(?:(?!\[)[^\n]*\n)*)')
+
+changed, found = 0, 0
+def fix(m):
+    global changed, found
+    found += 1
+    body = m.group("body")
+    state = "enabled" if re.search(r'^enabled\s*=\s*true', body, re.M) else "disabled"
+    print(f"  {state:8} {m.group('key')}")
+    if list_only or state == "enabled":
+        return m.group(0)
+    new_body, n = re.subn(r'^enabled\s*=\s*false', 'enabled = true', body, flags=re.M)
+    if n == 0:
+        new_body = body.rstrip("\n") + "\nenabled = true\n"
+        n = 1
+    changed += n
+    return m.group(1) + new_body
+
+updated = pattern.sub(fix, text)
+
+if found == 0:
+    print("  no hook state entries — run codex once so it registers them")
+elif list_only:
+    pass
+elif changed == 0:
+    print("  nothing to change")
+elif dry:
+    print(f"  would enable {changed} hook(s)")
+else:
+    open(config, "w").write(updated)
+    print(f"  enabled {changed} hook(s)")
+PY

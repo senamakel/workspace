@@ -451,6 +451,27 @@ auto-commit --now              # checkpoint right now
 AUTO_COMMIT_EVERY=10 …         # checkpoint less often
 ```
 
+### `codex-trust-hooks [--list] [--dry-run]`
+
+Enables the shared Codex hooks on this machine. Codex records every hook it
+discovers in `~/.codex/config.toml` with a `trusted_hash` and an `enabled` flag
+that **defaults to false** — so a hook does nothing until something flips it.
+Normally that is an interactive prompt, which never appears on a headless box
+and will block `codex exec` waiting for an answer it cannot show.
+
+`codex/hooks.json` is shared through this repo, so every machine computes the
+same `trusted_hash`; only the enable flag is machine-local, which is why it
+cannot simply be synced. Run this once per box, and again whenever
+`codex/hooks.json` changes, since editing it invalidates the recorded hash.
+
+Only entries pointing at this repo's `hooks.json` are touched; anything else
+Codex has registered is left alone, and the config is backed up first.
+
+```sh
+codex-trust-hooks --list      # show which hooks are enabled
+codex-trust-hooks             # enable the repo's hooks
+```
+
 ### `tune-box [--dry-run] [--clean-targets] [--report]`
 
 Applies build, memory, and I/O tuning appropriate to the machine it runs on.
