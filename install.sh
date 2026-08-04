@@ -237,11 +237,67 @@ done
 
 # --- Medulla workflows --------------------------------------------------------
 # Workflow definitions are shared like skills and agents: one canonical JSON per
-# flow in workflows/, linked file-by-file into ~/.medulla/workflows so Medulla
-# can still keep unmanaged, machine-local flows in the same directory.
-for f in "$REPO_ROOT"/workflows/*.json; do
-  [ -f "$f" ] || continue
-  link "$f" "$HOME/.medulla/workflows/$(basename "$f")"
+# flow in workflows/, linked file-by-file so Medulla can still keep unmanaged,
+# machine-local flows in the same directory.
+#
+# The destination is per account, not per install. Medulla scopes everything it
+# persists to `<root>/<account id>` and reads its user-global workflow store from
+# `<root>/<account id>/workflows`; the root itself holds only account directories
+# and the `active_user.toml` marker naming the live one. The flat
+# `~/.medulla/workflows` this used to link into predates that split and is no
+# longer read at all, which is how the shared flows became invisible to Medulla
+# while their symlinks still looked perfectly healthy.
+MEDULLA_ROOT="${MEDULLA_HOME:-$HOME/.medulla}"
+
+# The active account, then every other account already on this machine — sharing
+# a workflow only with whoever happens to be signed in now would drop it the
+# next time the marker changes.
+medulla_accounts() {
+  local marker="$MEDULLA_ROOT/active_user.toml" active="" d name
+  if [ -n "${MEDULLA_USER:-}" ]; then
+    active="$MEDULLA_USER"
+  elif [ -f "$marker" ]; then
+    active="$(sed -n 's/^[[:space:]]*user_id[[:space:]]*=[[:space:]]*"\([^"]*\)".*$/\1/p' "$marker" | head -1)"
+  fi
+  # Nobody has signed in on this box yet. Pre-login state is real state and lives
+  # under its own id, so the flows belong there just the same.
+  [ -n "$active" ] || active="local"
+  printf '%s\n' "$active"
+  for d in "$MEDULLA_ROOT"/*/; do
+    [ -d "$d" ] || continue
+    name="$(basename "$d")"
+    [ "$name" != "$active" ] || continue
+    # An account directory is one Medulla has homed: it carries the layered
+    # config file. This is what keeps `bin/`, the legacy `workflows/`, and any
+    # other stray directory at the root from being mistaken for an account.
+    [ -f "$d/config.toml" ] || [ "$name" = "local" ] || continue
+    printf '%s\n' "$name"
+  done
+}
+
+while IFS= read -r account; do
+  [ -n "$account" ] || continue
+  for f in "$REPO_ROOT"/workflows/*.json; do
+    [ -f "$f" ] || continue
+    link "$f" "$MEDULLA_ROOT/$account/workflows/$(basename "$f")"
+  done
+done < <(medulla_accounts)
+
+# Retire the pre-account links. Only symlinks into this repository's workflows/
+# are removed — an unmanaged file someone left there is Medulla's or theirs, not
+# ours to delete, even though nothing reads it any more.
+for f in "$MEDULLA_ROOT"/workflows/*.json; do
+  [ -L "$f" ] || continue
+  case "$(readlink "$f")" in
+    "$REPO_ROOT"/workflows/*)
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "[would unlink]  $f (legacy pre-account location)"
+      else
+        rm -f "$f"
+        echo "[unlink] $f (legacy pre-account location)"
+      fi
+      ;;
+  esac
 done
 
 # --- tmux --------------------------------------------------------------------

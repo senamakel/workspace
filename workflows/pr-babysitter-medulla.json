@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "id": "pr-babysitter-medulla",
+  "name": "PR babysitter (medulla)",
+  "inputs": [
+    {
+      "name": "pr",
+      "type": "number",
+      "description": "The pull request number in the medulla repository.",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "repo",
+      "type": "string",
+      "description": "owner/name of the repository the PR belongs to.",
+      "required": false,
+      "default": "tinyhumansai/medulla"
+    },
+    {
+      "name": "max_retries",
+      "type": "number",
+      "description": "How many merge attempts before giving up.",
+      "required": false,
+      "default": 3
+    }
+  ],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Babysit a PR",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "assess",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Read PR state",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\nOWNER=\"${REPO%%/*}\"; NAME=\"${REPO##*/}\"\nbase=$(gh pr view \"$PR\" --repo \"$REPO\" --json number,url,state,isDraft,mergeable,mergeStateStatus,headRefName)\nchecks=$(gh pr checks \"$PR\" --repo \"$REPO\" --json name,state,link 2>/dev/null || echo '[]')\nthreads=$(gh api graphql -F pr=\"$PR\" -F owner=\"$OWNER\" -F name=\"$NAME\" -f query='\nquery($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name){pullRequest(number:$pr){\nreviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{author{login} path body}}}}}}}' \\\n  --jq '[.data.repository.pullRequest.reviewThreads.nodes[]|{id,isResolved,author:(.comments.nodes[0].author.login // \"\"),path:(.comments.nodes[0].path // \"\"),body:((.comments.nodes[0].body // \"\")[0:400])}]')\njq -n --argjson b \"$base\" --argjson c \"$checks\" --argjson t \"$threads\" '\n($c|map(select(.state==\"FAILURE\" or .state==\"ERROR\" or .state==\"CANCELLED\" or .state==\"TIMED_OUT\"))) as $failed |\n($c|map(select(.state==\"PENDING\" or .state==\"QUEUED\" or .state==\"IN_PROGRESS\" or .state==\"EXPECTED\"))) as $pending |\n($t|map(select(.isResolved==false))) as $open |\n{pr:$b.number, url:$b.url, state:$b.state, branch:$b.headRefName, draft:$b.isDraft,\n mergeable:$b.mergeable, merge_state:$b.mergeStateStatus,\n has_conflicts:($b.mergeable==\"CONFLICTING\" or $b.mergeStateStatus==\"DIRTY\"),\n ci_failed:($failed|map(.name)), ci_pending:($pending|map(.name)),\n ci_green:(($failed|length)==0 and ($pending|length)==0),\n unresolved_count:($open|length), unresolved:$open,\n ready_to_merge:(($failed|length)==0 and ($pending|length)==0 and ($open|length)==0 and $b.mergeable==\"MERGEABLE\")}'\n",
+          "env": {
+            "PR": "=.inputs.pr | tostring",
+            "REPO": "=inputs.repo"
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "gate",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Merge conflicts?",
+      "config": {
+        "field": "=nodes.assess.item.json.json.output.has_conflicts"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "fix_conflicts",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Resolve conflicts (codex)",
+      "config": {
+        "agent_ref": "this-device",
+        "harness": "codex",
+        "prompt": "=\"You are babysitting pull request #\\(.inputs.pr) in \\(.inputs.repo), checked out in this workspace. It has merge conflicts against its base branch.\\n\\nCurrent assessment:\\n\\(.nodes.assess.item.json.json.output | tojson)\\n\\nDo this:\\n1. Fetch and check out the PR branch with `gh pr checkout \\(.inputs.pr)`.\\n2. Merge or rebase onto the base branch and resolve every conflict by understanding what both sides changed - never blindly take one side.\\n3. Build and run the test suite (`cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt --check`) and fix what the resolution broke.\\n4. Also address every unresolved review thread listed in the assessment above, replying in thread and resolving each one you fix.\\n5. Push the branch. Do not merge the PR yourself - a later step does that.\\n\\nReport what you resolved and whether the branch is now conflict-free.\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "babysit",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Fix CI and review threads (deepcode)",
+      "config": {
+        "agent_ref": "this-device",
+        "harness": "deepcode",
+        "prompt": "=\"You are babysitting pull request #\\(.inputs.pr) in \\(.inputs.repo), checked out in this workspace. It has no merge conflicts.\\n\\nCurrent assessment (failing checks and unresolved review threads):\\n\\(.nodes.assess.item.json.json.output | tojson)\\n\\nLoop until the PR is clean, up to \\(.inputs.max_retries) cycles:\\n1. Fetch and check out the PR branch with `gh pr checkout \\(.inputs.pr)`.\\n2. Fix every failing CI check at its root. Never skip hooks, disable tests, or weaken assertions to make a check pass.\\n3. Address every unresolved review thread from coderabbitai, chatgpt-codex-connector, greptile-apps and any human reviewer. Reply in thread on each one and resolve it, or explain in the reply why you are declining it. Never resolve a thread you did not actually address.\\n4. Run `cargo test`, `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check` locally before pushing.\\n5. Push atomic commits and wait for CI to report back; repeat from step 2 while anything is still red or unresolved.\\n\\nDo not merge the PR yourself - a later step does that. Report what is green and what, if anything, is still outstanding.\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "join",
+      "kind": "merge",
+      "type_version": 1,
+      "name": "Join",
+      "config": null,
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "finish",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Merge, retrying",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -uo pipefail\nOWNER=\"${REPO%%/*}\"; NAME=\"${REPO##*/}\"\nattempts=0\nreport() { jq -n --arg s \"$1\" --argjson a \"$attempts\" --argjson st \"$2\" '{status:$s, attempts:$a, pr_state:$st}'; exit 0; }\nsnapshot() {\n  local b c t\n  b=$(gh pr view \"$PR\" --repo \"$REPO\" --json number,url,state,mergeable,mergeStateStatus)\n  c=$(gh pr checks \"$PR\" --repo \"$REPO\" --json name,state 2>/dev/null || echo '[]')\n  t=$(gh api graphql -F pr=\"$PR\" -F owner=\"$OWNER\" -F name=\"$NAME\" -f query='\nquery($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name){pullRequest(number:$pr){\nreviewThreads(first:100){nodes{isResolved}}}}}' --jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved==false)]|length')\n  jq -n --argjson b \"$b\" --argjson c \"$c\" --argjson u \"$t\" '\n  ($c|map(select(.state==\"FAILURE\" or .state==\"ERROR\" or .state==\"CANCELLED\" or .state==\"TIMED_OUT\"))|map(.name)) as $f |\n  ($c|map(select(.state==\"PENDING\" or .state==\"QUEUED\" or .state==\"IN_PROGRESS\" or .state==\"EXPECTED\"))|map(.name)) as $p |\n  {pr:$b.number, url:$b.url, state:$b.state, mergeable:$b.mergeable, merge_state:$b.mergeStateStatus,\n   ci_failed:$f, ci_pending:$p, unresolved_count:$u,\n   ready:(($f|length)==0 and ($p|length)==0 and $u==0 and $b.mergeable==\"MERGEABLE\")}'\n}\nwhile [ \"$attempts\" -lt \"$MAX_RETRIES\" ]; do\n  attempts=$((attempts + 1))\n  st=$(snapshot)\n  [ \"$(jq -r .state <<<\"$st\")\" = \"MERGED\" ] && report merged \"$st\"\n  if [ \"$(jq -r '.ci_pending|length' <<<\"$st\")\" -gt 0 ]; then sleep 30; continue; fi\n  if [ \"$(jq -r .ready <<<\"$st\")\" != \"true\" ]; then report blocked \"$st\"; fi\n  if gh pr merge \"$PR\" --repo \"$REPO\" --squash --delete-branch; then report merged \"$(snapshot)\"; fi\n  sleep 15\ndone\nreport exhausted \"$(snapshot)\"\n",
+          "env": {
+            "PR": "=.inputs.pr | tostring",
+            "REPO": "=inputs.repo",
+            "MAX_RETRIES": "=.inputs.max_retries | tostring"
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "assess",
+      "to_port": "main"
+    },
+    {
+      "from_node": "assess",
+      "from_port": "main",
+      "to_node": "gate",
+      "to_port": "main"
+    },
+    {
+      "from_node": "gate",
+      "from_port": "true",
+      "to_node": "fix_conflicts",
+      "to_port": "main"
+    },
+    {
+      "from_node": "gate",
+      "from_port": "false",
+      "to_node": "babysit",
+      "to_port": "main"
+    },
+    {
+      "from_node": "fix_conflicts",
+      "from_port": "main",
+      "to_node": "join",
+      "to_port": "main"
+    },
+    {
+      "from_node": "babysit",
+      "from_port": "main",
+      "to_node": "join",
+      "to_port": "main"
+    },
+    {
+      "from_node": "join",
+      "from_port": "main",
+      "to_node": "finish",
+      "to_port": "main"
+    }
+  ],
+  "description": "Babysit a medulla PR until CI is green and every coderabbit/codex/greptile thread is resolved, then merge it, retrying up to max_retries.",
+  "enabled": true
+}
