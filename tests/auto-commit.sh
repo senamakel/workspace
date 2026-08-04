@@ -50,6 +50,9 @@ make_repo() {
     git -C "$repo" init -q -b main
     git -C "$repo" config user.email test@example.com
     git -C "$repo" config user.name "Test"
+    # The command only runs in allowlisted repositories, so the fixture claims
+    # one of them as its origin.
+    git -C "$repo" remote add origin git@github.com:tinyhumansai/medulla.git
     printf 'base\n' > "$repo/base.txt"
     git -C "$repo" add -A
     git -C "$repo" commit -q -m "Base"
@@ -511,6 +514,93 @@ test_cannot_be_disabled_by_environment() {
   done
 }
 
+test_commits_only_in_allowlisted_repositories() {
+  local repo state stub out url
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo allowlist)"
+  state="$(state_dir allowlist)"
+  stub="$(make_stub allowlist "chore: add a file")"
+
+  # A proprietary neighbour of an allowlisted repository must not match: the
+  # slugs are compared whole, so medulla-v1 is a different repository entirely.
+  for url in \
+    git@github.com:tinyhumansai/medulla-v1.git \
+    git@github.com:tinyhumansai/medulla-backend.git \
+    git@github.com:someone-else/openhuman.git
+  do
+    git -C "$repo" remote set-url origin "$url"
+    printf 'hello\n' > "$repo/new.txt"
+    AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+    assert_eq 1 "$(count_commits "$repo")" "$url must not be committed"
+    # Silent as a hook, like the other guards, but a manual run says why.
+    out="$(cd "$repo" && AUTO_COMMIT_CMD="$stub" "$COMMAND" --dry-run)"
+    assert_contains "$out" "allowlist" "$url is refused with a reason"
+  done
+
+  # A repository with no remote at all is not on the list either.
+  git -C "$repo" remote remove origin
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 1 "$(count_commits "$repo")" "a remoteless repository is not committed"
+
+  # Each of the three defaults is accepted, in either URL form.
+  local slug n=1
+  for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla \
+              senamakel/openhuman senamakel/opencompany senamakel/medulla; do
+    git -C "$repo" remote add origin "git@github.com:$slug.git"
+    AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+    assert_eq "$((n + 1))" "$(count_commits "$repo")" "$slug is allowlisted"
+    git -C "$repo" remote remove origin
+    n=$((n + 1))
+
+    printf 'more\n' >> "$repo/new.txt"
+    git -C "$repo" remote add origin "https://github.com/$slug"
+    AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+    assert_eq "$((n + 1))" "$(count_commits "$repo")" "$slug matches as an https URL"
+    git -C "$repo" remote remove origin
+    n=$((n + 1))
+    printf 'more\n' >> "$repo/new.txt"
+  done
+}
+
+test_allowlist_matches_any_remote_and_is_overridable() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo allowlist-remotes)"
+  state="$(state_dir allowlist-remotes)"
+  stub="$(make_stub allowlistremotes "chore: add a file")"
+
+  # origin is routinely a personal fork, so an allowlisted upstream counts.
+  git -C "$repo" remote set-url origin git@github.com:someone-else/medulla.git
+  git -C "$repo" remote add upstream git@github.com:tinyhumansai/medulla.git
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "an allowlisted upstream is enough"
+
+  # The personal fork of an allowlisted repository counts on its own too.
+  git -C "$repo" remote remove upstream
+  git -C "$repo" remote set-url origin git@github.com:senamakel/medulla.git
+  printf 'more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 3 "$(count_commits "$repo")" "the senamakel fork is allowlisted"
+
+  # Only origin and upstream are consulted, so a stray extra remote naming an
+  # allowlisted repository cannot admit an unrelated checkout.
+  git -C "$repo" remote set-url origin git@github.com:tinyhumansai/medulla-v1.git
+  git -C "$repo" remote add mirror git@github.com:tinyhumansai/medulla.git
+  printf 'more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 3 "$(count_commits "$repo")" "a third remote does not admit the repo"
+
+  # And the list itself can be replaced for a one-off repository.
+  jq -n '{session_id: "s", tool_name: "Bash"}' \
+    | (cd "$repo" && AUTO_COMMIT_EVERY=1 AUTO_COMMIT_CMD="$stub" \
+       AUTO_COMMIT_REPOS="tinyhumansai/medulla-v1" XDG_STATE_HOME="$state" \
+       "$COMMAND" --hook >/dev/null 2>&1)
+  assert_eq 4 "$(count_commits "$repo")" "AUTO_COMMIT_REPOS overrides the default"
+}
+
+run_test "commits only in allowlisted repositories" test_commits_only_in_allowlisted_repositories
+run_test "the allowlist matches any remote and is overridable" test_allowlist_matches_any_remote_and_is_overridable
 run_test "commits on every tool call by default" test_commits_on_every_tool_call_by_default
 run_test "commits the tool worktree instead of the launch checkout" test_commits_the_tool_worktree_not_the_launch_checkout
 run_test "commits only every Nth tool call when configured" test_commits_only_every_nth_tool_call

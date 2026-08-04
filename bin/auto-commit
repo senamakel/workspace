@@ -27,6 +27,8 @@
 # way before review.
 #
 # Guards, all deliberate:
+#   * commits only in repositories on the allowlist, because the message is
+#     written by sending the diff to a third-party model
 #   * refuses on a protected branch (main/master) unless allowed, because new
 #     work is supposed to happen on a feature branch
 #   * never stages a path that looks like a credential, whatever .gitignore says
@@ -43,6 +45,8 @@
 # they exist so the command never commits something it should not.
 #
 #   AUTO_COMMIT_EVERY                tool calls between commits (1 = every call)
+#   AUTO_COMMIT_REPOS                allowlisted owner/repo slugs, colon-separated
+#   AUTO_COMMIT_REMOTES              remotes consulted for the slug (origin upstream)
 #   AUTO_COMMIT_ALLOW_PROTECTED=1    allow commits on main/master
 #   AUTO_COMMIT_PROTECTED            protected branch names (main master)
 #   AUTO_COMMIT_SKIP                 extra glob(s) never staged, colon-separated
@@ -109,6 +113,17 @@ note() { [ "$HOOK" = "1" ] || printf '%s\n' "$*"; }
 # about it means work quietly stops being saved for the rest of the session.
 speak() { printf '[auto-commit] %s\n' "$*" >&2; }
 
+emit() {
+  local status="$1" detail="$2" files="${3:-}"
+  if [ "$FORMAT" = "json" ]; then
+    jq -n --arg status "$status" --arg detail "$detail" --arg files "$files" \
+      '{status: $status, detail: $detail, files: ($files | split("\n") | map(select(length > 0)))}'
+  else
+    note "[$(printf '%s' "$status" | tr 'a-z' 'A-Z')] $detail"
+    [ -z "$files" ] || note "$files"
+  fi
+}
+
 # Hooks are launched in the harness's session directory, which can differ from
 # the checkout a tool actually edited (Medulla commonly starts on `main`, then
 # the agent works under `worktrees/<slug>`). Prefer the tool's explicit working
@@ -131,6 +146,56 @@ git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 TOP="$(git rev-parse --show-toplevel)"
 GIT_DIR="$(git rev-parse --absolute-git-dir)"
 
+# ── Allowlisted repositories only ──────────────────────────────────
+# Writing the message means sending the diff to a third-party model, so this
+# runs in named repositories and nowhere else. The list is deliberately opt-in:
+# a new checkout — a client's, a proprietary one, anything cloned in a hurry —
+# is not covered until someone adds it here, which is the safe way round.
+#
+# Slugs match exactly, so `tinyhumansai/medulla` covers that repository and not
+# `medulla-v1` or `medulla-backend`. Both owners are listed because `origin` is
+# routinely the personal fork of an allowlisted upstream; only those two remotes
+# are consulted, so an incidental third remote cannot admit a repository.
+ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
+tinyhumansai/openhuman:tinyhumansai/opencompany:tinyhumansai/medulla:\
+senamakel/openhuman:senamakel/opencompany:senamakel/medulla}"
+ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
+
+# git@host:owner/repo.git, https://host/owner/repo, ssh://git@host/owner/repo/
+# and a bare owner/repo all reduce to the same lower-case owner/repo.
+repo_slug() {
+  local url="$1"
+  url="${url%/}"
+  url="${url%.git}"
+  url="${url#*://}"      # scheme, if any
+  url="${url#*@}"        # user@, if any
+  url="${url#*:}"        # scp-style host separator
+  # Keep the last two path components; a host prefix left by an https URL drops.
+  local repo="${url##*/}"
+  local rest="${url%/*}"
+  local owner="${rest##*/}"
+  [ "$rest" != "$url" ] || owner=""
+  printf '%s' "$owner/$repo" | tr 'A-Z' 'a-z'
+}
+
+repo_allowed() {
+  local slug url entry name
+  for name in $ALLOWED_REMOTES; do
+    url="$(git remote get-url "$name" 2>/dev/null || true)"
+    [ -n "$url" ] || continue
+    slug="$(repo_slug "$url")"
+    for entry in $(printf '%s' "$ALLOWED_REPOS" | tr ':,' '  '); do
+      [ "$slug" = "$(repo_slug "$entry")" ] && return 0
+    done
+  done
+  return 1
+}
+
+if ! repo_allowed; then
+  emit skipped "'$TOP' is not on the auto-commit allowlist (AUTO_COMMIT_REPOS)"
+  exit 0
+fi
+
 # ── Tool-call counter ──────────────────────────────────────────────
 # PostToolUse fires on every tool call. Only every Nth one does any work, so the
 # other N-1 cost a counter increment and nothing else.
@@ -148,17 +213,6 @@ if [ "$HOOK" = "1" ]; then
   fi
   printf '0\n' > "$COUNT_FILE"
 fi
-
-emit() {
-  local status="$1" detail="$2" files="${3:-}"
-  if [ "$FORMAT" = "json" ]; then
-    jq -n --arg status "$status" --arg detail "$detail" --arg files "$files" \
-      '{status: $status, detail: $detail, files: ($files | split("\n") | map(select(length > 0)))}'
-  else
-    note "[$(printf '%s' "$status" | tr 'a-z' 'A-Z')] $detail"
-    [ -z "$files" ] || note "$files"
-  fi
-}
 
 # ── Guards ─────────────────────────────────────────────────────────
 # An unmerged index means a conflict is sitting there half-resolved. The markers

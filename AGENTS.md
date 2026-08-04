@@ -19,9 +19,9 @@ There is no compilation step or centralized test suite. Validate the part you ch
 - `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
   repository with dirty, unpushed, and submodule-bearing worktrees.
 - `tests/auto-commit.sh` exercises the auto-commit hook's offline logic — the
-  tool-call counter, the protected-branch and in-progress-operation guards,
-  credential filtering, and the subject fallback — with a stubbed model and no
-  credentials.
+  tool-call counter, the repository allowlist, the protected-branch and
+  in-progress-operation guards, credential filtering, and the subject fallback —
+  with a stubbed model and no credentials.
 - `tests/langfuse-lib.sh` exercises the Langfuse helpers' offline logic —
   environment resolution, project presets, time windows, and paging — with a
   stubbed API and no credentials.
