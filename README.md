@@ -877,6 +877,14 @@ Everything is passed as `-c` overrides in the wrapper process, so `~/.codex/conf
 is never written and your normal `codex` stays signed in to OpenAI. Override with
 `DEEPCODEX_MODEL`, `DEEPCODEX_EFFORT` (default `high`), or `DEEPCODEX_BASE_URL`.
 
+As with `deepcode`, the effective context is capped at 300k tokens rather than the
+1M DeepSeek V4 advertises but cannot use accurately. Codex has no equivalent of
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, so the cap is applied by declaring the smaller
+window in the generated catalog: every budget Codex computes — when to compact,
+how much history to keep — is drawn against 300k, and with the catalog's 95%
+effective factor it compacts at roughly 285k. Override with
+`DEEPCODEX_CONTEXT_WINDOW`, or blank it to declare the model's full 1M window.
+
 Codex will not run a model it has no metadata for, so the wrapper generates a
 `model_catalog_json` entry on each run by cloning the highest-priority entry out
 of the catalog the installed Codex already cached (`~/.codex/models_cache.json`)

@@ -21,6 +21,12 @@
 #   DEEPCODEX_EFFORT      reasoning effort (default: high, per DeepSeek's docs)
 #   DEEPCODEX_BASE_URL    provider endpoint, if you route it somewhere else
 #   DEEPCODEX_CATALOG     path of the generated model catalog
+#   DEEPCODEX_CONTEXT_WINDOW  context declared to Codex in tokens (default
+#                         300000). DeepSeek V4 advertises 1M but loses accuracy
+#                         well before it, so Codex is told the window is 300k and
+#                         compacts against that — the same cap `deepcode` applies
+#                         with CLAUDE_CODE_AUTO_COMPACT_WINDOW. Blank it to
+#                         declare the model's full 1M window.
 #
 # ── Why a generated model catalog ──────────────────────────────────
 # Codex refuses to run a model it has no metadata for — context window, tool
@@ -72,6 +78,16 @@ fi
 
 EFFORT="${DEEPCODEX_EFFORT:-high}"
 
+# Declared to Codex as the model's window, so every budget it computes — when to
+# compact, how much history to keep — is drawn against 300k rather than the 1M
+# the model advertises but cannot use well. The `-` (not `:-`) is deliberate:
+# blanking the variable means "no cap", while leaving it unset means the default.
+CONTEXT="${DEEPCODEX_CONTEXT_WINDOW-300000}"
+[ -n "$CONTEXT" ] || CONTEXT=1048576
+case "$CONTEXT" in
+  ''|*[!0-9]*) fail "DEEPCODEX_CONTEXT_WINDOW must be a number of tokens: $CONTEXT"; exit 1 ;;
+esac
+
 # ── The model catalog ──────────────────────────────────────────────
 CACHE_SRC="${CODEX_HOME:-$HOME/.codex}/models_cache.json"
 CATALOG="${DEEPCODEX_CATALOG:-${XDG_CACHE_HOME:-$HOME/.cache}/deepcodex/models.json}"
@@ -86,7 +102,7 @@ mkdir -p "$(dirname "$CATALOG")"
 
 # Rebuilt every run rather than cached: it is one jq pass over a small file, and
 # it means a Codex upgrade never leaves a stale system prompt behind.
-if ! jq --arg slug "$MODEL" '
+if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" '
       # Highest-priority real model as the template. The auto-review entry is a
       # special-purpose profile, not a general coding one, so it is excluded.
       [ (.models // .)[] | select((.slug // "") | test("auto-review") | not) ]
@@ -95,8 +111,8 @@ if ! jq --arg slug "$MODEL" '
       | .slug = $slug
       | .display_name = "DeepSeek V4 Flash"
       | .description = "DeepSeek V4 Flash, driven through Codex by deepcodex."
-      | .context_window = 1048576
-      | .max_context_window = 1048576
+      | .context_window = $ctx
+      | .max_context_window = $ctx
       | .effective_context_window_percent = 95
       | .default_reasoning_level = "high"
       | .priority = 1
