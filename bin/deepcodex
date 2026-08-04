@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# deepcodex — Codex CLI, but driven by DeepSeek V4 Flash.
+#
+# Usage: deepcodex [codex args...]
+#
+#   deepcodex                          interactive session on DeepSeek V4 Flash
+#   deepcodex exec "explain this repo"  non-interactive, same as `codex exec`
+#   deepcodex --dangerously-bypass-approvals-and-sandbox   flags pass through
+#
+# The Codex counterpart of `deepcode`: it points Codex at DeepSeek for this
+# process only and exec's `codex`, so your normal `codex` (signed in to OpenAI)
+# is untouched. Nothing is written to ~/.codex/config.toml — every setting is
+# passed as a `-c` override, which is also why `codex login` still owns your
+# real account.
+#
+# Requires OPENROUTER_API_KEY (as `deepcode` does), or DEEPSEEK_API_KEY to talk
+# to DeepSeek's own API instead. Overridable:
+#
+#   DEEPCODEX_MODEL       model id (default: deepseek/deepseek-v4-flash-0731 on
+#                         OpenRouter, deepseek-v4-flash direct)
+#   DEEPCODEX_EFFORT      reasoning effort (default: high, per DeepSeek's docs)
+#   DEEPCODEX_BASE_URL    provider endpoint, if you route it somewhere else
+#   DEEPCODEX_CATALOG     path of the generated model catalog
+#
+# ── Why a generated model catalog ──────────────────────────────────
+# Codex refuses to run a model it has no metadata for — context window, tool
+# shapes, reasoning levels — and `model_catalog_json` is where that comes from.
+# Rather than vendor a copy of somebody's catalog (DeepSeek publishes one that
+# embeds a whole Codex system prompt, which would go stale the moment Codex
+# updates), this derives an entry from the catalog the installed Codex already
+# cached for itself. The instructions therefore always match the Codex on this
+# machine.
+#
+# Three fields of that entry have to be turned off, and each one is a hard
+# 400 from DeepSeek rather than a preference:
+#
+#   apply_patch_tool_type  freeform apply_patch is sent as a `custom` tool
+#   tool_mode              `code_mode_only` is likewise a `custom` tool
+#   supports_search_tool   sent as a `tool_search` tool
+#
+# DeepSeek's API accepts `function` tools and nothing else, so any of the three
+# fails the whole request with "unknown variant". `shell_type` is deliberately
+# left as the template has it: the richer `shell_command` tool is a plain
+# function and works fine.
+set -euo pipefail
+
+fail() { printf 'deepcodex: %s\n' "$*" >&2; }
+
+command -v codex >/dev/null 2>&1 || { fail "'codex' CLI not found on PATH."; exit 1; }
+command -v jq    >/dev/null 2>&1 || { fail "'jq' is required to build the model catalog."; exit 1; }
+
+# DeepSeek's own API when its key is present, OpenRouter otherwise. OpenRouter is
+# the tested path and the one `deepcode` uses, so it stays the default; the
+# direct endpoint follows DeepSeek's published Codex integration.
+if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+  PROVIDER_ID="deepseek"
+  PROVIDER_NAME="DeepSeek"
+  BASE_URL="${DEEPCODEX_BASE_URL:-https://api.deepseek.com/v1}"
+  KEY_VAR="DEEPSEEK_API_KEY"
+  MODEL="${DEEPCODEX_MODEL:-deepseek-v4-flash}"
+elif [ -n "${OPENROUTER_API_KEY:-}" ]; then
+  PROVIDER_ID="openrouter"
+  PROVIDER_NAME="OpenRouter"
+  BASE_URL="${DEEPCODEX_BASE_URL:-https://openrouter.ai/api/v1}"
+  KEY_VAR="OPENROUTER_API_KEY"
+  MODEL="${DEEPCODEX_MODEL:-deepseek/deepseek-v4-flash-0731}"
+else
+  fail "neither OPENROUTER_API_KEY nor DEEPSEEK_API_KEY is set."
+  fail "  Add one to your ~/.zshenv: export OPENROUTER_API_KEY=sk-or-..."
+  exit 1
+fi
+
+EFFORT="${DEEPCODEX_EFFORT:-high}"
+
+# ── The model catalog ──────────────────────────────────────────────
+CACHE_SRC="${CODEX_HOME:-$HOME/.codex}/models_cache.json"
+CATALOG="${DEEPCODEX_CATALOG:-${XDG_CACHE_HOME:-$HOME/.cache}/deepcodex/models.json}"
+
+if [ ! -f "$CACHE_SRC" ]; then
+  fail "no Codex model metadata at $CACHE_SRC."
+  fail "  Run 'codex' once (it caches the catalog on start), then try again."
+  exit 1
+fi
+
+mkdir -p "$(dirname "$CATALOG")"
+
+# Rebuilt every run rather than cached: it is one jq pass over a small file, and
+# it means a Codex upgrade never leaves a stale system prompt behind.
+if ! jq --arg slug "$MODEL" '
+      # Highest-priority real model as the template. The auto-review entry is a
+      # special-purpose profile, not a general coding one, so it is excluded.
+      [ (.models // .)[] | select((.slug // "") | test("auto-review") | not) ]
+      | sort_by(.priority) | .[0]
+      | if . == null then error("no usable template model in the Codex catalog") else . end
+      | .slug = $slug
+      | .display_name = "DeepSeek V4 Flash"
+      | .description = "DeepSeek V4 Flash, driven through Codex by deepcodex."
+      | .context_window = 1048576
+      | .max_context_window = 1048576
+      | .effective_context_window_percent = 95
+      | .default_reasoning_level = "high"
+      | .priority = 1
+      | .upgrade = null
+      | .availability_nux = null
+      # The three that DeepSeek rejects outright — see the header.
+      | .apply_patch_tool_type = null
+      | .tool_mode = null
+      | .supports_search_tool = false
+      | {models: [.]}
+    ' "$CACHE_SRC" > "$CATALOG.tmp" 2>/dev/null; then
+  rm -f "$CATALOG.tmp"
+  fail "could not build a model catalog from $CACHE_SRC."
+  exit 1
+fi
+mv "$CATALOG.tmp" "$CATALOG"
+
+# ── Hand off ───────────────────────────────────────────────────────
+# `wire_api = "responses"`: Codex dropped the chat-completions wire in 0.146,
+# and both endpoints above serve the Responses API.
+exec codex \
+  -c model="$MODEL" \
+  -c model_provider="$PROVIDER_ID" \
+  -c model_providers."$PROVIDER_ID".name="$PROVIDER_NAME" \
+  -c model_providers."$PROVIDER_ID".base_url="$BASE_URL" \
+  -c model_providers."$PROVIDER_ID".env_key="$KEY_VAR" \
+  -c model_providers."$PROVIDER_ID".wire_api="responses" \
+  -c model_catalog_json="$CATALOG" \
+  -c model_reasoning_effort="$EFFORT" \
+  -c preferred_auth_method="apikey" \
+  "$@"

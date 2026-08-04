@@ -9,10 +9,10 @@
 #
 # Overridable:
 #   DEEPCODE_FLASH_MODEL  the flash model used everywhere
-#                         (default: deepseek/deepseek-v4-flash)
+#                         (default: deepseek/deepseek-v4-flash-0731)
 set -euo pipefail
 
-flash="${DEEPCODE_FLASH_MODEL:-deepseek/deepseek-v4-flash}"
+flash="${DEEPCODE_FLASH_MODEL:-deepseek/deepseek-v4-flash-0731}"
 
 here="$(cd "$(dirname "$0")" && pwd)"
 

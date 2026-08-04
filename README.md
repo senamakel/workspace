@@ -668,7 +668,7 @@ launch branch. Bypass flags per harness: `claude
 --dangerously-skip-permissions`, `codex
 --dangerously-bypass-approvals-and-sandbox`, `opencode --auto`.
 
-### `pr-babysit [<PR#>] [claude|codex|opencode|deepcode|deepcode-flash] [-R owner/name]`
+### `pr-babysit [<PR#>] [claude|codex|opencode|deepcode|deepcode-flash|deepcodex] [-R owner/name]`
 
 Babysits a PR until it is **green and clean, no matter what** — the paced,
 main-loop counterpart to the `pr-babysitter` agent. Run it from the PR's checkout
@@ -688,7 +688,7 @@ pr-babysit 123 codex
 pr-babysit -R tinyhumansai/openhuman 123
 ```
 
-### `repo-orchestrate [claude|codex|opencode|deepcode|deepcode-flash] [options] [extra prompt...]`
+### `repo-orchestrate [claude|codex|opencode|deepcode|deepcode-flash|deepcodex] [options] [extra prompt...]`
 
 Spins up the `repo-orchestrator` agent (above) in the chosen harness (default
 `claude`) from the repo root. The launched session reviews every open issue and
@@ -858,7 +858,7 @@ Anthropic-compatible endpoint (`https://openrouter.ai/api`). It sets the
 `ANTHROPIC_*` routing/model env vars in the wrapper process only and `exec`s
 `claude`, so your normal `claude` (pointed at Anthropic) is unaffected. The Opus
 tier maps to `deepseek/deepseek-v4-pro` (heavy — coding/deep review); the Sonnet,
-Haiku, and subagent tiers map to `deepseek/deepseek-v4-flash`, matching the agent
+Haiku, and subagent tiers map to `deepseek/deepseek-v4-flash-0731`, matching the agent
 model tiering so a Sonnet-tier agent stays cheap here too. Override with
 `DEEPCODE_MODEL` / `DEEPCODE_FAST_MODEL` (or use `deepcode-flash` to force every
 tier onto flash). Because DeepSeek V4's 1M window loses accuracy well before it
@@ -867,6 +867,28 @@ fills, the wrapper caps the effective context by setting
 of the ~967k default; override with `DEEPCODE_CONTEXT_WINDOW` (blank it to keep the
 model's full window). Requires `OPENROUTER_API_KEY` in the environment (set it in
 your `~/.zshrc`, not this repo). All arguments pass straight through to `claude`.
+
+### `deepcodex [codex args...]`
+
+The Codex counterpart of `deepcode`: it runs the Codex CLI against DeepSeek V4
+Flash (`deepseek/deepseek-v4-flash-0731` through OpenRouter, or `deepseek-v4-flash`
+against DeepSeek's own API when `DEEPSEEK_API_KEY` is set) and `exec`s `codex`.
+Everything is passed as `-c` overrides in the wrapper process, so `~/.codex/config.toml`
+is never written and your normal `codex` stays signed in to OpenAI. Override with
+`DEEPCODEX_MODEL`, `DEEPCODEX_EFFORT` (default `high`), or `DEEPCODEX_BASE_URL`.
+
+Codex will not run a model it has no metadata for, so the wrapper generates a
+`model_catalog_json` entry on each run by cloning the highest-priority entry out
+of the catalog the installed Codex already cached (`~/.codex/models_cache.json`)
+and retargeting it at DeepSeek — which keeps the base instructions in step with
+whatever Codex version is installed instead of vendoring a copy that goes stale.
+Three fields of that entry are forced off because DeepSeek accepts `function`
+tools and nothing else: `apply_patch_tool_type` and `tool_mode` are sent as
+`custom` tools, and `supports_search_tool` as a `tool_search` tool, each of which
+fails the whole request with a 400. The richer `shell_command` shell tool is a
+plain function and is left enabled. Requires `OPENROUTER_API_KEY` (or
+`DEEPSEEK_API_KEY`), and a `codex` that has been run at least once so the catalog
+exists. All arguments pass straight through to `codex`.
 
 ### `ocr [args...]`
 

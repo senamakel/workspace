@@ -15,7 +15,7 @@
 # set it in your ~/.zshrc). Model IDs can be overridden:
 #
 #   DEEPCODE_MODEL           main/heavy model  (default: deepseek/deepseek-v4-pro)
-#   DEEPCODE_FAST_MODEL      fast/background    (default: deepseek/deepseek-v4-flash)
+#   DEEPCODE_FAST_MODEL      fast/background    (default: deepseek/deepseek-v4-flash-0731)
 #   DEEPCODE_CONTEXT_WINDOW  auto-compact threshold in tokens (default: 300000).
 #                            DeepSeek V4 advertises 1M but loses accuracy well
 #                            before it, so we compact by ~300k. Set to a bigger
@@ -34,7 +34,7 @@ if ! command -v claude >/dev/null 2>&1; then
 fi
 
 pro="${DEEPCODE_MODEL:-deepseek/deepseek-v4-pro}"
-flash="${DEEPCODE_FAST_MODEL:-deepseek/deepseek-v4-flash}"
+flash="${DEEPCODE_FAST_MODEL:-deepseek/deepseek-v4-flash-0731}"
 
 # Route through OpenRouter's Anthropic-compatible endpoint.
 export ANTHROPIC_BASE_URL="https://openrouter.ai/api"

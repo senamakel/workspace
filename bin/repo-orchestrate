@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # repo-orchestrate — spin up the repo-orchestrator loop in a chosen harness.
 #
-# Usage: repo-orchestrate [claude|codex|opencode|deepcode|deepcode-flash] [options] [extra prompt...]
+# Usage: repo-orchestrate [claude|codex|opencode|deepcode|deepcode-flash|deepcodex] [options] [extra prompt...]
 #
 #   repo-orchestrate                   review + merge/work/close/fix all open issues + PRs (claude)
 #   repo-orchestrate codex             same, with codex
@@ -70,7 +70,7 @@ resolve_repo() {
 }
 
 # ── Harness registry (kept in sync with bin/pr-fix) ────────────────
-HARNESSES="claude codex opencode deepcode deepcode-flash"
+HARNESSES="claude codex opencode deepcode deepcode-flash deepcodex"
 
 is_harness() {
   case " $HARNESSES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
@@ -92,6 +92,9 @@ harness_launch() {
     codex)
       if [ "$mode" = safe ]; then codex "$prompt"
       else codex --dangerously-bypass-approvals-and-sandbox "$prompt"; fi ;;
+    deepcodex)
+      if [ "$mode" = safe ]; then deepcodex "$prompt"
+      else deepcodex --dangerously-bypass-approvals-and-sandbox "$prompt"; fi ;;
     opencode)
       if [ "$mode" = safe ]; then opencode --prompt "$prompt"
       else opencode --prompt "$prompt" --auto; fi ;;
