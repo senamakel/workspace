@@ -412,9 +412,15 @@ built this way. Reach for `atomic-commit` directly when a specific commit matter
 
 Guards, all deliberate and all tested:
 
-- refuses on `main`/`master` unless `AUTO_COMMIT_ALLOW_PROTECTED=1`, because new
-  work belongs on a feature branch and silently checkpointing onto main would
-  break that several times a minute
+- commits only in the allowlisted repositories, because writing the message means
+  sending the diff to a third-party model. The default list is `openhuman`,
+  `opencompany`, and `medulla` under either `tinyhumansai` or `senamakel`, matched
+  whole against the `origin` and `upstream` remotes — so `medulla-v1` and the
+  backends never match. Override with `AUTO_COMMIT_REPOS` / `AUTO_COMMIT_REMOTES`
+- refuses on a detached HEAD, where the commit would be unreachable from any
+  branch and collected as soon as HEAD moves. There is **no** protected-branch
+  guard: those repositories are worked on `main` directly, so refusing there meant
+  the hook silently did nothing in exactly the repositories it was enabled for
 - never stages a path that looks like a credential (`.env`, `*.pem`, `id_rsa*`,
   `*credentials*`, …) whatever `.gitignore` says, since nobody reviews these
   files before they are staged; the file is left in the working tree, not lost

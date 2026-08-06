@@ -29,8 +29,7 @@
 # Guards, all deliberate:
 #   * commits only in repositories on the allowlist, because the message is
 #     written by sending the diff to a third-party model
-#   * refuses on a protected branch (main/master) unless allowed, because new
-#     work is supposed to happen on a feature branch
+#   * refuses on a detached HEAD, where a commit would be unreachable
 #   * never stages a path that looks like a credential, whatever .gitignore says
 #   * bails on any merge conflict — an unmerged index or leftover conflict
 #     markers — rather than checkpointing a half-resolved merge
@@ -47,8 +46,6 @@
 #   AUTO_COMMIT_EVERY                tool calls between commits (1 = every call)
 #   AUTO_COMMIT_REPOS                allowlisted owner/repo slugs, colon-separated
 #   AUTO_COMMIT_REMOTES              remotes consulted for the slug (origin upstream)
-#   AUTO_COMMIT_ALLOW_PROTECTED=1    allow commits on main/master
-#   AUTO_COMMIT_PROTECTED            protected branch names (main master)
 #   AUTO_COMMIT_SKIP                 extra glob(s) never staged, colon-separated
 #   AUTO_COMMIT_SCAN_CONTENT=0       skip the credential content scan
 #   AUTO_COMMIT_SECRET_PATTERNS      extra "name|regex" pairs, colon-separated
@@ -235,20 +232,15 @@ for marker in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD BISECT_LOG rebase-merge re
   fi
 done
 
+# A detached HEAD is still refused: commits made there are unreachable from any
+# branch and are lost to `gc` once HEAD moves, which is the opposite of a
+# checkpoint. There is deliberately no protected-branch guard — the allowlisted
+# repositories are worked on `main` directly, and refusing there meant the hook
+# silently did nothing in exactly the repositories it was turned on for.
 BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
 if [ -z "$BRANCH" ]; then
   emit skipped "detached HEAD"
   exit 0
-fi
-if [ "${AUTO_COMMIT_ALLOW_PROTECTED:-0}" != "1" ]; then
-  for protected in ${AUTO_COMMIT_PROTECTED:-main master}; do
-    if [ "$BRANCH" = "$protected" ]; then
-      # New work belongs on a feature branch; silently checkpointing onto main
-      # would quietly break that rule several times a minute.
-      emit skipped "on protected branch '$BRANCH' (AUTO_COMMIT_ALLOW_PROTECTED=1 to override)"
-      exit 0
-    fi
-  done
 fi
 
 # ── What changed ───────────────────────────────────────────────────

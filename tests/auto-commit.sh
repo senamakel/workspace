@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Exercises auto-commit's offline logic — the tool-call counter, the protected
-# branch and in-progress-operation guards, credential filtering, message
-# generation and its fallback, and the commit itself — with a stubbed model and
-# no credentials.
+# Exercises auto-commit's offline logic — the tool-call counter, the repository
+# allowlist, the detached-HEAD and in-progress-operation guards, credential
+# filtering, message generation and its fallback, and the commit itself — with a
+# stubbed model and no credentials.
 set -euo pipefail
 
 COMMAND="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)/bin/auto-commit"
@@ -134,7 +134,7 @@ test_commits_the_tool_worktree_not_the_launch_checkout() {
   assert_eq "" "$(git -C "$work_repo" status --porcelain)" \
     "the active worktree is clean afterwards"
   assert_eq 1 "$(count_commits "$launch_repo")" \
-    "the protected launch checkout is untouched"
+    "the launch checkout, which changed nothing, is untouched"
 }
 
 test_commits_only_every_nth_tool_call() {
@@ -388,23 +388,51 @@ test_ordinary_code_is_not_flagged() {
   assert_eq "" "$(git -C "$repo" status --porcelain)" "nothing was withheld"
 }
 
-test_refuses_a_protected_branch() {
-  local repo state stub output
+test_commits_on_main() {
+  local repo state stub v
   command -v jq >/dev/null 2>&1 || return 0
-  repo="$(make_repo protected)"
-  state="$(state_dir protected)"
-  stub="$(make_stub protected "change things")"
+  # There is no protected-branch guard. The allowlisted repositories are worked
+  # on main directly, so refusing there meant the hook silently did nothing in
+  # exactly the repositories it was turned on for.
+  repo="$(make_repo on-main)"
+  state="$(state_dir on-main)"
+  stub="$(make_stub onmain "chore: change things")"
   git -C "$repo" switch -q main
   printf 'hello\n' > "$repo/new.txt"
-  output="$(AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub")"
-  assert_eq 1 "$(count_commits "$repo")" "nothing is committed on main"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "main is committed like any other branch"
+  assert_eq "" "$(git -C "$repo" status --porcelain)" "the tree is clean afterwards"
 
-  # The override exists for the cases where that is genuinely wanted.
-  jq -n '{session_id: "s", tool_name: "Bash"}' \
-    | (cd "$repo" && AUTO_COMMIT_EVERY=1 AUTO_COMMIT_ALLOW_PROTECTED=1 \
-       AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$(state_dir protected2)" \
-       "$COMMAND" --hook >/dev/null 2>&1)
-  assert_eq 2 "$(count_commits "$repo")" "AUTO_COMMIT_ALLOW_PROTECTED=1 permits it"
+  git -C "$repo" switch -q -c master
+  printf 'more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 3 "$(count_commits "$repo")" "master is committed too"
+
+  # The retired opt-outs must not come back as silent behaviour: setting either
+  # to the value that used to block a commit may no longer block one.
+  for v in AUTO_COMMIT_ALLOW_PROTECTED AUTO_COMMIT_PROTECTED; do
+    git -C "$repo" switch -q main
+    printf 'more for %s\n' "$v" >> "$repo/new.txt"
+    jq -n '{session_id: "s", tool_name: "Bash"}' \
+      | (cd "$repo" && env "$v=0" AUTO_COMMIT_EVERY=1 AUTO_COMMIT_CMD="$stub" \
+         XDG_STATE_HOME="$(state_dir "on-main-$v")" "$COMMAND" --hook >/dev/null 2>&1)
+    assert_eq "" "$(git -C "$repo" status --porcelain)" "$v=0 does not withhold the commit"
+  done
+}
+
+test_refuses_a_detached_head() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  # A commit on a detached HEAD is unreachable from any branch and is collected
+  # the moment HEAD moves, which is the opposite of a checkpoint.
+  repo="$(make_repo detached)"
+  state="$(state_dir detached)"
+  stub="$(make_stub detached "chore: change things")"
+  git -C "$repo" checkout -q --detach HEAD
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 1 "$(count_commits "$repo")" "nothing is committed on a detached HEAD"
+  assert_contains "$(git -C "$repo" status --porcelain)" "new.txt" "the file is left dirty"
 }
 
 test_bails_on_an_unmerged_index() {
@@ -617,7 +645,8 @@ run_test "never commits a credential" test_never_commits_a_credential
 run_test "never commits a key pasted into source" test_never_commits_a_key_pasted_into_source
 run_test "the content scan covers common key shapes" test_content_scan_covers_common_key_shapes
 run_test "ordinary code is not flagged" test_ordinary_code_is_not_flagged
-run_test "refuses a protected branch unless allowed" test_refuses_a_protected_branch
+run_test "commits on main and master" test_commits_on_main
+run_test "refuses a detached HEAD" test_refuses_a_detached_head
 run_test "bails on an unmerged index" test_bails_on_an_unmerged_index
 run_test "bails on conflict markers in a file" test_bails_on_conflict_markers_in_a_file
 run_test "prose about conflicts is not mistaken for one" test_prose_about_conflicts_is_not_mistaken_for_one
