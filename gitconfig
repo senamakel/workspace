@@ -1,0 +1,43 @@
+# Shared git configuration, included from ~/.gitconfig by install.sh.
+#
+# Only portable settings belong here. Anything machine-local — the signing key,
+# the GPG binary's path, credential helpers pointing at Homebrew, tool machine
+# ids — stays in ~/.gitconfig, which this file is *included from* rather than
+# replacing. That split is what lets the same file work on the Linux boxes.
+#
+# Because it is included at the end of ~/.gitconfig, the values here win over
+# anything set earlier in that file.
+
+[format]
+	# Git's own default. Set explicitly to override a stale global
+	# `pretty = oneline`, which reduced every `git log` to a hash and a subject —
+	# no author, no date, no diff — including in repositories whose history is
+	# mostly machine-written checkpoints, where the author and time are the whole
+	# point. Command-line flags still win, so `git log --oneline` is unaffected.
+	pretty = medium
+
+[log]
+	# Absolute, unambiguous, sortable — and it keeps the timezone, which matters
+	# when reading history written on three machines in two timezones.
+	date = iso
+	# The default format prints the full 40-character hash. Short hashes are
+	# enough to identify a commit and leave room for the message.
+	abbrevCommit = true
+	# Show branch and tag names on the commits that carry them.
+	decorate = auto
+
+[alias]
+	# Compact history: one line per commit, with the author and date the plain
+	# `--oneline` view drops.
+	lg = log --graph --date=short --pretty=format:'%C(auto)%h%d%C(reset) %s %C(dim)(%an, %ad)%C(reset)'
+	# The same view, plus the files each commit touched. No --graph here: the
+	# graph column runs down the left of the stat block and collides with it.
+	# tformat (not format) terminates each entry, which keeps the stat of one
+	# commit from running onto the subject line of the next.
+	lgs = log --stat --date=short --pretty=tformat:'%C(auto)%h%d%C(reset) %s %C(dim)(%an, %ad)%C(reset)'
+	# Everything about recent commits: full header, and the files changed.
+	ll = log --stat
+	# One commit, in full, with its diff.
+	last = show --stat HEAD
+	# What is actually going on right now.
+	st = status --short --branch

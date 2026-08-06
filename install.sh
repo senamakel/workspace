@@ -300,6 +300,37 @@ for f in "$MEDULLA_ROOT"/workflows/*.json; do
   esac
 done
 
+# --- git ----------------------------------------------------------------------
+# ~/.gitconfig stays a local file: it holds the signing key, the GPG binary's
+# path, and credential helpers pointing at Homebrew, none of which are portable
+# to the Linux boxes. The shared, portable half is pulled in with include.path,
+# which git evaluates in place — so appending it means the repo's values win over
+# anything set earlier in the local file.
+GITCONFIG_SHARED="$REPO_ROOT/gitconfig"
+if [ ! -f "$GITCONFIG_SHARED" ]; then
+  echo "[skip] missing source: $GITCONFIG_SHARED"
+elif git config --global --get-all include.path 2>/dev/null | grep -qxF "$GITCONFIG_SHARED"; then
+  echo "[ok]   ~/.gitconfig includes $GITCONFIG_SHARED"
+elif [ "$DRY_RUN" -eq 1 ]; then
+  echo "[would include] ~/.gitconfig -> $GITCONFIG_SHARED"
+else
+  git config --global --add include.path "$GITCONFIG_SHARED"
+  echo "[include] ~/.gitconfig -> $GITCONFIG_SHARED"
+fi
+
+# The include cannot retire a setting it does not name, and a stale
+# `format.pretty = oneline` in the local file is exactly the setting that made
+# every `git log` print a hash and a subject and nothing else. Remove it only
+# when it still holds that value — a deliberate custom format is left alone.
+if [ "$(git config --global --get format.pretty 2>/dev/null || true)" = "oneline" ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "[would unset]   ~/.gitconfig format.pretty=oneline (shadows the shared log format)"
+  else
+    git config --global --unset-all format.pretty
+    echo "[unset] ~/.gitconfig format.pretty=oneline (shadowed the shared log format)"
+  fi
+fi
+
 # --- tmux --------------------------------------------------------------------
 link "$REPO_ROOT/tmux.conf" "$HOME/.tmux.conf"
 

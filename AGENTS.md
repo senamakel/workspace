@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is the source of truth for personal shell and coding-agent configuration. `install.sh` links managed files into the user’s home directory. Shared workflow rules live in `RULES.md`; shared agent sources live in `agents/<name>/` and are rendered into harness-native files. Shared skills live in `skills/<name>/` and are linked into both Claude and Codex. Shared Medulla workflow definitions live in `workflows/<name>.json` and are linked file-by-file into `~/.medulla/<account id>/workflows/`, for the active account named by `~/.medulla/active_user.toml` and any other account already on the machine. Medulla scopes its workflow store per account, so the flat `~/.medulla/workflows/` is *not* read; `install.sh` removes the links it used to leave there. Other harness-specific configuration is under `claude/`, `codex/`, and `opencode/`. Executable helpers belong in `bin/`, while custom shell aliases and functions live in `zshrc`. Keep every skill self-contained, with `SKILL.md` as its entry point and optional resources inside the same directory.
+This repository is the source of truth for personal shell and coding-agent configuration. `install.sh` links managed files into the user’s home directory. Shared workflow rules live in `RULES.md`; shared agent sources live in `agents/<name>/` and are rendered into harness-native files. Shared skills live in `skills/<name>/` and are linked into both Claude and Codex. Shared Medulla workflow definitions live in `workflows/<name>.json` and are linked file-by-file into `~/.medulla/<account id>/workflows/`, for the active account named by `~/.medulla/active_user.toml` and any other account already on the machine. Medulla scopes its workflow store per account, so the flat `~/.medulla/workflows/` is *not* read; `install.sh` removes the links it used to leave there. Shared git settings live in `gitconfig` and are pulled into `~/.gitconfig` with `include.path` rather than replacing it, so machine-local values (signing key, GPG path, credential helpers) stay put. Other harness-specific configuration is under `claude/`, `codex/`, and `opencode/`. Executable helpers belong in `bin/`, while custom shell aliases and functions live in `zshrc`. Keep every skill self-contained, with `SKILL.md` as its entry point and optional resources inside the same directory.
 
 Do not commit machine-local credentials or generated state. In particular, `~/.codex/config.toml` and the local OpenCode package/config files are intentionally excluded, as are the credential maps the `bin/` helpers read (`~/.config/langfuse/envs.tsv`, `~/.config/langfuse/projects.tsv`, `~/.config/sentry/repos.tsv`). Tools may point at existing secret files by path, but must never copy a key into this repository.
 
@@ -19,7 +19,7 @@ There is no compilation step or centralized test suite. Validate the part you ch
 - `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
   repository with dirty, unpushed, and submodule-bearing worktrees.
 - `tests/auto-commit.sh` exercises the auto-commit hook's offline logic — the
-  tool-call counter, the repository allowlist, the protected-branch and
+  tool-call counter, the repository allowlist, the detached-HEAD and
   in-progress-operation guards, credential filtering, and the subject fallback —
   with a stubbed model and no credentials.
 - `tests/langfuse-lib.sh` exercises the Langfuse helpers' offline logic —

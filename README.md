@@ -14,12 +14,13 @@ the source of truth, so source changes appear in `git diff`.
 | `claude/mcp.json` | `~/.claude/mcp.json` |
 | `claude/statusline-command.sh` | `~/.claude/statusline-command.sh` |
 | `skills/<name>/` | `~/.claude/skills/<name>`, `~/.codex/skills/<name>` (one canonical source) |
-| `workflows/*.json` | `~/.medulla/workflows/<file>.json` (one link per flow) |
+| `workflows/*.json` | `~/.medulla/<account id>/workflows/<file>.json` (one link per flow, per account) |
 | `open-source/` | Git-backed repository catalog and per-issue contribution queue shared by every machine |
 | `bin/*` | on PATH via the repo `zshrc` (no symlinks) |
 | `bin/super-review` | `~/super-review.sh` |
 | `bin/workspace-tmux` | `~/bin/mosh-tmux` (installed by `workspace-init`) |
 | `codex/hooks.json` | `~/.codex/hooks.json` |
+| `gitconfig` | pulled into `~/.gitconfig` via an appended `include.path` |
 | `zshrc` | sourced from `~/.zshrc` via an appended loader line |
 
 `RULES.md` is the single source of truth for agent instructions: it is
@@ -38,10 +39,13 @@ generated cache or installed harness files; edit `agent.json` or
 is linked into Claude and Codex.
 
 `workflows/` is the single source of truth for shared Medulla workflow
-definitions. Each `<name>.json` is linked individually into
-`~/.medulla/workflows/`, rather than linking the directory itself, so Medulla
-can keep unmanaged machine-local flows in the same directory. Edit the JSON in
-the repo and the change is live; re-run `install.sh` after adding a new file.
+definitions. Each `<name>.json` is linked individually — rather than linking the
+directory itself — so Medulla can keep unmanaged machine-local flows alongside
+them. The destination is per account (`~/.medulla/<account id>/workflows/`, for
+the account named by `~/.medulla/active_user.toml` plus any other already on the
+machine), because Medulla scopes its workflow store per account and does not read
+the flat `~/.medulla/workflows/`. Edit the JSON in the repo and the change is
+live; re-run `install.sh` after adding a new file.
 
 `zshrc` holds only custom functions and aliases. `~/.zshrc` and `~/.zshenv`
 remain local machine-specific files (oh-my-zsh setup, PATH exports, tool
@@ -386,6 +390,36 @@ without discarding it; and stages and commits only the named files.
 atomic-commit "bin: add worktree helper" -- bin/worktree .gitignore
 atomic-commit --json "docs: explain setup" -- README.md
 ```
+
+### Git log defaults (`gitconfig`)
+
+`~/.gitconfig` keeps the machine-local half — signing key, GPG binary path,
+credential helpers pointing at Homebrew — and `install.sh` appends an
+`include.path` pulling in this repo's portable `gitconfig`. Because git evaluates
+an include in place, appending it means the shared values win over anything set
+earlier in the local file.
+
+It exists because a global `format.pretty = oneline` had reduced every `git log`
+to a hash and a subject: no author, no timestamp, no diff. That is a poor default
+anywhere, and actively misleading in repositories whose history is mostly
+machine-written `auto-commit` checkpoints, where *who* and *when* are most of the
+information. The installer removes that setting when it still holds exactly
+`oneline`, and leaves a deliberate custom format alone.
+
+The shared file restores git's `medium` default, sets `log.date = iso` (absolute
+and timezone-bearing, which matters across three machines in two timezones) and
+`log.abbrevCommit`, and adds:
+
+| alias | what it shows |
+| --- | --- |
+| `git lg` | one line per commit with a graph, author, and date |
+| `git lgs` | the same, plus the files each commit touched |
+| `git ll` | full headers plus files changed |
+| `git last` | the current commit in full, with its stat |
+| `git st` | short status with branch |
+
+Command-line flags still win, so `git log --oneline` is unaffected and scripts
+that pass an explicit `--format` are untouched.
 
 ### `auto-commit [--hook] [--now] [--dry-run] [--json]`
 
