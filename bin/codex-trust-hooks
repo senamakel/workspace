@@ -14,42 +14,25 @@
 # cannot simply be synced. Run this once per box, and again whenever
 # codex/hooks.json changes, because editing it invalidates the recorded hash.
 #
-# Two sources of shared hooks are enabled, and the second is the one that is
-# easy to miss:
+# This covers `~/.codex/hooks.json` — the file this repo links in — and nothing
+# else. A hook the checked-out workspace or another tool registered is left
+# alone, and so is Medulla's, which is no longer this script's job:
 #
-#   ~/.codex/hooks.json           this repo's own file, linked in by install.sh
-#   /<session-flags>/config.toml  the pseudo-path Codex keys a `-c hooks=…`
-#                                 command-line override under
+# Medulla injects the hooks declared in medulla/config.toml per spawn, as a
+# `-c hooks=…` override that Codex keys under the pseudo-path
+# `/<session-flags>/config.toml`. Those entries land disabled like any other, so
+# for a while nothing Medulla declared ran on Codex at all — not the shared
+# hooks and not Medulla's own session reporting — silently, with nothing on
+# stderr and a zero exit. Medulla now enables its own entries as it builds the
+# launch (`harness_hooks::codex::trust`), scoped to the events that spawn is
+# installing, so this script would only be duplicating it. Run `medulla codex`
+# once; if its hooks are still inert, that is a Medulla bug, not a missing run
+# of this.
 #
-# The second is how Medulla delivers the hooks declared in medulla/config.toml —
-# it injects them per spawn rather than writing them to disk, so they arrive as
-# a config override and land in the state store *disabled*, exactly like any
-# other hook Codex has not been told to trust. Medulla deliberately does not
-# pass --dangerously-bypass-hook-trust (that flag is invocation-wide and would
-# also authorize whatever .codex/hooks.json the checked-out repository happens to
-# ship), and it reports the requirement instead of bypassing it. Until this
-# script flips those entries, *nothing* Medulla declares runs on Codex — not the
-# shared hooks and not Medulla's own session reporting hooks — and it fails
-# silently, with nothing on stderr and a zero exit.
-#
-# Only the two paths above are touched; a hook the workspace or another tool
-# registered is left alone. The trust model is preserved either way: an entry
-# only exists once Codex has recorded a hash for that exact hook, so this
-# enables what has already been seen and never pre-authorizes hook text that
-# has yet to appear.
-#
-# What this cannot do, measured against Codex 0.146: `enabled = true` only
-# counts while the recorded trusted_hash still matches the hook Codex is being
-# handed. Change a hook — edit hooks.json, add a `[[hooks]]` entry to Medulla's
-# config, rebuild Medulla so a built-in's binary path moves — and the whole
-# event group rehashes. Codex then reports the group as needing review and
-# keeps the *old* hash: registration does not refresh it, only an explicit
-# trust does. So a changed hook set costs one interactive acceptance — start
-# the harness and press `t` on the Hooks screen — after which this script is
-# again what keeps the entries enabled on every later launch. It is not a way
-# around that acceptance, and deliberately so: forging a trusted_hash here
-# would be the same blanket authorization --dangerously-bypass-hook-trust
-# hands out, just written to disk.
+# The trust model is preserved either way: an entry only exists once Codex has
+# recorded a hash for that exact hook, so this enables what has already been
+# seen and never pre-authorizes hook text that has yet to appear. Editing
+# hooks.json rehashes it, which is why the flag has to be set again afterwards.
 set -euo pipefail
 
 LIST=0
@@ -80,15 +63,11 @@ text = open(config).read()
 pattern = re.compile(
     r'(\[hooks\.state\."(?P<key>[^"]*)"\]\n)(?P<body>(?:(?!\[)[^\n]*\n)*)')
 
-# The two sources this script speaks for, matched against the "<path>" half of a
+# The one source this script speaks for, matched against the "<path>" half of a
 # "<path>:<event>:<group>:<index>" state key. Anything else — a hook the
-# checked-out workspace declares, a path some other tool registered — is left
-# exactly as Codex recorded it.
-SHARED = re.compile(
-    r'^(?:'
-    r'.*/\.codex/hooks\.json'        # this repo's file, linked in by install.sh
-    r'|/<session-flags>/config\.toml'  # Medulla's per-spawn `-c hooks=` override
-    r'):[^:]+:\d+:\d+$')
+# checked-out workspace declares, Medulla's own injection, a path some other tool
+# registered — is left exactly as Codex recorded it.
+SHARED = re.compile(r'^.*/\.codex/hooks\.json:[^:]+:\d+:\d+$')
 
 changed, found = 0, 0
 def fix(m):
