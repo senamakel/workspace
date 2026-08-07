@@ -435,6 +435,55 @@ test_refuses_a_detached_head() {
   assert_contains "$(git -C "$repo" status --porcelain)" "new.txt" "the file is left dirty"
 }
 
+test_marks_the_device_that_made_the_commit() {
+  local repo state stub devfile
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo device)"
+  state="$(state_dir device)"
+  stub="$(make_stub device "chore: change things")"
+
+  # The trailer names the machine and is parseable as a real git trailer, not
+  # just text that happens to be in the body.
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_DEVICE=dragonfly AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq "dragonfly" \
+    "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | head -1)" \
+    "the commit records the device it was made on"
+
+  # A machine-local file supplies the name when the environment does not.
+  devfile="$TEST_ROOT/device-name"
+  printf 'mac-mini\n' > "$devfile"
+  printf 'more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_DEVICE_FILE="$devfile" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq "mac-mini" \
+    "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | head -1)" \
+    "the device file names the machine"
+
+  # A trailer is one line of Key: value. A name carrying a newline must not be
+  # able to inject a second trailer and forge a different machine.
+  printf 'more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_DEVICE="evil
+Auto-committed-on: spoofed" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 1 \
+    "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | grep -c .)" \
+    "a newline in the device name cannot forge a second trailer"
+  assert_not_contains "$(git -C "$repo" log -1 --format='%B')" "spoofed
+" "the injected line is not a trailer of its own"
+}
+
+test_hand_written_commits_carry_no_device_trailer() {
+  local repo
+  command -v jq >/dev/null 2>&1 || return 0
+  # The trailer's presence is what distinguishes a checkpoint from a commit
+  # somebody wrote, so atomic-commit run directly must not add one.
+  repo="$(make_repo hand-written)"
+  printf 'manual\n' > "$repo/manual.txt"
+  (cd "$repo" && "$(dirname "$COMMAND")/atomic-commit" "docs: written by hand" -- manual.txt) >/dev/null 2>&1
+  assert_eq "" \
+    "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)')" \
+    "a hand-written commit is not marked as automatic"
+}
+
 test_bails_on_an_unmerged_index() {
   local repo state stub out
   command -v jq >/dev/null 2>&1 || return 0
@@ -647,6 +696,8 @@ run_test "the content scan covers common key shapes" test_content_scan_covers_co
 run_test "ordinary code is not flagged" test_ordinary_code_is_not_flagged
 run_test "commits on main and master" test_commits_on_main
 run_test "refuses a detached HEAD" test_refuses_a_detached_head
+run_test "marks the device that made the commit" test_marks_the_device_that_made_the_commit
+run_test "hand-written commits carry no device trailer" test_hand_written_commits_carry_no_device_trailer
 run_test "bails on an unmerged index" test_bails_on_an_unmerged_index
 run_test "bails on conflict markers in a file" test_bails_on_conflict_markers_in_a_file
 run_test "prose about conflicts is not mistaken for one" test_prose_about_conflicts_is_not_mistaken_for_one

@@ -36,6 +36,10 @@
 #   * does nothing during a merge, rebase, cherry-pick, or bisect
 #   * commits without a model, and without a network, if it has to
 #
+# Every commit it makes carries an `Auto-committed-on: <machine>` trailer, so a
+# checkpoint is always distinguishable from a hand-written commit, and from the
+# box it was made on.
+#
 # Overridable:
 # There is deliberately no environment switch to turn this off. A kill switch is
 # the first thing reached for when committing is inconvenient, which is exactly
@@ -57,6 +61,8 @@
 #   AUTO_COMMIT_URL                  chat-completions endpoint
 #   AUTO_COMMIT_API_KEY_VAR          env var holding the key (OPENROUTER_API_KEY)
 #   AUTO_COMMIT_CMD                  call this CLI instead of the API (tests)
+#   AUTO_COMMIT_DEVICE               name in the trailer (default: this hostname)
+#   AUTO_COMMIT_DEVICE_FILE          file holding that name (~/.config/workspace/device)
 #   AUTO_COMMIT_MAX_DIFF             bytes of diff sent to the model (40000)
 #   AUTO_COMMIT_BODY_MAX_LINES       description lines kept from the model (6)
 set -euo pipefail
@@ -102,6 +108,10 @@ MODEL="${AUTO_COMMIT_MODEL:-deepseek/deepseek-v4-flash}"
 API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
 API_KEY_VAR="${AUTO_COMMIT_API_KEY_VAR:-OPENROUTER_API_KEY}"
 CRITIC_CMD="${AUTO_COMMIT_CMD:-}"
+# A machine-local, one-line friendly name for this box, used in the trailer that
+# marks a commit as automatic. Not in this repository: it differs per machine,
+# which is the whole point of recording it.
+DEVICE_FILE="${AUTO_COMMIT_DEVICE_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/workspace/device}"
 
 note() { [ "$HOOK" = "1" ] || printf '%s\n' "$*"; }
 
@@ -572,8 +582,43 @@ fi
 SUBJECT="$(printf '%s' "$SUBJECT" | cut -c1-100)"
 [ -n "$BODY" ] || BODY="$(fallback_body)"
 
-# Subject, blank line, description — the shape git and every tool expect.
-MESSAGE="$(printf '%s\n\n%s\n' "$SUBJECT" "$BODY")"
+# ── Which machine wrote this ───────────────────────────────────────
+# Every checkpoint carries a trailer naming the machine that made it, which is
+# also what distinguishes a checkpoint from a commit somebody wrote by hand:
+# `atomic-commit` run directly adds nothing, so the trailer's presence *is* the
+# "was this automatic?" answer.
+#
+# `Auto-committed-on` rather than "Signed on": these commits are GPG-signed for
+# real (commit.gpgsign is on), and `Signed-off-by` already means a DCO sign-off.
+# Borrowing either word would make the trailer ambiguous about the one thing it
+# exists to state.
+#
+#   git log --format='%h %s %(trailers:key=Auto-committed-on,valueonly)'
+#   git log --grep='^Auto-committed-on:' --   # every checkpoint
+device_name() {
+  local name=""
+  if [ -n "${AUTO_COMMIT_DEVICE:-}" ]; then
+    name="$AUTO_COMMIT_DEVICE"
+  elif [ -r "$DEVICE_FILE" ]; then
+    name="$(head -1 "$DEVICE_FILE" 2>/dev/null || true)"
+  fi
+  [ -n "$name" ] || name="$(hostname -s 2>/dev/null || hostname 2>/dev/null || true)"
+  [ -n "$name" ] || name="unknown"
+  # macOS reports `host.local`; the suffix says nothing and differs per network.
+  name="${name%.local}"
+  # A trailer is one line of `Key: value`, so anything that could introduce a
+  # newline or break the parse is dropped rather than escaped.
+  printf '%s' "$name" \
+    | tr 'A-Z' 'a-z' \
+    | LC_ALL=C tr -cd 'a-z0-9._-' \
+    | cut -c1-64
+}
+DEVICE="$(device_name)"
+
+# Subject, blank line, description, blank line, trailer — the shape git and every
+# tool expect, with the trailer alone in the final paragraph so that
+# `git interpret-trailers` and `%(trailers)` both see it.
+MESSAGE="$(printf '%s\n\n%s\n\n%s\n' "$SUBJECT" "$BODY" "Auto-committed-on: $DEVICE")"
 
 FILE_LIST="$(printf '%s\n' "${STAGE[@]}")"
 

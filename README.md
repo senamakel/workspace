@@ -455,6 +455,30 @@ These are working checkpoints, not curated history: they take whatever is dirty
 at that moment, which may span more than one concern. Expect to squash a branch
 built this way. Reach for `atomic-commit` directly when a specific commit matters.
 
+Every commit it makes carries a git trailer naming the machine:
+
+```
+Auto-committed-on: dragonfly
+```
+
+That answers both "was this automatic?" and "which box?". `atomic-commit` run by
+hand adds nothing, so the trailer's presence *is* the answer to the first:
+
+```sh
+git log --grep='^Auto-committed-on:'                                  # checkpoints only
+git log --format='%h %s [%(trailers:key=Auto-committed-on,valueonly)]' # all, annotated
+```
+
+It is `Auto-committed-on` rather than "Signed on" because these commits are
+GPG-signed for real (`commit.gpgsign` is on) and `Signed-off-by` already means a
+DCO sign-off — borrowing either word would make the trailer ambiguous about the
+one thing it exists to state. The name comes from `AUTO_COMMIT_DEVICE`, else
+`~/.config/workspace/device`, else the short hostname; it is lowercased, stripped
+of a `.local` suffix, and reduced to `[a-z0-9._-]` so a name carrying a newline
+cannot forge a second trailer. `dragonfly` and `robot1` need no file — their
+hostnames already read correctly; this laptop has one because its hostname is
+`Stevens-MacBook-Pro-5`.
+
 Guards, all deliberate and all tested:
 
 - commits only in the allowlisted repositories, because writing the message means
