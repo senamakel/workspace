@@ -80,6 +80,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# ── TEMPORARY PROBE — remove when the Codex hook question is settled ──
+# Records that this command was invoked at all, before any guard can exit
+# silently. Absence of a line here means the hook never ran; presence with no
+# following COUNTER line means it exited on jq, repo discovery, or the allowlist.
+probe() {
+  [ -n "${AUTO_COMMIT_PROBE:-}" ] || return 0
+  printf '%s pid=%s ppid=%s %s\n' "$(date -u +%FT%TZ)" "$$" "${PPID:-?}" "$*" \
+    >> "$AUTO_COMMIT_PROBE" 2>/dev/null || true
+}
+AUTO_COMMIT_PROBE="${AUTO_COMMIT_PROBE:-$HOME/.local/state/auto-commit/probe.log}"
+probe "INVOKED hook=$HOOK cwd=$PWD parent=$(cat /proc/${PPID:-0}/comm 2>/dev/null || echo ?)"
+
 [ "$HOOK" = "1" ] || [ "$NOW" = "1" ] || [ "$DRY" = "1" ] || { usage; exit 1; }
 
 # Every tool call by default. This is cheaper than it sounds: a call that changed
@@ -112,6 +124,7 @@ speak() { printf '[auto-commit] %s\n' "$*" >&2; }
 
 emit() {
   local status="$1" detail="$2" files="${3:-}"
+  probe "EMIT $status: $detail"
   if [ "$FORMAT" = "json" ]; then
     jq -n --arg status "$status" --arg detail "$detail" --arg files "$files" \
       '{status: $status, detail: $detail, files: ($files | split("\n") | map(select(length > 0)))}'
@@ -123,25 +136,72 @@ emit() {
 
 # Hooks are launched in the harness's session directory, which can differ from
 # the checkout a tool actually edited (Medulla commonly starts on `main`, then
-# the agent works under `worktrees/<slug>`). Prefer the tool's explicit working
-# directory, then the hook event's cwd, so repository discovery follows the
-# work rather than the long-lived harness process.
+# the agent works under `worktrees/<slug>`). Repository discovery has to follow
+# the work rather than the long-lived harness process.
+#
+# It cannot do that from `cwd` alone. The session's `cwd` is fixed for the life
+# of the process, and no tool on this harness reports a per-call working
+# directory: a Bash `tool_input` carries only `command` and `description`, so an
+# agent working under `worktrees/<slug>` does it by putting `cd` in the command
+# string. Reading `cwd` therefore always names the session root, which is
+# typically clean while the real work piles up unchecked in the worktree — the
+# hook then reports "nothing to commit" forever and silently saves nothing.
+#
+# So take, in order of how precisely each names the edited checkout:
+#   1. `file_path` — Edit, Write and NotebookEdit name the exact file touched
+#   2. the last `cd` target in a Bash command, resolved against the session cwd
+#   3. the event's `cwd`, which is right whenever the session sits in the
+#      checkout being edited
+event_target() {
+  local fp dir cd_arg
+  fp="$(printf '%s' "$EVENT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
+  if [ -n "$fp" ]; then
+    dir="$(dirname -- "$fp")"
+    [ -d "$dir" ] && { printf '%s' "$dir"; return 0; }
+  fi
+
+  # `cd foo && cargo test` and `cd -- "$HOME/x"; ls` both reduce to the target.
+  # Only the last cd matters, and anything with a shell expansion left in it is
+  # refused rather than guessed at — a wrong directory is worse than the cwd.
+  cd_arg="$(printf '%s' "$EVENT" \
+    | jq -r '.tool_input.command // empty' 2>/dev/null \
+    | grep -oE '(^|[;&|]|&&)[[:space:]]*cd[[:space:]]+(--[[:space:]]+)?[^;&|]+' \
+    | tail -1 \
+    | sed -E 's/.*cd[[:space:]]+(--[[:space:]]+)?//; s/[[:space:]]+$//; s/^"//; s/"$//; s/^'"'"'//; s/'"'"'$//' \
+    || true)"
+  case "$cd_arg" in
+    ''|-|*'$'*|*'`'*|*'*'*) ;;                       # unusable or unexpanded
+    '~'|'~/'*) cd_arg="$HOME${cd_arg#\~}" ;;
+  esac
+  if [ -n "$cd_arg" ]; then
+    case "$cd_arg" in
+      /*) dir="$cd_arg" ;;
+      *)  dir="${EVENT_CWD:-$PWD}/$cd_arg" ;;
+    esac
+    [ -d "$dir" ] && { printf '%s' "$dir"; return 0; }
+  fi
+
+  printf '%s' "${EVENT_CWD:-}"
+}
+
 EVENT=""
 if [ "$HOOK" = "1" ]; then
-  command -v jq >/dev/null 2>&1 || exit 0
+  command -v jq >/dev/null 2>&1 || { probe "EXIT no-jq PATH=$PATH"; exit 0; }
   EVENT="$(cat)"
-  EVENT_CWD="$(printf '%s' "$EVENT" \
-    | jq -r '((.tool_input | objects | .workdir // .cwd) // .cwd // empty)' 2>/dev/null \
-    || true)"
-  if [ -n "$EVENT_CWD" ] && [ -d "$EVENT_CWD" ]; then
-    cd -- "$EVENT_CWD"
+  probe "EVENT bytes=${#EVENT} tool=$(printf '%s' "$EVENT" | jq -r '.tool_name // "?"' 2>/dev/null) keys=$(printf '%s' "$EVENT" | jq -rc '.tool_input | objects | keys' 2>/dev/null) fp=$(printf '%s' "$EVENT" | jq -r '.tool_input.file_path // "none"' 2>/dev/null)"
+  EVENT_CWD="$(printf '%s' "$EVENT" | jq -r '.cwd // empty' 2>/dev/null || true)"
+  TARGET="$(event_target)"
+  probe "TARGET $TARGET (event_cwd=${EVENT_CWD:-none})"
+  if [ -n "$TARGET" ] && [ -d "$TARGET" ]; then
+    cd -- "$TARGET"
   fi
 fi
 
 # ── Where are we ───────────────────────────────────────────────────
-git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+git rev-parse --git-dir >/dev/null 2>&1 || { probe "EXIT not-a-repo cwd=$PWD"; exit 0; }
 TOP="$(git rev-parse --show-toplevel)"
 GIT_DIR="$(git rev-parse --absolute-git-dir)"
+probe "REPO top=$TOP event_cwd=${EVENT_CWD:-none}"
 
 # ── Allowlisted repositories only ──────────────────────────────────
 # Writing the message means sending the diff to a third-party model, so this
@@ -189,9 +249,11 @@ repo_allowed() {
 }
 
 if ! repo_allowed; then
+  probe "EXIT not-allowlisted top=$TOP"
   emit skipped "'$TOP' is not on the auto-commit allowlist (AUTO_COMMIT_REPOS)"
   exit 0
 fi
+probe "ALLOWED top=$TOP"
 
 # ── Tool-call counter ──────────────────────────────────────────────
 # PostToolUse fires on every tool call. Only every Nth one does any work, so the
