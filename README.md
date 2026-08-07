@@ -400,26 +400,37 @@ an include in place, appending it means the shared values win over anything set
 earlier in the local file.
 
 It exists because a global `format.pretty = oneline` had reduced every `git log`
-to a hash and a subject: no author, no timestamp, no diff. That is a poor default
-anywhere, and actively misleading in repositories whose history is mostly
-machine-written `auto-commit` checkpoints, where *who* and *when* are most of the
-information. The installer removes that setting when it still holds exactly
-`oneline`, and leaves a deliberate custom format alone.
+to a hash and a subject: no author, no timestamp. That is a poor default anywhere,
+and actively misleading in repositories whose history is mostly machine-written
+`auto-commit` checkpoints, where *who* and *when* are most of the information. The
+installer removes that setting when it still holds exactly `oneline`, and leaves a
+deliberate custom format alone.
 
-The shared file restores git's `medium` default, sets `log.date = iso` (absolute
-and timezone-bearing, which matters across three machines in two timezones) and
-`log.abbrevCommit`, and adds:
+`git log` now prints a named `summary` format — sha, refs, author, ISO date, and
+the subject, laid out like git's own `medium` but with the **body suppressed**.
+`log.date = iso` keeps timezones (three machines, two timezones) and
+`log.abbrevCommit` keeps hashes short.
 
-| alias | what it shows |
+| command | what it shows |
 | --- | --- |
-| `git lg` | one line per commit with a graph, author, and date |
+| `git log` | sha, refs, author, date, subject — no body |
+| `glass` / `git glass` | the old short view: one line per commit, graph and refs |
+| `git lg` | one line per commit with graph, author, and date |
 | `git lgs` | the same, plus the files each commit touched |
-| `git ll` | full headers plus files changed |
+| `git ll` | full messages *including bodies*, plus files changed |
+| `git full` | full messages including bodies |
 | `git last` | the current commit in full, with its stat |
 | `git st` | short status with branch |
 
-Command-line flags still win, so `git log --oneline` is unaffected and scripts
-that pass an explicit `--format` are untouched.
+`glass` is a `zshrc` alias delegating to `git glass`, so the flags live in
+`gitconfig` only and the two cannot drift apart.
+
+One consequence worth knowing: `format.pretty` governs `git show` as well as
+`git log`, so a bare `git show <sha>` also hides the body. That is why `ll`,
+`full`, and `last` ask for `--pretty=medium` explicitly — reading a single commit
+is exactly when the body is wanted. Command-line flags still win, so
+`git log --oneline` is unaffected and scripts passing an explicit `--format` are
+untouched.
 
 ### `auto-commit [--hook] [--now] [--dry-run] [--json]`
 

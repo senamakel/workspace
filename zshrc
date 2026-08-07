@@ -38,6 +38,11 @@ alias aliases="vim ~/.zshrc"
 alias cleude="claude"
 alias work="cd ~/work"
 
+# The short one-line log, since plain `git log` now shows author and date per
+# commit. Delegates to the git alias in this repo's gitconfig so the flags live
+# in one place rather than drifting between here and there.
+alias glass="git glass"
+
 # Attach to each box's persistent tmux workspace (see bin/box).
 alias df="box dragonfly"
 alias mini="box mac-mini"

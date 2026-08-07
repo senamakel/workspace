@@ -8,36 +8,56 @@
 # Because it is included at the end of ~/.gitconfig, the values here win over
 # anything set earlier in that file.
 
+[pretty]
+	# The default log entry: sha, refs, author, date, and the subject line —
+	# and deliberately not the body. Laid out like git's own `medium` so the
+	# shape stays familiar; it is `medium` with the description suppressed.
+	#
+	# Named rather than written inline so `--pretty=summary` selects it
+	# explicitly, and so the aliases below can refer to one definition.
+	#
+	# Unquoted on purpose: a [pretty] value is taken literally, unlike an alias,
+	# whose value git word-splits. Wrapping this in the single quotes the shell
+	# would need puts them in the output, around every commit.
+	summary = tformat:%C(auto)commit %h%d%C(reset)%nAuthor: %an <%ae>%nDate:   %ad%n%n    %s%n
+
 [format]
-	# Git's own default. Set explicitly to override a stale global
-	# `pretty = oneline`, which reduced every `git log` to a hash and a subject —
-	# no author, no date, no diff — including in repositories whose history is
-	# mostly machine-written checkpoints, where the author and time are the whole
-	# point. Command-line flags still win, so `git log --oneline` is unaffected.
-	pretty = medium
+	# Replaces a stale global `pretty = oneline`, which reduced every `git log`
+	# to a hash and a subject — no author, no date. Command-line flags still
+	# win, so `git log --oneline` and `--pretty=medium` are unaffected.
+	#
+	# Note this also applies to `git show`, which is why `last` and `full`
+	# below ask for `medium` explicitly: reading one commit is exactly when the
+	# body is wanted.
+	pretty = summary
 
 [log]
 	# Absolute, unambiguous, sortable — and it keeps the timezone, which matters
 	# when reading history written on three machines in two timezones.
 	date = iso
-	# The default format prints the full 40-character hash. Short hashes are
-	# enough to identify a commit and leave room for the message.
+	# Short hashes are enough to identify a commit and leave room for the message.
 	abbrevCommit = true
 	# Show branch and tag names on the commits that carry them.
 	decorate = auto
 
 [alias]
-	# Compact history: one line per commit, with the author and date the plain
-	# `--oneline` view drops.
+	# The short view: one line per commit, with a graph and refs. This is what
+	# `git log` used to print before the default above, kept under its own name.
+	# The zshrc alias of the same name delegates here, so `glass` and
+	# `git glass` stay one definition.
+	glass = log --oneline --graph --decorate
+	# Compact history with the author and date that `--oneline` drops.
 	lg = log --graph --date=short --pretty=format:'%C(auto)%h%d%C(reset) %s %C(dim)(%an, %ad)%C(reset)'
 	# The same view, plus the files each commit touched. No --graph here: the
 	# graph column runs down the left of the stat block and collides with it.
 	# tformat (not format) terminates each entry, which keeps the stat of one
 	# commit from running onto the subject line of the next.
 	lgs = log --stat --date=short --pretty=tformat:'%C(auto)%h%d%C(reset) %s %C(dim)(%an, %ad)%C(reset)'
-	# Everything about recent commits: full header, and the files changed.
-	ll = log --stat
-	# One commit, in full, with its diff.
-	last = show --stat HEAD
+	# Full commit messages, bodies included, plus the files changed — for when
+	# the summary above has hidden the part you need.
+	ll = log --stat --pretty=medium
+	full = log --pretty=medium
+	# One commit in full: whole message, and what it touched.
+	last = show --stat --pretty=medium HEAD
 	# What is actually going on right now.
 	st = status --short --branch
