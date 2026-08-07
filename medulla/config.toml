@@ -1,0 +1,70 @@
+# Shared Medulla settings, merged into each account's live config.toml by
+# install.sh (via bin/medulla-config-merge).
+#
+# Only whole top-level sections that are true of every machine belong here. The
+# live file keeps everything else — `[fleet]` agent declarations and
+# `[harness].recentWorkspaces` name paths and checkouts that differ per box,
+# `[backend]` names the environment that box is pointed at, and Medulla rewrites
+# all of them on its own. A section named here is *replaced* wholesale on every
+# install, so anything you add becomes managed by this repository.
+
+[appearance]
+cpu = "bar"
+deviceCpu = "percent"
+deviceDisk = "bar"
+deviceRam = "value"
+diskIo = "bar"
+ram = "value"
+showHarnessBranch = true
+showHarnessPath = true
+showSessionTitles = true
+
+[statusLine]
+branch = "line1"
+branchWhen = "always"
+control = "line1"
+controlStyle = "icon"
+controlWhen = "active"
+harness = "line1"
+harnessStyle = "short"
+harnessWhen = "always"
+path = "line3"
+pathStyle = "last"
+pathWhen = "active"
+state = "line1"
+stateWhen = "always"
+
+[theme]
+accent = "magenta"
+attention = "yellow"
+attentionBlink = true
+dimBorder = "darkgray"
+primary = "red"
+selectionFg = "black"
+
+[workflows]
+runTimeoutSecs = 9600
+
+# Hooks Medulla installs into every harness it launches, declared once here
+# instead of once per harness in each harness's own config language. These used
+# to live in claude/settings.json, where only Claude Code ever ran them.
+[[hooks]]
+event = "Stop"
+type = "command"
+command = "\"$HOME/work/workspace/bin/afplay\" /System/Library/Sounds/Glass.aiff"
+
+[[hooks]]
+event = "Notification"
+type = "command"
+command = "\"$HOME/work/workspace/bin/afplay\" /System/Library/Sounds/Ping.aiff"
+
+# Claude only: `--hook` parses Claude Code's PostToolUse payload (tool_input,
+# session_id, cwd), which no other harness sends in that shape. Medulla drops a
+# hook for a harness that cannot run it, but it cannot know this one would
+# misread a payload it *can* deliver.
+[[hooks]]
+event = "PostToolUse"
+matcher = "*"
+type = "command"
+command = "\"$HOME/work/workspace/bin/auto-commit\" --hook"
+harnesses = ["claude"]

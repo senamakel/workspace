@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# medulla-config-merge — apply this repository's shared Medulla settings onto a
+# machine's live config.toml.
+#
+# Usage: medulla-config-merge [--dry-run] <shared.toml> <live.toml>
+#
+# Medulla's config is not a file we can symlink. It saves by writing a temporary
+# file beside the target and renaming it into place, and `rename` replaces the
+# path without following it — so a symlink there survives exactly one save,
+# after which the live config is a regular file again and this repository's copy
+# quietly stops being the thing Medulla reads. The shared half is therefore
+# merged in, the way ~/.gitconfig pulls in the repo's gitconfig with
+# include.path.
+#
+# Whole top-level sections are the unit. Every section the shared file declares
+# is dropped from the live file and replaced by the shared text verbatim;
+# everything else — fleet declarations, recentWorkspaces, backend URLs, the
+# values that are true of one box and not the next — is left exactly as Medulla
+# wrote it. Re-running changes nothing.
+set -euo pipefail
+
+DRY_RUN=0
+if [ "${1:-}" = "--dry-run" ]; then
+  DRY_RUN=1
+  shift
+fi
+
+SHARED="${1:-}"
+LIVE="${2:-}"
+if [ -z "$SHARED" ] || [ -z "$LIVE" ]; then
+  echo "usage: medulla-config-merge [--dry-run] <shared.toml> <live.toml>" >&2
+  exit 2
+fi
+if [ ! -f "$SHARED" ]; then
+  echo "[skip] missing source: $SHARED"
+  exit 0
+fi
+
+# The section names this repository claims, read from the shared file itself so
+# the two can never disagree: `[theme]`, `[[hooks]]` and `[a.b]` all reduce to
+# their root name, which is the granularity a merge replaces.
+managed="$(sed -n 's/^[[:space:]]*\[\[\{0,1\}\([A-Za-z0-9_-]\{1,\}\).*$/\1/p' "$SHARED" | sort -u | paste -sd, -)"
+if [ -z "$managed" ]; then
+  echo "[skip] $SHARED declares no sections"
+  exit 0
+fi
+
+# The live file minus every managed section. Comment and blank lines are held
+# back until something is actually kept, so the header comment above a dropped
+# section leaves with it rather than stranding itself on the section below.
+kept=""
+if [ -f "$LIVE" ]; then
+  kept="$(awk -v managed="$managed" '
+    BEGIN {
+      n = split(managed, names, ",")
+      for (i = 1; i <= n; i++) drop[names[i]] = 1
+    }
+    /^[[:space:]]*\[/ {
+      root = $0
+      sub(/^[[:space:]]*\[\[?/, "", root)
+      sub(/[].].*$/, "", root)
+      if (root in drop) { skipping = 1; pending = ""; next }
+      skipping = 0
+      printf "%s", pending; pending = ""
+      print; next
+    }
+    skipping { next }
+    /^[[:space:]]*(#|$)/ { pending = pending $0 "\n"; next }
+    { printf "%s", pending; pending = ""; print }
+  ' "$LIVE")"
+fi
+
+if [ -n "$kept" ]; then
+  rendered="$(printf '%s\n\n%s\n' "$kept" "$(cat "$SHARED")")"
+else
+  rendered="$(printf '%s\n' "$(cat "$SHARED")")"
+fi
+
+if [ -f "$LIVE" ] && [ "$rendered" = "$(cat "$LIVE")" ]; then
+  echo "[ok]   $LIVE"
+  exit 0
+fi
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "[would merge]   $LIVE <- $SHARED ($managed)"
+  exit 0
+fi
+
+# Same temp-and-rename Medulla itself uses, so a reader never sees half a config.
+mkdir -p "$(dirname "$LIVE")"
+tmp="$LIVE.medulla-config-merge.$$"
+trap 'rm -f "$tmp"' EXIT
+printf '%s\n' "$rendered" > "$tmp"
+mv "$tmp" "$LIVE"
+trap - EXIT
+echo "[merge] $LIVE <- $SHARED ($managed)"

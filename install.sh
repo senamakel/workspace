@@ -236,9 +236,18 @@ for d in "$REPO_ROOT"/skills/*/; do
 done
 
 # --- Medulla workflows --------------------------------------------------------
-# Workflow definitions are shared like skills and agents: one canonical JSON per
-# flow in workflows/, linked file-by-file so Medulla can still keep unmanaged,
-# machine-local flows in the same directory.
+# The whole store directory is one symlink onto workflows/, not a link per file.
+# That direction matters: Medulla publishes a flow by writing a temporary file
+# beside the target and renaming it into place, and `rename` replaces the *path*
+# without following it. With a link per file, saving a shared flow from the TUI
+# silently swapped its symlink for a regular file and the edit never reached this
+# repository; a flow created from scratch simply landed in the account store and
+# stayed there. Linking the directory puts the rename *inside* workflows/, so
+# every flow Medulla writes — new or edited — is a change in this checkout.
+#
+# The cost is that the store no longer holds anything unshared: a machine-local
+# flow written there is written here. That is the intent — this repository is
+# where workflows live now — but it is why the adoption step below exists.
 #
 # The destination is per account, not per install. Medulla scopes everything it
 # persists to `<root>/<account id>` and reads its user-global workflow store from
@@ -275,12 +284,47 @@ medulla_accounts() {
   done
 }
 
+# Take a real store directory into the repository before replacing it with the
+# link. Anything in there that is not already one of ours is a flow Medulla wrote
+# on this machine — either created in the TUI or saved over a per-file link by
+# the rename described above — and swapping the directory out would file it away
+# under ~/.config-backups where nothing reads it again. A name this repository
+# already carries is left alone and reported: the two versions may genuinely
+# differ, and picking a winner is a merge, not an install step.
+medulla_adopt_workflows() {
+  local dir="$1" f base
+  [ -d "$dir" ] || return 0
+  [ -L "$dir" ] && return 0
+  for f in "$dir"/*.json; do
+    [ -f "$f" ] || continue
+    if [ -L "$f" ]; then continue; fi
+    base="$(basename "$f")"
+    if cmp -s "$f" "$REPO_ROOT/workflows/$base"; then
+      : # already identical to the shared copy; the link supersedes it
+    elif [ -e "$REPO_ROOT/workflows/$base" ]; then
+      echo "[keep] $f differs from workflows/$base — resolve by hand, backup kept"
+    elif [ "$DRY_RUN" -eq 1 ]; then
+      echo "[would adopt]   workflows/$base <- $f"
+    else
+      cp "$f" "$REPO_ROOT/workflows/$base"
+      echo "[adopt] workflows/$base <- $f"
+    fi
+  done
+}
+
 while IFS= read -r account; do
   [ -n "$account" ] || continue
-  for f in "$REPO_ROOT"/workflows/*.json; do
-    [ -f "$f" ] || continue
-    link "$f" "$MEDULLA_ROOT/$account/workflows/$(basename "$f")"
-  done
+  medulla_adopt_workflows "$MEDULLA_ROOT/$account/workflows"
+  link "$REPO_ROOT/workflows" "$MEDULLA_ROOT/$account/workflows"
+  # The config is merged rather than linked; see bin/medulla-config-merge for
+  # why a symlink cannot survive Medulla saving its own settings.
+  if [ "$DRY_RUN" -eq 1 ]; then
+    "$REPO_ROOT/bin/medulla-config-merge" --dry-run \
+      "$REPO_ROOT/medulla/config.toml" "$MEDULLA_ROOT/$account/config.toml"
+  else
+    "$REPO_ROOT/bin/medulla-config-merge" \
+      "$REPO_ROOT/medulla/config.toml" "$MEDULLA_ROOT/$account/config.toml"
+  fi
 done < <(medulla_accounts)
 
 # Retire the pre-account links. Only symlinks into this repository's workflows/
