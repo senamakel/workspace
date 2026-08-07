@@ -57,7 +57,17 @@ fi
 ok()   { printf '%s[ok]%s   %s\n' "$_G" "$_0" "$*"; }
 skip() { printf '%s[skip]%s %s\n' "$_Y" "$_0" "$*"; }
 head_() { printf '\n%s== %s%s\n' "$_B" "$*" "$_0"; }
-act()  { if [ "$DRY" = "1" ]; then printf '       would: %s\n' "$*"; return 1; fi; return 0; }
+# `--report` is documented as showing current state only, so it must gate here
+# too and not just in the sections that happen to test $REPORT themselves. It
+# did not, which made a report run quietly apply anything not yet configured —
+# the one mode where changing the machine is never what was asked for.
+act()  {
+  if [ "$DRY" = "1" ] || [ "$REPORT" = "1" ]; then
+    printf '       would: %s\n' "$*"
+    return 1
+  fi
+  return 0
+}
 
 # ── Machine facts ──────────────────────────────────────────────────
 OS="$(uname -s)"
@@ -115,16 +125,37 @@ if [ -n "$SCCACHE_BIN" ]; then
   # A config file, not environment variables: these shells are spawned by tmux,
   # `zsh -c` snapshots and systemd units, and an env var set in one of those
   # silently would not apply in the others.
-  if [ -f "$HOME/.config/sccache/config.toml" ]; then
-    ok "cache config already present"
-  elif act "write ~/.config/sccache/config.toml"; then
+  #
+  # The file is `config`, with no extension. It is TOML, and this script wrote
+  # `config.toml` for months — which sccache never reads, so the cache silently
+  # ran on its 10G default while the box reported itself configured, and the
+  # existence check below matched the dead file and never corrected it. Confirm
+  # with `sccache --show-stats`, which prints the size actually in force.
+  SCCACHE_CFG="$HOME/.config/sccache/config"
+  SCCACHE_DEAD="$HOME/.config/sccache/config.toml"
+  if [ -f "$SCCACHE_CFG" ]; then
+    ok "cache config already present ($SCCACHE_CFG)"
+  elif [ -f "$SCCACHE_DEAD" ] && act "move config.toml to config (sccache reads the extensionless name)"; then
+    mv "$SCCACHE_DEAD" "$SCCACHE_CFG"
+    ok "moved config.toml -> config; its size setting is now actually in force"
+  elif act "write $SCCACHE_CFG"; then
     mkdir -p "$HOME/.config/sccache"
-    cat > "$HOME/.config/sccache/config.toml" <<EOF
+    cat > "$SCCACHE_CFG" <<EOF
 [cache.disk]
 dir = "$HOME/.cache/sccache"
-size = 32212254720
+size = 64424509440
 EOF
-    ok "wrote cache config (30 GiB)"
+    ok "wrote cache config (60 GiB)"
+  fi
+  # A leftover config.toml beside a live config is inert but reads as
+  # authoritative, which is the whole trap. Say what it claimed before removing
+  # it, so a hand-tuned size is not lost silently.
+  if [ -f "$SCCACHE_CFG" ] && [ -f "$SCCACHE_DEAD" ]; then
+    dead_size="$(sed -n 's/^[[:space:]]*size[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' "$SCCACHE_DEAD" | head -1)"
+    if act "remove the ignored $SCCACHE_DEAD (declared size=${dead_size:-unset})"; then
+      rm -f "$SCCACHE_DEAD"
+      ok "removed ignored config.toml (it declared size=${dead_size:-unset}; sccache never read it)"
+    fi
   fi
 fi
 
@@ -312,17 +343,49 @@ fi
 # ── Stale target dirs ──────────────────────────────────────────────
 head_ "cargo target dirs"
 TARGETS=()
+TMP_TARGETS=()
 while IFS= read -r t; do
   [ -f "$t/CACHEDIR.TAG" ] || [ -d "$t/debug" ] || [ -d "$t/release" ] || continue
   TARGETS+=("$t")
-done < <(find "$HOME/work" -maxdepth 7 -type d -name target \
-  -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null || true)
+  case "$t" in
+    "$HOME"/work/*) ;;
+    *) TMP_TARGETS+=("$t") ;;
+  esac
+done < <(
+  {
+    find "$HOME/work" -maxdepth 7 -type d -name target \
+      -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null || true
+    # Temp dirs too, matching `<slug>-target` as well as a plain `target`.
+    #
+    # CARGO_TARGET_DIR in the environment overrides the `build.target-dir` a
+    # workflow writes into a worktree's .cargo/config.toml, so an agent that
+    # exports one silently opts that build out of the shared target dir — and
+    # what it exports is typically a path under /tmp. Those were invisible here
+    # twice over: this search never left ~/work, and `-name target` does not
+    # match `medulla-pr220-target`. On a tmpfs /tmp they are charged against RAM,
+    # so a couple of them exhaust the mount and every later build — and any shell
+    # wanting a temp file — fails with EDQUOT while `df` still shows free space.
+    for tmp in "${TMPDIR:-}" /tmp; do
+      [ -n "$tmp" ] && [ -d "$tmp" ] || continue
+      find "$tmp" -maxdepth 2 -type d -uid "$(id -u)" \
+        \( -name target -o -name '*-target' \) 2>/dev/null || true
+    done
+  } | sort -u
+)
 
 if [ "${#TARGETS[@]}" -eq 0 ]; then
   ok "none found"
 else
   TOTAL="$(du -csm "${TARGETS[@]}" 2>/dev/null | tail -1 | cut -f1)"
   printf '  %s dirs, ~%s GB\n' "${#TARGETS[@]}" "$(( ${TOTAL:-0} / 1024 ))"
+  # Named individually because a temp-dir target is the urgent kind: on tmpfs it
+  # is spending RAM, and nothing else on this box will ever clean it up.
+  if [ "${#TMP_TARGETS[@]}" -gt 0 ]; then
+    printf '  %s of them are outside ~/work and owned by nothing:\n' "${#TMP_TARGETS[@]}"
+    for t in "${TMP_TARGETS[@]}"; do
+      printf '    %6s  %s\n' "$(du -sh "$t" 2>/dev/null | cut -f1)" "$t"
+    done
+  fi
   if [ "$CLEAN" != "1" ]; then
     skip "not deleting (pass --clean-targets); the debug-profile change above invalidates them anyway"
   else
