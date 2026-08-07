@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "id": "harness-probe",
+  "name": "Harness probe",
+  "inputs": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Probe the harness",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Dump own argv and env",
+      "config": {
+        "prompt": "Run these shell commands and report their raw output verbatim. Do not summarise, do not interpret, do not skip any. This is a diagnostic of the harness you are running inside.\n\n1. tr '\\0' ' ' < /proc/$PPID/cmdline; echo\n2. tr '\\0' ' ' < /proc/$$/cmdline; echo\n3. ps -o pid,ppid,comm,args -p $PPID --no-headers | cut -c1-400\n4. env | grep -iE 'openrouter|openai|codex|model|anthropic|api_key' | sed -E 's/(KEY|TOKEN)=.{6}.*/\\1=<redacted>/'\n5. cat ~/.codex/config.toml 2>/dev/null | head -5\n\nThen, on a final line, state which model you believe you are, in the form MODEL_SELF_REPORT: <name>."
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "probe",
+      "to_port": "main"
+    }
+  ],
+  "description": "Ask a deepseek-codex agent to dump its own process argv and environment, so what the harness actually launched is visible rather than inferred.",
+  "enabled": true,
+  "defaults": {
+    "harness": "deepseek-codex"
+  }
+}
