@@ -58,13 +58,16 @@ event = "Notification"
 type = "command"
 command = "\"$HOME/work/workspace/bin/afplay\" /System/Library/Sounds/Ping.aiff"
 
-# Claude only: `--hook` parses Claude Code's PostToolUse payload (tool_input,
-# session_id, cwd), which no other harness sends in that shape. Medulla drops a
-# hook for a harness that cannot run it, but it cannot know this one would
-# misread a payload it *can* deliver.
+# Every harness, which is the point of declaring it here: this used to be wired
+# twice, in claude/settings.json and codex/hooks.json, and not at all for the
+# rest. Nothing in `--hook` is Claude-shaped — it reads `.tool_input.workdir`,
+# `.cwd` and `.session_id` through `//` fallbacks, and writes nothing to stdout,
+# so a harness that sends none of them still checkpoints correctly using its own
+# working directory. The one degradation is that a payload without a session id
+# shares a counter with its siblings in the same repository, which only matters
+# if AUTO_COMMIT_EVERY is raised above 1.
 [[hooks]]
 event = "PostToolUse"
 matcher = "*"
 type = "command"
 command = "\"$HOME/work/workspace/bin/auto-commit\" --hook"
-harnesses = ["claude"]
