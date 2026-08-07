@@ -9,39 +9,11 @@
   },
   "model": "opus",
   "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/work/workspace/bin/afplay\" /System/Library/Sounds/Glass.aiff"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/work/workspace/bin/afplay\" /System/Library/Sounds/Ping.aiff"
-          }
-        ]
-      }
-    ],
+    "Stop": [],
+    "Notification": [],
     "UserPromptSubmit": [],
     "PreToolUse": [],
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
-          }
-        ]
-      }
-    ],
+    "PostToolUse": [],
     "PostToolUseFailure": [],
     "PermissionRequest": []
   },
@@ -63,5 +35,8 @@
   "theme": "auto",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "env": {
+    "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT": "1800000"
+  }
 }
