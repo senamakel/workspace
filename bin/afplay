@@ -32,6 +32,15 @@ if [ -x "$NATIVE_PLAYER" ] && ! [ "$NATIVE_PLAYER" -ef "$0" ]; then
   exec "$NATIVE_PLAYER" "$@"
 fi
 
+# `[ -w /dev/tty ]` is not the question. The node is world-writable, so the test
+# passes even for a process with no controlling terminal — and the open then
+# fails with ENXIO, which under `set -e` makes a notification hook exit 1 and
+# report an error for a sound nobody needed. Only an attempted open can tell,
+# and its failure is not an error here: no terminal simply means no bell.
+bell_to_tty() {
+  { printf '\a' >/dev/tty; } 2>/dev/null
+}
+
 OUTPUT_MODE="${AFPLAY_OUTPUT:-auto}"
 case "$OUTPUT_MODE" in
   silent)
@@ -42,16 +51,12 @@ case "$OUTPUT_MODE" in
     exit 0
     ;;
   tty)
-    if [ -w /dev/tty ]; then
-      printf '\a' >/dev/tty
-    fi
+    bell_to_tty || true
     exit 0
     ;;
   auto)
-    if [ -w /dev/tty ]; then
-      printf '\a' >/dev/tty
-    elif [ -t 1 ]; then
-      printf '\a'
+    if ! bell_to_tty; then
+      [ -t 1 ] && printf '\a' || true
     fi
     exit 0
     ;;
