@@ -307,7 +307,11 @@ while IFS= read -r -d '' entry; do
     R*|C*) path="${path##* -> }" ;;
   esac
   [ -n "$path" ] && CHANGED+=("$path")
-done < <(git status --porcelain -z 2>/dev/null || true)
+# `--untracked-files=all` is load-bearing here.  Git's default `normal` mode
+# collapses an untracked directory to (for example) `src/`; `atomic-commit`
+# correctly refuses directory arguments, so a freshly initialized checkout
+# could never receive its first checkpoint.
+done < <(git status --porcelain=v1 -z --untracked-files=all 2>/dev/null || true)
 
 if [ "${#CHANGED[@]}" -eq 0 ]; then
   emit clean "nothing to commit"
