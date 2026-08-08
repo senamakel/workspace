@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # atomic-commit — commit only an explicit list of files.
 #
-# Usage: atomic-commit [--json] "<scoped message>" -- <path> [<path>...]
+# Usage: atomic-commit [--json] [--allow-whitespace] "<scoped message>" -- <path> [<path>...]
 #
 # Unstages the repository first without discarding working-tree changes, then
 # stages and commits only the named repo-relative files. Directories, unchanged
@@ -25,6 +25,7 @@ require() {
 }
 
 FORMAT="text"
+ALLOW_WHITESPACE=0
 MESSAGE=""
 SAW_SEPARATOR=0
 PATHS=()
@@ -35,6 +36,12 @@ while [ $# -gt 0 ]; do
       [ "$SAW_SEPARATOR" -eq 0 ] \
         || { fail "--json must appear before the commit message"; usage; exit 1; }
       FORMAT="json"
+      shift
+      ;;
+    --allow-whitespace)
+      [ "$SAW_SEPARATOR" -eq 0 ] && [ -z "$MESSAGE" ] \
+        || { fail "--allow-whitespace must appear before the commit message"; usage; exit 1; }
+      ALLOW_WHITESPACE=1
       shift
       ;;
     --)
@@ -141,7 +148,12 @@ if git diff --cached --quiet -- "${NORMALIZED_PATHS[@]}"; then
   fail "explicit paths produced no staged changes"
   exit 1
 fi
-git diff --cached --check -- "${NORMALIZED_PATHS[@]}"
+# Manual commits keep the formatting gate. Checkpoint callers may opt out: a
+# trailing space is worth reporting, but it must not prevent saving unrelated
+# in-progress work. Credential and conflict guards remain the caller's job.
+if [ "$ALLOW_WHITESPACE" -eq 0 ]; then
+  git diff --cached --check -- "${NORMALIZED_PATHS[@]}"
+fi
 
 if ! COMMIT_OUTPUT=$(git commit -m "$MESSAGE" -- "${NORMALIZED_PATHS[@]}" 2>&1); then
   fail "git commit failed"

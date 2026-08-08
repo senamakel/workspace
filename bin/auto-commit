@@ -671,8 +671,8 @@ if [ ! -x "$ATOMIC" ]; then
   emit skipped "atomic-commit not found beside this command"
   exit 0
 fi
-if ! OUTPUT="$(cd "$TOP" && "$ATOMIC" "$MESSAGE" -- "${STAGE[@]}" 2>&1)"; then
-  # A rejected path, a whitespace error, nothing actually staged. Never fatal:
+if ! OUTPUT="$(cd "$TOP" && "$ATOMIC" --allow-whitespace "$MESSAGE" -- "${STAGE[@]}" 2>&1)"; then
+  # A rejected path or nothing actually staged. Never fatal:
   # the working tree is untouched and the next tick tries again.
   emit skipped "atomic-commit refused: $(printf '%s' "$OUTPUT" | head -2 | tr '\n' ' ')"
   exit 0
