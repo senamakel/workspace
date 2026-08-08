@@ -44,6 +44,13 @@ selectionFg = "black"
 
 [workflows]
 runTimeoutSecs = 10800
+# The most harness tasks one run may have in flight, and — because `mcp`
+# leaves `maxInFlight` unset — also the most concurrent MCP-dispatched tasks
+# one grant may hold. That second meaning is the one that bites: a session
+# babysitting twenty-odd PRs dispatches every run through a single grant, so
+# the default 4 throttles the whole fleet to four working harnesses no matter
+# how many runs are admitted. Sized for a box that can serve ten.
+maxParallelAgents = 10
 
 # Hooks Medulla installs into every harness it launches, declared once here
 # instead of once per harness in each harness's own config language. These used
