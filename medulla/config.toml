@@ -43,7 +43,7 @@ primary = "red"
 selectionFg = "black"
 
 [workflows]
-runTimeoutSecs = 9600
+runTimeoutSecs = 10800
 
 # Hooks Medulla installs into every harness it launches, declared once here
 # instead of once per harness in each harness's own config language. These used

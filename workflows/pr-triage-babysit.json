@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "id": "pr-triage-babysit",
+  "name": "PR triage and babysit",
+  "inputs": [
+    {
+      "name": "pr",
+      "type": "number",
+      "description": "The pull request number.",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "trusted_authors",
+      "type": "string",
+      "description": "Comma-separated GitHub logins whose PRs skip scrutiny entirely and go straight to babysitting. Matched case-insensitively.",
+      "required": false,
+      "default": "senamakel"
+    },
+    {
+      "name": "max_iterations",
+      "type": "number",
+      "description": "Passed to the babysitter child workflow: how many babysit-and-merge passes before giving up.",
+      "required": false,
+      "default": 16
+    },
+    {
+      "name": "ci_wait_secs",
+      "type": "number",
+      "description": "Passed to the babysitter child workflow: how long a pass waits for in-flight CI checks to settle.",
+      "required": false,
+      "default": 1200
+    }
+  ],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Triage a PR",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "collect",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Read the PR and its context",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\ngit rev-parse --git-dir >/dev/null 2>&1 || { echo \"not a git checkout: $(pwd)\" >&2; exit 1; }\n\n# Same remote resolution the babysitter uses: prefer the canonical org, and\n# prefer `upstream` within it, so a fork checkout still names the real repo.\nnormalize() { printf '%s' \"$1\" | sed -E 's#^git\\+##; s#/+$##; s#\\.git$##; s#^(https?://|ssh://)?(git@)?[^/:]+[:/]##'; }\nslug=\"\"; remote=\"\"\nfor r in $(git remote); do\n  u=$(git remote get-url \"$r\" 2>/dev/null || true)\n  [ -n \"$u\" ] || continue\n  case \"$u\" in *github.com*) ;; *) continue ;; esac\n  s=$(normalize \"$u\")\n  case \"${s%%/*}\" in\n    tinyhumansai|tinyhumans)\n      if [ -z \"$slug\" ] || [ \"$r\" = upstream ]; then slug=\"$s\"; remote=\"$r\"; fi\n      ;;\n  esac\ndone\nif [ -z \"$slug\" ]; then\n  for r in upstream origin $(git remote); do\n    u=$(git remote get-url \"$r\" 2>/dev/null || true)\n    [ -n \"$u\" ] || continue\n    case \"$u\" in *github.com*) ;; *) continue ;; esac\n    slug=$(normalize \"$u\"); remote=\"$r\"; break\n  done\nfi\nif [ -z \"$slug\" ]; then\n  echo \"no github remote in $(pwd); remotes: $(git remote | tr '\\n' ' ')\" >&2\n  exit 1\nfi\n\ninfo=$(gh pr view \"$PR\" --repo \"$slug\" --json number,url,title,body,state,isDraft,author,authorAssociation,createdAt,updatedAt,additions,deletions,changedFiles,files,labels,baseRefName,headRefName,commits,mergeable,mergeStateStatus,isCrossRepository)\n\n# Every other open PR, so the scrutiniser can spot a duplicate without going\n# hunting for one. Cheap, and it is the check most often skipped.\nothers=$(gh pr list --repo \"$slug\" --state open --limit 100 --json number,title,author,updatedAt \\\n  --jq '[.[]|{number,title,author:(.author.login // \"\"),updated:.updatedAt}]' 2>/dev/null || echo '[]')\n\n# A patch excerpt, not the patch: enough for a first read, and the agent is told\n# to fetch the whole thing itself. Truncating here keeps a 40k-line PR from\n# swallowing the prompt.\npatch=$( (gh pr diff \"$PR\" --repo \"$slug\" --patch 2>/dev/null || true) | head -c 12000 || true)\n\n# The author allowlist skips scrutiny entirely. Matched case-insensitively on a\n# comma-separated list so `senamakel` and `Senamakel` are the same person.\nlogin=$(jq -r '.author.login // \"\"' <<<\"$info\")\ntrusted=$(jq -rn --arg login \"$login\" --arg list \"${TRUSTED:-}\" '\n  ($list|ascii_downcase|split(\",\")|map(sub(\"^ +\";\"\")|sub(\" +$\";\"\"))|map(select(length>0))) as $t\n  | (($t | index($login|ascii_downcase)) != null)')\n\njq -n --arg repo \"$slug\" --arg remote \"$remote\" --arg dir \"$(pwd)\" \\\n      --argjson info \"$info\" --argjson others \"$others\" --arg patch \"$patch\" \\\n      --argjson trusted \"$trusted\" '\n{repo:$repo, remote:$remote, workdir:$dir,\n pr:$info.number, url:$info.url, title:($info.title // \"\"),\n body:(($info.body // \"\")[0:4000]),\n state:$info.state, draft:$info.isDraft,\n author:($info.author.login // \"\"), author_association:($info.authorAssociation // \"\"),\n created:$info.createdAt, updated:$info.updatedAt,\n base:$info.baseRefName, head:$info.headRefName,\n additions:$info.additions, deletions:$info.deletions, changed_files:$info.changedFiles,\n files:(($info.files // [])|map({path:.path, additions:.additions, deletions:.deletions})),\n labels:(($info.labels // [])|map(.name)),\n commits:(($info.commits // [])|map({message:(.messageHeadline // \"\"), body:((.messageBody // \"\")[0:300])})),\n commit_count:(($info.commits // [])|length),\n mergeable:$info.mergeable, merge_state:$info.mergeStateStatus,\n cross_repo:$info.isCrossRepository,\n other_open_prs:$others,\n patch_excerpt:$patch,\n patch_truncated:(($patch|length) >= 12000),\n trusted_author:$trusted,\n open:(($info.state // \"\") == \"OPEN\")}'\n",
+          "env": {
+            "PR": "=.inputs.pr | tostring",
+            "TRUSTED": "=.inputs.trusted_authors"
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "open_gate",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Still open?",
+      "config": {
+        "field": "=(.nodes.collect.item.json.output.open == true) and (.nodes.collect.item.json.output.draft != true)"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "trusted_gate",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Allowlisted author - skip scrutiny?",
+      "config": {
+        "field": "=.nodes.collect.item.json.output.trusted_author == true"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "scrutinize",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Is this PR worth triaging?",
+      "config": {
+        "prompt": "=\"You are the gatekeeper for pull request #\\(.inputs.pr) in \\(.nodes.collect.item.json.output.repo). You decide exactly one thing: is this pull request worth an engineer spending real time on it, or should it be closed?\\n\\nWORK READ-ONLY. Do not edit files, do not commit, do not push, do not comment on the PR and do not close it. Your entire output is a judgement; a later step acts on it. Do not check the PR branch out over the working tree - the repository checkout at \\(.nodes.collect.item.json.output.workdir) belongs to someone else. cd there to READ the code, nothing more.\\n\\nWhat the PR says about itself:\\n\\(.nodes.collect.item.json.output | tojson)\\n\\nINVESTIGATE BEFORE YOU JUDGE. Everything above is the author claiming something, not evidence that it is true. A title that sounds sensible is not a reason to pass a PR, and a title that sounds odd is not a reason to close one. Go and look:\\n  - `gh pr diff \\(.inputs.pr) --repo \\(.nodes.collect.item.json.output.repo)` for the whole patch, not the excerpt above\\n  - read every file it touches IN THE CHECKOUT, plus the code around them, and establish whether the problem it claims to fix is real and still present on \\(.nodes.collect.item.json.output.base)\\n  - `git log` and `git log -S<token>` over the touched code, to see whether it was already fixed, or was deliberately written the way it is\\n  - the repository AGENTS.md, CLAUDE.md, README and Makefile/manifest for what is in scope and what the conventions are\\n  - the other open PRs listed above, for one that does the same job further along\\n  - `gh pr view \\(.inputs.pr) --repo \\(.nodes.collect.item.json.output.repo) --comments` for what reviewers already said\\n\\nCLOSE it only when you can name the specific evidence for one of these:\\n  - spam, or machine-generated filler with no purpose: whitespace churn, comment reflow, README padding, renames that carry no behaviour change\\n  - the problem it claims to fix does not exist in this codebase, or was already fixed - name the commit or the current code that shows it\\n  - it duplicates another open PR that is further along - name the number\\n  - it edits vendored, generated or third-party code this repository does not own (for example anything under vendor/), where the fix belongs upstream\\n  - a sweeping unrequested rewrite, or new dependencies, frameworks or config the repository has no use for\\n  - hostile: data exfiltration, obfuscated payloads, credential or token access, build/CI tampering, a dependency swapped for a lookalike, a postinstall hook\\n  - abandoned against a codebase that has moved so far that nothing in it still applies\\n\\nDO NOT close a PR because it is small, imperfect, failing CI, conflicted, out of date with the base branch, badly described, from a first-time contributor, or would need a round of review comments. Every one of those is precisely what the babysitting step exists to fix, and closing one of them is the most damaging mistake you can make here.\\n\\nTHE BAR IS DELIBERATELY ASYMMETRIC. Babysitting a weak PR costs some machine time. Closing a good one destroys work somebody did for free and tells them not to come back. So when the evidence is thin, when you are extrapolating, or when the honest answer is that you are not sure - set worthy to true and let it through. Closing needs concrete evidence you can point at, and a downstream gate independently refuses to close on a confidence below 0.8.\\n\\nFinish your reply with one JSON object and nothing after it:\\n  worthy         boolean - true to hand it to the babysitter, false to close it\\n  confidence     number between 0 and 1 - how sure you are of that call\\n  category       one of: genuine, spam, duplicate, already_fixed, obsolete, out_of_scope, vendored, malicious, unclear\\n  reason         one or two sentences, for the run log\\n  evidence       array of strings; each one names the file and line, commit, PR number or command output that backs the call. An empty array means you did not investigate - go back and do it.\\n  close_comment  markdown that gets posted to the PR if it is closed. Address the author directly, thank them for the time they put in, state plainly and specifically why it is being closed and point at the same evidence, and say what a contribution that would land looks like. Never condescending, never a form letter. Empty string when worthy is true.\"",
+        "harness": "claude",
+        "output_parser": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "worthy": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "category": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "close_comment": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "worthy",
+              "confidence",
+              "category",
+              "reason"
+            ]
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "verdict",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Worth babysitting?",
+      "config": {
+        "field": "=(.nodes.scrutinize.item.json.worthy != false) or ((.nodes.scrutinize.item.json.confidence // 0) < 0.8) or (((.nodes.scrutinize.item.json.close_comment // \"\") | length) == 0)"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "babysit",
+      "kind": "sub_workflow",
+      "type_version": 1,
+      "name": "Babysit it to green and merged",
+      "config": {
+        "workflow_id": "pr-babysitter",
+        "inputs": {
+          "pr": "=.inputs.pr",
+          "ci_wait_secs": "=.inputs.ci_wait_secs",
+          "max_iterations": "=.inputs.max_iterations"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "close",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Close it with the reason",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\n\n# Every gate that must hold before a PR is closed is re-checked here rather than\n# trusted from the branch that routed us: the scrutiniser is a model, and this\n# node is the last thing standing between a wrong call and a contributor losing\n# their work. A refusal here fails the run loudly instead of closing quietly.\n[ \"${TRUSTED_AUTHOR:-false}\" = \"false\" ] || { echo \"refusing to close a PR by an allowlisted author\" >&2; exit 1; }\n[ \"${STATE:-}\" = \"OPEN\" ] || { echo \"PR is ${STATE:-unknown}, not OPEN; nothing to close\" >&2; exit 1; }\n[ \"${WORTHY:-true}\" = \"false\" ] || { echo \"refusing to close a PR the scrutiniser judged worthy\" >&2; exit 1; }\nawk -v c=\"${CONFIDENCE:-0}\" 'BEGIN{exit !(c+0 >= 0.8)}' \\\n  || { echo \"confidence ${CONFIDENCE:-0} below the 0.8 close threshold\" >&2; exit 1; }\n[ -n \"${COMMENT:-}\" ] || { echo \"no close comment was written; refusing to close silently\" >&2; exit 1; }\n\nbody=\"$COMMENT\n\n<sub>Closed by the automated PR triage workflow after reading the diff against the codebase. If this call is wrong, say so and reopen it - that is a normal thing to do, not an escalation.</sub>\"\n\ngh pr close \"$PR\" --repo \"$REPO\" --comment \"$body\"\n\njq -n --arg repo \"$REPO\" --argjson pr \"$PR\" --arg reason \"${REASON:-}\" \\\n      --arg category \"${CATEGORY:-}\" --arg confidence \"${CONFIDENCE:-}\" '\n{action:\"closed\", repo:$repo, pr:$pr, category:$category,\n confidence:($confidence|tonumber? // null), reason:$reason}'\n",
+          "env": {
+            "PR": "=.inputs.pr | tostring",
+            "REPO": "=.nodes.collect.item.json.output.repo",
+            "STATE": "=.nodes.collect.item.json.output.state",
+            "TRUSTED_AUTHOR": "=.nodes.collect.item.json.output.trusted_author | tostring",
+            "WORTHY": "=.nodes.scrutinize.item.json.worthy | tostring",
+            "CONFIDENCE": "=.nodes.scrutinize.item.json.confidence | tostring",
+            "CATEGORY": "=.nodes.scrutinize.item.json.category // \"\"",
+            "REASON": "=.nodes.scrutinize.item.json.reason // \"\"",
+            "COMMENT": "=.nodes.scrutinize.item.json.close_comment // \"\""
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "report",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Final report",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "env": {
+            "REPO": "=.nodes.collect.item.json.output.repo // \"\"",
+            "PR": "=.inputs.pr | tostring",
+            "META": "=(.nodes.collect.item.json.output // null) | tojson",
+            "VERDICT": "=(.nodes.scrutinize.item.json // null) | tojson",
+            "CLOSED": "=(.nodes.close.item.json.output // null) | tojson",
+            "BABYSAT": "=(.nodes.babysit.item.json // null) | tojson"
+          },
+          "script": "set -euo pipefail\njq -n --arg repo \"${REPO:-}\" --argjson pr \"${PR:-null}\" --argjson meta \"${META:-null}\" \\\n      --argjson verdict \"${VERDICT:-null}\" --argjson closed \"${CLOSED:-null}\" \\\n      --argjson babysat \"${BABYSAT:-null}\" '\n{repo:$repo, pr:$pr,\n url:($meta.url // \"\"), title:($meta.title // \"\"), author:($meta.author // \"\"),\n outcome:(if $closed != null then \"closed\"\n          elif $babysat != null then \"handed_to_babysitter\"\n          elif (($meta.open // false) != true) then \"skipped_not_open\"\n          else \"no_action\" end),\n scrutiny_skipped:(($meta.trusted_author // false) == true),\n verdict:$verdict, close_result:$closed, babysit_result:$babysat}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "collect",
+      "to_port": "main"
+    },
+    {
+      "from_node": "collect",
+      "from_port": "main",
+      "to_node": "open_gate",
+      "to_port": "main"
+    },
+    {
+      "from_node": "open_gate",
+      "from_port": "true",
+      "to_node": "trusted_gate",
+      "to_port": "main"
+    },
+    {
+      "from_node": "open_gate",
+      "from_port": "false",
+      "to_node": "report",
+      "to_port": "main"
+    },
+    {
+      "from_node": "trusted_gate",
+      "from_port": "true",
+      "to_node": "babysit",
+      "to_port": "main"
+    },
+    {
+      "from_node": "trusted_gate",
+      "from_port": "false",
+      "to_node": "scrutinize",
+      "to_port": "main"
+    },
+    {
+      "from_node": "scrutinize",
+      "from_port": "main",
+      "to_node": "verdict",
+      "to_port": "main"
+    },
+    {
+      "from_node": "verdict",
+      "from_port": "true",
+      "to_node": "babysit",
+      "to_port": "main"
+    },
+    {
+      "from_node": "verdict",
+      "from_port": "false",
+      "to_node": "close",
+      "to_port": "main"
+    },
+    {
+      "from_node": "babysit",
+      "from_port": "main",
+      "to_node": "report",
+      "to_port": "main"
+    },
+    {
+      "from_node": "close",
+      "from_port": "main",
+      "to_node": "report",
+      "to_port": "main"
+    }
+  ],
+  "description": "Scrutinise a pull request against the actual codebase before spending any effort on it: hand it to the PR babysitter if it is a genuine, relevant contribution, or close it with a specific, evidenced reason if it is not. PRs by allowlisted authors skip scrutiny entirely.",
+  "enabled": true,
+  "defaults": {
+    "harness": "deepseek-codex"
+  }
+}
