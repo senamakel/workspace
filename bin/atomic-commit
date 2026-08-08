@@ -97,8 +97,13 @@ for supplied_path in "${PATHS[@]}"; do
     fail "directories are not allowed; list each file explicitly: $supplied_path"
     exit 1
   fi
+  # A path deleted with `git rm` is intentionally absent from both the
+  # worktree and index.  It is still a valid explicit commit path when HEAD
+  # contains it, which is the state auto-commit receives after another tool
+  # staged a deletion before the checkpoint runs.
   if [ ! -e "$normalized_path" ] && [ ! -L "$normalized_path" ] &&
-    ! git ls-files --error-unmatch -- "$normalized_path" >/dev/null 2>&1; then
+    ! git ls-files --error-unmatch -- "$normalized_path" >/dev/null 2>&1 &&
+    ! git cat-file -e "HEAD:$normalized_path" 2>/dev/null; then
     fail "path does not exist and is not a tracked deletion: $supplied_path"
     exit 1
   fi

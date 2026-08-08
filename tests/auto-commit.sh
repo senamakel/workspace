@@ -484,6 +484,29 @@ test_hand_written_commits_carry_no_device_trailer() {
     "a hand-written commit is not marked as automatic"
 }
 
+test_commits_a_pre_staged_deletion() {
+  local repo state stub before
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo staged-deletion)"
+  state="$(state_dir staged-deletion)"
+  stub="$(make_stub stageddeletion "chore: remove obsolete file")"
+  before="$(count_commits "$repo")"
+
+  # `git rm` removes the path from the index before auto-commit delegates to
+  # atomic-commit.  The deletion remains a valid checkpoint because HEAD still
+  # contains the file.
+  git -C "$repo" rm -q base.txt
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  assert_eq "$((before + 1))" "$(count_commits "$repo")" \
+    "a pre-staged deletion is committed"
+  if git -C "$repo" cat-file -e HEAD:base.txt 2>/dev/null; then
+    fail_test "the deleted file remains in HEAD"
+  fi
+  assert_eq "" "$(git -C "$repo" status --porcelain)" \
+    "the tree is clean after committing a deletion"
+}
+
 test_bails_on_an_unmerged_index() {
   local repo state stub out
   command -v jq >/dev/null 2>&1 || return 0
@@ -700,6 +723,7 @@ run_test "commits on main and master" test_commits_on_main
 run_test "refuses a detached HEAD" test_refuses_a_detached_head
 run_test "marks the device that made the commit" test_marks_the_device_that_made_the_commit
 run_test "hand-written commits carry no device trailer" test_hand_written_commits_carry_no_device_trailer
+run_test "commits a pre-staged deletion" test_commits_a_pre_staged_deletion
 run_test "bails on an unmerged index" test_bails_on_an_unmerged_index
 run_test "bails on conflict markers in a file" test_bails_on_conflict_markers_in_a_file
 run_test "prose about conflicts is not mistaken for one" test_prose_about_conflicts_is_not_mistaken_for_one
