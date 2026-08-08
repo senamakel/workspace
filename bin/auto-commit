@@ -208,8 +208,8 @@ GIT_DIR="$(git rev-parse --absolute-git-dir)"
 # routinely the personal fork of an allowlisted upstream; only those two remotes
 # are consulted, so an incidental third remote cannot admit a repository.
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
-tinyhumansai/openhuman:tinyhumansai/opencompany:tinyhumansai/medulla:\
-senamakel/openhuman:senamakel/opencompany:senamakel/medulla}"
+tinyhumansai/openhuman:tinyhumansai/opencompany:tinyhumansai/medulla:tinyhumansai/tinysweeper:\
+senamakel/openhuman:senamakel/opencompany:senamakel/medulla:senamakel/tinysweeper}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
 # git@host:owner/repo.git, https://host/owner/repo, ssh://git@host/owner/repo/

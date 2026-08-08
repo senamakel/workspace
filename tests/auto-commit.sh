@@ -619,10 +619,10 @@ test_commits_only_in_allowlisted_repositories() {
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq 1 "$(count_commits "$repo")" "a remoteless repository is not committed"
 
-  # Each of the three defaults is accepted, in either URL form.
+  # Each default is accepted, in either URL form.
   local slug n=1
-  for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla \
-              senamakel/openhuman senamakel/opencompany senamakel/medulla; do
+  for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla tinyhumansai/tinysweeper \
+              senamakel/openhuman senamakel/opencompany senamakel/medulla senamakel/tinysweeper; do
     git -C "$repo" remote add origin "git@github.com:$slug.git"
     AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
     assert_eq "$((n + 1))" "$(count_commits "$repo")" "$slug is allowlisted"
