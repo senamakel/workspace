@@ -328,12 +328,17 @@ SECRET_GLOBS=(
   'id_rsa*' 'id_ed25519*' '*.ppk' '*credentials*' '*secret*' '*.kdbx'
   '.npmrc' '.netrc' '*.token'
 )
+# Built-in patterns are file names, not directory names: application source
+# commonly lives below a `credentials/` domain without containing credentials.
+# User-supplied skips still match the complete repository-relative path so a
+# caller can deliberately withhold a particular directory or file.
+EXTRA_SKIP_GLOBS=()
 # Bash 3.2, which is what macOS ships, treats an empty array as unbound under
 # `set -u`, so the caller's extra globs are appended rather than expanded beside
 # the defaults.
 if [ -n "${AUTO_COMMIT_SKIP:-}" ]; then
   while IFS= read -r glob; do
-    [ -z "$glob" ] || SECRET_GLOBS+=("$glob")
+    [ -z "$glob" ] || EXTRA_SKIP_GLOBS+=("$glob")
   done < <(printf '%s' "$AUTO_COMMIT_SKIP" | tr ':' '\n')
 fi
 
@@ -410,8 +415,15 @@ for path in "${CHANGED[@]}"; do
   for glob in "${SECRET_GLOBS[@]}"; do
     [ -n "$glob" ] || continue
     # shellcheck disable=SC2053
-    if [[ "$base" == $glob || "$path" == $glob ]]; then secret=1; break; fi
+    if [[ "$base" == $glob ]]; then secret=1; break; fi
   done
+  if [ "$secret" = "0" ]; then
+    for glob in "${EXTRA_SKIP_GLOBS[@]}"; do
+      [ -n "$glob" ] || continue
+      # shellcheck disable=SC2053
+      if [[ "$base" == $glob || "$path" == $glob ]]; then secret=1; break; fi
+    done
+  fi
   if [ "$secret" = "1" ]; then
     SKIPPED+=("$path")
     continue

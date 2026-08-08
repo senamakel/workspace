@@ -388,6 +388,23 @@ test_ordinary_code_is_not_flagged() {
   assert_eq "" "$(git -C "$repo" status --porcelain)" "nothing was withheld"
 }
 
+test_commits_source_below_a_credentials_directory() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo credentials-domain)"
+  state="$(state_dir credentials-domain)"
+  stub="$(make_stub credentialsdomain "feat: add credential domain logic")"
+  mkdir -p "$repo/src/security/credentials"
+  printf 'pub fn session_support() {}\n' > "$repo/src/security/credentials/session_support.rs"
+
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  assert_eq 2 "$(count_commits "$repo")" \
+    "source below a credentials directory commits normally"
+  assert_eq "" "$(git -C "$repo" status --porcelain)" \
+    "the source file is not withheld by its parent directory"
+}
+
 test_commits_on_main() {
   local repo state stub v
   command -v jq >/dev/null 2>&1 || return 0
@@ -719,6 +736,7 @@ run_test "never commits a credential" test_never_commits_a_credential
 run_test "never commits a key pasted into source" test_never_commits_a_key_pasted_into_source
 run_test "the content scan covers common key shapes" test_content_scan_covers_common_key_shapes
 run_test "ordinary code is not flagged" test_ordinary_code_is_not_flagged
+run_test "commits source below a credentials directory" test_commits_source_below_a_credentials_directory
 run_test "commits on main and master" test_commits_on_main
 run_test "refuses a detached HEAD" test_refuses_a_detached_head
 run_test "marks the device that made the commit" test_marks_the_device_that_made_the_commit
