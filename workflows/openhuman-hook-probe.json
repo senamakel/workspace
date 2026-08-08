@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "id": "openhuman-hook-probe",
+  "name": "OpenHuman hook probe",
+  "inputs": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Probe embedded OpenHuman",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Edit a file and report the environment",
+      "config": {
+        "prompt": "You are running as a coding agent. Do all of the following, in order, using your shell and file tools. Report the raw output of every command verbatim; do not summarise.\n\nThe checkout you must work in is exactly:\n/home/enamakel/work/workflow-medulla/worktrees/oh-harness-eval/medulla-public\n\n1. Report your own working directory: run `pwd`.\n2. Run `ls /home/enamakel/work/workflow-medulla/worktrees/oh-harness-eval/medulla-public | head`.\n3. Using a file-writing tool (not a shell heredoc), create the file `/home/enamakel/work/workflow-medulla/worktrees/oh-harness-eval/medulla-public/OH_PROBE.md` containing exactly these two lines:\n\n# OpenHuman probe\nwritten by the embedded OpenHuman harness\n\n4. Run `cd /home/enamakel/work/workflow-medulla/worktrees/oh-harness-eval/medulla-public && git status --short && git log --oneline -3`.\n5. List the names of the tools you have available to you.\n6. On a final line, state which model you are, in the form MODEL_SELF_REPORT: <name>."
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "probe",
+      "to_port": "main"
+    }
+  ],
+  "description": "Run one turn on the embedded OpenHuman harness that edits a file in a real checkout, so it is visible whether the turn honours a working directory and whether the PostToolUse auto-commit hook fires in-process.",
+  "enabled": true,
+  "defaults": {
+    "harness": "openhuman"
+  }
+}
