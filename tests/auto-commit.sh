@@ -524,6 +524,28 @@ test_commits_a_pre_staged_deletion() {
     "the tree is clean after committing a deletion"
 }
 
+test_commits_a_pre_staged_rename() {
+  local repo state stub before
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo staged-rename)"
+  state="$(state_dir staged-rename)"
+  stub="$(make_stub stagedrename "refactor: rename base file")"
+  before="$(count_commits "$repo")"
+
+  git -C "$repo" mv base.txt renamed.txt
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  assert_eq "$((before + 1))" "$(count_commits "$repo")" \
+    "a pre-staged rename is committed"
+  if git -C "$repo" cat-file -e HEAD:base.txt 2>/dev/null; then
+    fail_test "the renamed source remains in HEAD"
+  fi
+  git -C "$repo" cat-file -e HEAD:renamed.txt 2>/dev/null \
+    || fail_test "the rename destination is absent from HEAD"
+  assert_eq "" "$(git -C "$repo" status --porcelain)" \
+    "the tree is clean after committing a rename"
+}
+
 test_bails_on_an_unmerged_index() {
   local repo state stub out
   command -v jq >/dev/null 2>&1 || return 0
@@ -742,6 +764,7 @@ run_test "refuses a detached HEAD" test_refuses_a_detached_head
 run_test "marks the device that made the commit" test_marks_the_device_that_made_the_commit
 run_test "hand-written commits carry no device trailer" test_hand_written_commits_carry_no_device_trailer
 run_test "commits a pre-staged deletion" test_commits_a_pre_staged_deletion
+run_test "commits a pre-staged rename" test_commits_a_pre_staged_rename
 run_test "bails on an unmerged index" test_bails_on_an_unmerged_index
 run_test "bails on conflict markers in a file" test_bails_on_conflict_markers_in_a_file
 run_test "prose about conflicts is not mistaken for one" test_prose_about_conflicts_is_not_mistaken_for_one

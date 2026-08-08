@@ -303,12 +303,22 @@ fi
 # --porcelain omits ignored files, so build artifacts never appear here.
 CHANGED=()
 while IFS= read -r -d '' entry; do
+  status="${entry:0:2}"
   path="${entry:3}"
-  # Renames read "R  old -> new"; the new path is what needs staging.
-  case "$entry" in
-    R*|C*) path="${path##* -> }" ;;
+  source_path=""
+  is_rename=0
+  # With `-z`, porcelain v1 writes a rename/copy as the destination path in
+  # this record followed by a second NUL-delimited source path.  Consume that
+  # source record here; otherwise it is mistaken for a new status record and
+  # its first three filename characters are discarded.
+  case "$status" in
+    *R*) is_rename=1; IFS= read -r -d '' source_path || true ;;
+    *C*) IFS= read -r -d '' source_path || true ;;
   esac
   [ -n "$path" ] && CHANGED+=("$path")
+  # `atomic-commit` first restores the index, so it needs the old side too in
+  # order to re-stage the deletion that completes a rename.
+  [ "$is_rename" = "1" ] && [ -n "$source_path" ] && CHANGED+=("$source_path")
 # `--untracked-files=all` is load-bearing here.  Git's default `normal` mode
 # collapses an untracked directory to (for example) `src/`; `atomic-commit`
 # correctly refuses directory arguments, so a freshly initialized checkout
