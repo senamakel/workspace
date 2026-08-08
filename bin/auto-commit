@@ -209,9 +209,9 @@ GIT_DIR="$(git rev-parse --absolute-git-dir)"
 # are consulted, so an incidental third remote cannot admit a repository.
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
 tinyhumansai/openhuman:tinyhumansai/opencompany:tinyhumansai/medulla:tinyhumansai/tinysweeper:\
-tinyhumansai/tinyagents:tinyhumansai/tinychannels:tinyhumansai/tinycortex:tinyhumansai/tinyflows:\
+tinyhumansai/tinyagents:tinyhumansai/tinybus:tinyhumansai/tinychannels:tinyhumansai/tinycortex:tinyhumansai/tinyflows:\
 senamakel/openhuman:senamakel/opencompany:senamakel/medulla:senamakel/tinysweeper:\
-senamakel/tinyagents:senamakel/tinychannels:senamakel/tinycortex:senamakel/tinyflows}"
+senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:senamakel/tinycortex:senamakel/tinyflows}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
 # git@host:owner/repo.git, https://host/owner/repo, ssh://git@host/owner/repo/
