@@ -86,7 +86,14 @@ for supplied_path in "${PATHS[@]}"; do
       ;;
   esac
 
-  if [ -d "$normalized_path" ]; then
+  # A submodule is a directory in the worktree, but Git stores it as one
+  # gitlink entry (mode 160000).  It is therefore a valid explicit commit path,
+  # unlike an ordinary directory that would make the commit scope ambiguous.
+  is_gitlink=0
+  if git ls-files --stage -- "$normalized_path" | grep -q '^160000 '; then
+    is_gitlink=1
+  fi
+  if [ -d "$normalized_path" ] && [ "$is_gitlink" -eq 0 ]; then
     fail "directories are not allowed; list each file explicitly: $supplied_path"
     exit 1
   fi
