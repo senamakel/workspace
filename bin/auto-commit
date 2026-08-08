@@ -442,12 +442,17 @@ for path in "${CHANGED[@]}"; do
     CONFLICTS+=("$path")
     continue
   fi
-  if [ "${AUTO_COMMIT_SCAN_CONTENT:-1}" != "0" ] && hit="$(credential_in "$path")"; then
-    # Never echo the match itself — naming the file and the pattern is enough to
-    # act on, and the value must not reach a log or a terminal scrollback.
-    LEAKS+=("$path ($hit)")
-    SKIPPED+=("$path")
-    continue
+  if [ "${AUTO_COMMIT_SCAN_CONTENT:-1}" != "0" ]; then
+    # Keep the command substitution in its own conditional. Some hook runners
+    # reparse compound `&& assignment` conditions poorly, despite Bash accepting
+    # them when the helper is executed directly.
+    if hit="$(credential_in "$path")"; then
+      # Never echo the match itself — naming the file and the pattern is enough to
+      # act on, and the value must not reach a log or a terminal scrollback.
+      LEAKS+=("$path ($hit)")
+      SKIPPED+=("$path")
+      continue
+    fi
   fi
   STAGE+=("$path")
 done
