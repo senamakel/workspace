@@ -622,7 +622,9 @@ test_commits_only_in_allowlisted_repositories() {
   # Each default is accepted, in either URL form.
   local slug n=1
   for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla tinyhumansai/tinysweeper \
-              senamakel/openhuman senamakel/opencompany senamakel/medulla senamakel/tinysweeper; do
+              tinyhumansai/tinyagents tinyhumansai/tinychannels tinyhumansai/tinycortex tinyhumansai/tinyflows \
+              senamakel/openhuman senamakel/opencompany senamakel/medulla senamakel/tinysweeper \
+              senamakel/tinyagents senamakel/tinychannels senamakel/tinycortex senamakel/tinyflows; do
     git -C "$repo" remote add origin "git@github.com:$slug.git"
     AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
     assert_eq "$((n + 1))" "$(count_commits "$repo")" "$slug is allowlisted"
