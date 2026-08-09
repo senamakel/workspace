@@ -751,6 +751,14 @@ if [ -n "$MODEL_ERR" ]; then
 else
   RESPONSE="$(ask_model 2>/dev/null || true)"
 fi
+# Drop leading blank lines before anything reads the first one. A reply that
+# opens with a newline — or with the blank line that follows a stripped code
+# fence — put an empty string in `head -1`, and an empty subject is the signal
+# for "the model gave nothing", so the entire message was thrown away and the
+# commit fell back to listing files. The reply was there the whole time; on
+# dragonfly this was the only remaining source of model-fallback entries, and it
+# left no error behind to explain itself.
+RESPONSE="$(printf '%s\n' "$RESPONSE" | sed '/[^[:space:]]/,$!d')"
 SUBJECT="$(printf '%s\n' "$RESPONSE" | head -1 \
   | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'"'"']//;s/["'"'"']$//')"
 # Everything after the subject is the description. Blank lines and any stray code
