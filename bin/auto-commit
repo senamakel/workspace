@@ -287,7 +287,8 @@ if [ "$HOOK" = "1" ]; then
   if [ "${AUTO_COMMIT_LOG_ALL:-0}" = "1" ]; then
     log_event payload "tool=$LOG_TOOL pwd=$PWD cwd=${EVENT_CWD:-<none>} target=${TARGET:-<none>} tool_input keys=$(
       printf '%s' "$EVENT" | jq -rc '(.tool_input // {}) | if type == "object" then (keys | join(",")) else type end' 2>/dev/null || echo '?'
-    ) cmd=$(printf '%s' "$EVENT" | jq -rc '.tool_input.command // empty' 2>/dev/null | tr '\n' ' ' | cut -c1-140)"
+    ) cmd=$(printf '%s' "$EVENT" | jq -rc '.tool_input.command // empty' 2>/dev/null | tr '\n' ' ' | cut -c1-140)" \
+      "raw: $(printf '%s' "$EVENT" | jq -c 'del(.tool_response, .transcript_path)' 2>/dev/null | tr '\n' ' ' | cut -c1-1200)"
   fi
   if [ -n "$TARGET" ] && [ -d "$TARGET" ]; then
     cd -- "$TARGET"
