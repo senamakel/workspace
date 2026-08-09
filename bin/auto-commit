@@ -212,23 +212,39 @@ emit() {
 # the work rather than the long-lived harness process.
 #
 # It cannot do that from `cwd` alone. The session's `cwd` is fixed for the life
-# of the process, and no tool on this harness reports a per-call working
-# directory: a Bash `tool_input` carries only `command` and `description`, so an
-# agent working under `worktrees/<slug>` does it by putting `cd` in the command
-# string. Reading `cwd` therefore always names the session root, which is
-# typically clean while the real work piles up unchecked in the worktree — the
-# hook then reports "nothing to commit" forever and silently saves nothing.
+# of the process, so it always names the session root, which is typically clean
+# while the real work piles up unchecked in the worktree — the hook then reports
+# "nothing to commit" forever and silently saves nothing.
+#
+# Codex is the reason `workdir` is read here. Its `shell_command` tool takes
+# `ShellCommandToolCallParams { command: String, workdir: Option<String> }`, so
+# an agent working under `worktrees/<slug>` sets `workdir` and never types `cd`
+# — and its PostToolUse payload's `cwd` stays on whatever checkout Medulla
+# launched the session in. Every invocation then inspected the session root,
+# found it clean, and said nothing, while the worktree it was meant to be
+# checkpointing went uncommitted for hours. Claude's Bash tool has no such field
+# and does it with `cd`, so both are consulted.
 #
 # So take, in order of how precisely each names the edited checkout:
 #   1. `file_path` — Edit, Write and NotebookEdit name the exact file touched
-#   2. the last `cd` target in a Bash command, resolved against the session cwd
-#   3. the event's `cwd`, which is right whenever the session sits in the
+#   2. `workdir` — the directory Codex actually ran the command in
+#   3. the last `cd` target in a Bash command, resolved against the session cwd
+#   4. the event's `cwd`, which is right whenever the session sits in the
 #      checkout being edited
 event_target() {
-  local fp dir cd_arg
+  local fp dir cd_arg workdir
   fp="$(printf '%s' "$EVENT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
   if [ -n "$fp" ]; then
     dir="$(dirname -- "$fp")"
+    [ -d "$dir" ] && { printf '%s' "$dir"; return 0; }
+  fi
+
+  workdir="$(printf '%s' "$EVENT" | jq -r '.tool_input.workdir // .tool_input.cwd // empty' 2>/dev/null || true)"
+  if [ -n "$workdir" ]; then
+    case "$workdir" in
+      /*) dir="$workdir" ;;
+      *)  dir="${EVENT_CWD:-$PWD}/$workdir" ;;
+    esac
     [ -d "$dir" ] && { printf '%s' "$dir"; return 0; }
   fi
 
