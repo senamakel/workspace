@@ -689,6 +689,11 @@ Rules for the description:
 - describe behaviour, not which files moved
 - omit the description entirely for a trivial change
 
+Read the diff in the right direction: a line starting with + is being added by
+this change and a line starting with - is being removed. A file that gains lines
+is being extended, not deleted. Describing a restored block as a removal is the
+one mistake that makes the log actively misleading.
+
 Output the message and nothing else — no code fences, no preamble.
 
 Files:
