@@ -1,28 +1,8 @@
 {
   "hooks": {
-    "post_tool_use": [
+    "PostToolUse": [
       {
         "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
-          }
-        ]
-      }
-    ],
-    "session_end": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
-          }
-        ]
-      }
-    ],
-    "subagent_stop": [
-      {
         "hooks": [
           {
             "type": "command",
