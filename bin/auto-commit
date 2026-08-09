@@ -352,6 +352,38 @@ if ! repo_allowed; then
   exit 0
 fi
 
+# ── One checkpoint at a time, per repository ───────────────────────
+# Reading `git status` and committing are separate steps, and between them
+# another run of this command can commit the same files. The loser then hands
+# `atomic-commit` a path that has since gone clean, gets `path has no changes to
+# commit`, and — because that refusal aborts the whole call — loses every other
+# file in the checkpoint too. It is not a rare race: tool calls overlap, the
+# harness and Medulla may each declare the hook, and Stop and SubagentStop can
+# land on top of a PostToolUse still running.
+#
+# A directory is the lock because `mkdir` is atomic on every filesystem here,
+# unlike a lock *file*, and macOS ships no `flock`. Losing the race is not an
+# error: the run that holds the lock is committing the very same work, so this
+# one exits quietly rather than queueing behind it and committing nothing.
+LOCK_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/auto-commit"
+mkdir -p "$LOCK_ROOT" 2>/dev/null || true
+LOCK_DIR="$LOCK_ROOT/lock-$(printf '%s' "$TOP" | shasum | cut -c1-32)"
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  # A lock older than two minutes belonged to a run that was killed — the whole
+  # command is bounded by a few seconds — so reclaim it rather than letting one
+  # dead process stop every future checkpoint in the repository.
+  if [ -n "$(find "$LOCK_DIR" -maxdepth 0 -mmin +2 2>/dev/null || true)" ]; then
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+    log_event note "reclaimed a stale checkpoint lock"
+  fi
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    emit clean "another checkpoint is already running for this repository"
+    exit 0
+  fi
+fi
+LOCK_HELD=1
+
 # ── Tool-call counter ──────────────────────────────────────────────
 # PostToolUse fires on every tool call. Only every Nth one does any work, so the
 # other N-1 cost a counter increment and nothing else.
