@@ -717,11 +717,23 @@ EOF
     '{model: $model, temperature: 0, max_tokens: 300,
       reasoning: {enabled: false},
       messages: [{role: "user", content: $content}]}')"
-  curl -sS --fail-with-body --max-time "$TIMEOUT" --connect-timeout "$TIMEOUT" \
+  local raw content
+  raw="$(curl -sS --fail-with-body --max-time "$TIMEOUT" --connect-timeout "$TIMEOUT" \
     -H "Authorization: Bearer ${!API_KEY_VAR}" \
     -H "Content-Type: application/json" \
-    -d "$payload" "$API_URL" \
-    | jq -r '.choices[0].message.content // ""'
+    -d "$payload" "$API_URL" || true)"
+  content="$(printf '%s' "$raw" | jq -r '.choices[0].message.content // ""' 2>/dev/null || true)"
+  if [ -z "$content" ]; then
+    # A request that fails outright leaves curl's message on stderr, but one that
+    # returns 200 with no content — a provider error object, an empty choices
+    # array, a response truncated at max_tokens — left nothing at all to look at,
+    # and the fallback was indistinguishable from having no key. The body says
+    # which of those it was; it carries no credential, only the reply.
+    printf 'empty content from the endpoint; body was: %s\n' \
+      "$(printf '%s' "$raw" | tr '\n' ' ' | cut -c1-400)" >&2
+    return 1
+  fi
+  printf '%s\n' "$content"
 }
 
 # The model's own failures were being thrown away with its stderr, so a run that
