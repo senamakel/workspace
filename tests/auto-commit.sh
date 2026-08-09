@@ -228,9 +228,8 @@ test_subject_only_reply_still_commits() {
     "no boilerplate description is written"
   assert_contains "$(git -C "$repo" log -1 --format=%b)" "Auto-committed-on:" \
     "the trailer still parses as the final paragraph"
-  assert_eq "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | tr -d '\n')" \
-    "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | tr -d '\n')" \
-    "the trailer is readable by git interpret-trailers"
+  [ -n "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | tr -d '[:space:]')" ] \
+    || fail_test "git does not parse the trailer when the body is empty"
 }
 
 test_falls_back_without_a_model() {
