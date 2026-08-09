@@ -413,6 +413,10 @@ while IFS= read -r -d '' entry; do
 # could never receive its first checkpoint.
 done < <(git status --porcelain=v1 -z --untracked-files=all 2>/dev/null || true)
 
+if [ "${#NESTED[@]}" -gt 0 ]; then
+  emit warned "not staging $(printf '%s ' "${NESTED[@]}")— a checkout inside this one, commit it in its own repository"
+fi
+
 if [ "${#CHANGED[@]}" -eq 0 ]; then
   emit clean "nothing to commit"
   exit 0
