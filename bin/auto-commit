@@ -65,9 +65,66 @@
 #   AUTO_COMMIT_DEVICE_FILE          file holding that name (~/.config/workspace/device)
 #   AUTO_COMMIT_MAX_DIFF             bytes of diff sent to the model (40000)
 #   AUTO_COMMIT_BODY_MAX_LINES       description lines kept from the model (6)
+#   AUTO_COMMIT_LOG                  append a line per run here, `off` to disable
+#                                    (/tmp/autocommit-error.log)
+#   AUTO_COMMIT_LOG_ALL=1            also log the runs that found nothing to do
+#   AUTO_COMMIT_LOG_MAX_BYTES        size at which the log is halved (1048576)
 set -euo pipefail
 
 fail() { printf '[FAIL] %s\n' "$*" >&2; }
+
+# ── The log ────────────────────────────────────────────────────────
+# In hook mode this command is silent by design: every refusal above returns
+# exit 0 with `note` muted, so a checkpoint that never happens looks exactly
+# like a checkpoint that was not needed. That is fine for the working case and
+# useless the moment it stops committing, which is why every run also lands in
+# a file. One line per run, saying which guard it stopped at and where.
+LOG_FILE="${AUTO_COMMIT_LOG:-/tmp/autocommit-error.log}"
+LOG_MAX_BYTES="${AUTO_COMMIT_LOG_MAX_BYTES:-1048576}"
+LOG_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/auto-commit/last-log"
+mkdir -p "$(dirname -- "$LOG_STATE")" 2>/dev/null || true
+LOG_REPO="-"
+LOG_BRANCH="-"
+LOG_TOOL="-"
+
+# Nothing here may abort the run: the log exists to explain failures, so a
+# failure to log must never become one. Every step is best-effort.
+log_event() {
+  local status="$1" detail="${2:-}" extra="${3:-}" size dir stamp fingerprint last
+  [ -n "$LOG_FILE" ] && [ "$LOG_FILE" != "off" ] || return 0
+  dir="$(dirname -- "$LOG_FILE")"
+  [ -d "$dir" ] || mkdir -p "$dir" 2>/dev/null || return 0
+
+  # This runs on every tool call, so an unchanging condition — a repository off
+  # the allowlist, a missing tool — would otherwise write the same line
+  # hundreds of times and bury the one run that failed differently. Consecutive
+  # repeats of the same outcome in the same repository are recorded once.
+  fingerprint="$(printf '%s|%s|%s' "$LOG_REPO" "$status" "$detail" | shasum 2>/dev/null | cut -d' ' -f1 || true)"
+  if [ -n "$fingerprint" ]; then
+    last="$(cat "$LOG_STATE" 2>/dev/null || true)"
+    [ "$fingerprint" != "$last" ] || return 0
+    printf '%s\n' "$fingerprint" >"$LOG_STATE" 2>/dev/null || true
+  fi
+
+  # Halve the file rather than truncating it: the run that broke things is
+  # usually a few runs back, and losing all of the history to a size cap would
+  # throw away exactly the context worth reading.
+  size="$(wc -c <"$LOG_FILE" 2>/dev/null || echo 0)"
+  if [ "${size:-0}" -gt "$LOG_MAX_BYTES" ] 2>/dev/null; then
+    if tail -c "$((LOG_MAX_BYTES / 2))" "$LOG_FILE" >"$LOG_FILE.tmp" 2>/dev/null; then
+      mv -f "$LOG_FILE.tmp" "$LOG_FILE" 2>/dev/null || rm -f "$LOG_FILE.tmp" 2>/dev/null || true
+    else
+      rm -f "$LOG_FILE.tmp" 2>/dev/null || true
+    fi
+  fi
+  stamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo '?')"
+  {
+    printf '%s pid=%s tool=%s repo=%s branch=%s %s: %s\n' \
+      "$stamp" "$$" "$LOG_TOOL" "$LOG_REPO" "$LOG_BRANCH" "$status" \
+      "$(printf '%s' "$detail" | tr '\n' ' ')"
+    [ -z "$extra" ] || printf '%s\n' "$extra" | sed 's/^/    /'
+  } >>"$LOG_FILE" 2>/dev/null || true
+}
 usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
 
 HOOK=0
@@ -120,8 +177,19 @@ note() { [ "$HOOK" = "1" ] || printf '%s\n' "$*"; }
 # about it means work quietly stops being saved for the rest of the session.
 speak() { printf '[auto-commit] %s\n' "$*" >&2; }
 
+# The fourth argument is for the log only: the detail line has to stay short
+# enough to read in a terminal, while the log can carry the whole of what a
+# failing command said.
 emit() {
-  local status="$1" detail="$2" files="${3:-}"
+  local status="$1" detail="$2" files="${3:-}" extra="${4:-}"
+  # `clean` and `committed` are the working case and would otherwise write a
+  # line per tool call; they are logged only when asked for. Everything else is
+  # a run that wanted to commit and did not, which is the point of the file.
+  case "$status" in
+    clean|committed|dry-run)
+      if [ "${AUTO_COMMIT_LOG_ALL:-0}" = "1" ]; then log_event "$status" "$detail" "$extra"; fi ;;
+    *) log_event "$status" "$detail" "$extra" ;;
+  esac
   if [ "$FORMAT" = "json" ]; then
     jq -n --arg status "$status" --arg detail "$detail" --arg files "$files" \
       '{status: $status, detail: $detail, files: ($files | split("\n") | map(select(length > 0)))}'
@@ -183,9 +251,10 @@ event_target() {
 
 EVENT=""
 if [ "$HOOK" = "1" ]; then
-  command -v jq >/dev/null 2>&1 || exit 0
+  command -v jq >/dev/null 2>&1 || { log_event skipped "jq is not on PATH: PATH=$PATH"; exit 0; }
   EVENT="$(cat)"
   EVENT_CWD="$(printf '%s' "$EVENT" | jq -r '.cwd // empty' 2>/dev/null || true)"
+  LOG_TOOL="$(printf '%s' "$EVENT" | jq -r '.tool_name // "-"' 2>/dev/null || echo '-')"
   TARGET="$(event_target)"
   if [ -n "$TARGET" ] && [ -d "$TARGET" ]; then
     cd -- "$TARGET"
@@ -193,9 +262,14 @@ if [ "$HOOK" = "1" ]; then
 fi
 
 # ── Where are we ───────────────────────────────────────────────────
+# Not a repository at all is not worth a line: the hook fires wherever the
+# harness happens to be, and a directory outside any checkout is the expected
+# case rather than a failure.
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 TOP="$(git rev-parse --show-toplevel)"
 GIT_DIR="$(git rev-parse --absolute-git-dir)"
+LOG_REPO="$TOP"
+LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached)"
 
 # ── Allowlisted repositories only ──────────────────────────────────
 # Writing the message means sending the diff to a third-party model, so this
@@ -335,9 +409,18 @@ fi
 # reviewed first, so it keeps its own list rather than trusting the repo's.
 SECRET_GLOBS=(
   '.env' '.env.*' '*.pem' '*.key' '*.p12' '*.pfx' '*.keystore' '*.jks'
-  'id_rsa*' 'id_ed25519*' '*.ppk' '*credentials*' '*secret*' '*.kdbx'
+  'id_rsa*' 'id_ed25519*' '*.ppk' '*.kdbx'
   '.npmrc' '.netrc' '*.token'
 )
+# Names that only *mention* a credential. `secrets.rs`, `credentials_test.go`
+# and `secret-scan.md` are code and prose about credentials, not credentials,
+# and refusing them meant whole modules were never checkpointed while their
+# neighbours were. Source and prose extensions are let through on the name
+# alone; the content scan below still reads them, and that is the check that
+# actually finds a key. A `secrets.json`, `secrets.yaml` or extensionless
+# `credentials` is not on this list and stays withheld.
+SUSPICIOUS_GLOBS=('*credentials*' '*secret*')
+SOURCE_EXTS='rs|ts|tsx|js|jsx|mjs|cjs|py|go|rb|java|kt|kts|swift|m|c|h|cc|cpp|hpp|cs|php|pl|lua|ex|exs|erl|hs|scala|dart|sh|bash|zsh|fish|md|mdx|rst|txt|sql|proto|graphql|snap'
 # Built-in patterns are file names, not directory names: application source
 # commonly lives below a `credentials/` domain without containing credentials.
 # User-supplied skips still match the complete repository-relative path so a
@@ -347,7 +430,11 @@ EXTRA_SKIP_GLOBS=()
 # `set -u`, so the caller's extra globs are appended rather than expanded beside
 # the defaults.
 if [ -n "${AUTO_COMMIT_SKIP:-}" ]; then
-  while IFS= read -r glob; do
+  # `|| [ -n "$glob" ]` is load-bearing: the input has no trailing newline, so
+  # `read` returns non-zero on the final field and the loop body would never see
+  # it. With one glob — the usual case — that meant AUTO_COMMIT_SKIP was read,
+  # parsed, and silently discarded.
+  while IFS= read -r glob || [ -n "$glob" ]; do
     [ -z "$glob" ] || EXTRA_SKIP_GLOBS+=("$glob")
   done < <(printf '%s' "$AUTO_COMMIT_SKIP" | tr ':' '\n')
 fi
@@ -369,7 +456,8 @@ SECRET_PATTERNS=(
   'json-web-token|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}'
 )
 if [ -n "${AUTO_COMMIT_SECRET_PATTERNS:-}" ]; then
-  while IFS= read -r extra; do
+  # Same unterminated-final-field problem as AUTO_COMMIT_SKIP above.
+  while IFS= read -r extra || [ -n "$extra" ]; do
     [ -z "$extra" ] || SECRET_PATTERNS+=("$extra")
   done < <(printf '%s' "$AUTO_COMMIT_SECRET_PATTERNS" | tr ':' '\n')
 fi
@@ -386,9 +474,20 @@ added_content() {
   fi
 }
 
+# A credential issued by a provider never spells out that it is fake, so a
+# matched token that says so is a fixture, a docstring or a README — the
+# commonest false positive by far, and one that silently withholds a file from
+# every future checkpoint. Only the matched token is examined, not the line
+# around it: a real key sitting on a line that happens to say "example" is
+# still a real key.
+# Words only. A digit run like `1234567890` looks like a placeholder to a human
+# and is perfectly ordinary inside a real key, so numeric shapes are not on this
+# list — the marker has to be something a random token effectively cannot spell.
+PLACEHOLDER_MARKER='(x{4,}|example|sample|placeholder|redacted|dummy|fake|notreal|changeme|your[-_a-z]*key|testkey|test-key)'
+
 # Prints the name of the first pattern the file's additions match, if any.
 credential_in() {
-  local f="$1" content entry name regex
+  local f="$1" content entry name regex hits real
   content="$(added_content "$f")"
   [ -n "$content" ] || return 1
   for entry in "${SECRET_PATTERNS[@]}"; do
@@ -396,10 +495,12 @@ credential_in() {
     regex="${entry#*|}"
     # -e is required, not stylistic: the private-key pattern begins with "-----"
     # and grep would otherwise parse it as options and never match.
-    if printf '%s' "$content" | LC_ALL=C grep -qaE -e "$regex"; then
-      printf '%s' "$name"
-      return 0
-    fi
+    hits="$(printf '%s' "$content" | LC_ALL=C grep -oaE -e "$regex" || true)"
+    [ -n "$hits" ] || continue
+    real="$(printf '%s\n' "$hits" | LC_ALL=C grep -viE "$PLACEHOLDER_MARKER" || true)"
+    [ -n "$real" ] || continue
+    printf '%s' "$name"
+    return 0
   done
   return 1
 }
@@ -428,6 +529,19 @@ for path in "${CHANGED[@]}"; do
     if [[ "$base" == $glob ]]; then secret=1; break; fi
   done
   if [ "$secret" = "0" ]; then
+    for glob in "${SUSPICIOUS_GLOBS[@]}"; do
+      # shellcheck disable=SC2053
+      if [[ "$base" == $glob ]]; then
+        # Only withhold it if it is not source or prose.
+        printf '%s' "$base" | LC_ALL=C grep -qiE "\.($SOURCE_EXTS)\$" || secret=1
+        break
+      fi
+    done
+  fi
+  # Bash 3.2, which is what macOS ships as /bin/bash, treats `${arr[@]}` on an
+  # empty array as an unbound variable under `set -u` and aborts the whole run.
+  # The count has to be checked before the loop, not inside it.
+  if [ "$secret" = "0" ] && [ "${#EXTRA_SKIP_GLOBS[@]}" -gt 0 ]; then
     for glob in "${EXTRA_SKIP_GLOBS[@]}"; do
       [ -n "$glob" ] || continue
       # shellcheck disable=SC2053
@@ -590,7 +704,16 @@ EOF
     | jq -r '.choices[0].message.content // ""'
 }
 
-RESPONSE="$(ask_model 2>/dev/null || true)"
+# The model's own failures were being thrown away with its stderr, so a run that
+# fell back to naming files looked identical to one that never had a key. Keep
+# the error, log it if the answer turns out to be unusable.
+MODEL_ERR="$(mktemp 2>/dev/null || printf '')"
+[ -z "$MODEL_ERR" ] || trap 'rm -f "$MODEL_ERR"' EXIT
+if [ -n "$MODEL_ERR" ]; then
+  RESPONSE="$(ask_model 2>"$MODEL_ERR" || true)"
+else
+  RESPONSE="$(ask_model 2>/dev/null || true)"
+fi
 SUBJECT="$(printf '%s\n' "$RESPONSE" | head -1 \
   | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^["'"'"']//;s/["'"'"']$//')"
 # Everything after the subject is the description. Blank lines and any stray code
@@ -604,6 +727,13 @@ BODY="$(printf '%s\n' "$RESPONSE" | tail -n +2 \
   | head -"$BODY_MAX_LINES" || true)"
 
 if [ -z "$SUBJECT" ]; then
+  if [ -n "${!API_KEY_VAR:-}" ] || [ -n "$CRITIC_CMD" ]; then
+    MODEL_REASON="no usable subject from $MODEL"
+  else
+    MODEL_REASON="no usable subject: $API_KEY_VAR is unset"
+  fi
+  log_event "model-fallback" "$MODEL_REASON" \
+    "$([ -n "$MODEL_ERR" ] && head -c 2000 "$MODEL_ERR" 2>/dev/null || true)"
   SUBJECT="$(fallback_subject)"
   BODY="$(fallback_body)"
 elif ! printf '%s' "$SUBJECT" \
@@ -672,9 +802,13 @@ if [ ! -x "$ATOMIC" ]; then
   exit 0
 fi
 if ! OUTPUT="$(cd "$TOP" && "$ATOMIC" --allow-whitespace "$MESSAGE" -- "${STAGE[@]}" 2>&1)"; then
-  # A rejected path or nothing actually staged. Never fatal:
-  # the working tree is untouched and the next tick tries again.
-  emit skipped "atomic-commit refused: $(printf '%s' "$OUTPUT" | head -2 | tr '\n' ' ')"
+  # A rejected path or nothing actually staged. Never fatal: the working tree is
+  # untouched and the next tick tries again. Only the first couple of lines reach
+  # the terminal, so the whole of what atomic-commit said goes to the log along
+  # with the paths it was given — between them they say which file it choked on,
+  # which the summary alone never did.
+  emit skipped "atomic-commit refused: $(printf '%s' "$OUTPUT" | head -2 | tr '\n' ' ')" "" \
+    "$(printf '%s\n' "$OUTPUT" | head -40; printf 'paths:\n'; printf '  %s\n' "${STAGE[@]}")"
   exit 0
 fi
 

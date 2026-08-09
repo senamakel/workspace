@@ -20,8 +20,8 @@ There is no compilation step or centralized test suite. Validate the part you ch
   repository with dirty, unpushed, and submodule-bearing worktrees.
 - `tests/auto-commit.sh` exercises the auto-commit hook's offline logic — the
   tool-call counter, the repository allowlist, the detached-HEAD and
-  in-progress-operation guards, credential filtering, and the subject fallback —
-  with a stubbed model and no credentials.
+  in-progress-operation guards, credential filtering, the subject fallback, and
+  the refusal log — with a stubbed model and no credentials.
 - `tests/langfuse-lib.sh` exercises the Langfuse helpers' offline logic —
   environment resolution, project presets, time windows, and paging — with a
   stubbed API and no credentials.

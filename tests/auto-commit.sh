@@ -78,8 +78,11 @@ state_dir() { printf '%s/state-%s\n' "$TEST_ROOT" "$1"; }
 # Feeds one PostToolUse event.
 fire() {
   local repo="$1" state="$2" stub="${3:-}"
+  # Never the real /tmp/autocommit-error.log: a test run must not write into the
+  # file someone is reading to debug a live session.
   jq -n --arg s "session-fixed" '{session_id: $s, tool_name: "Bash", tool_input: {command: "ls"}}' \
     | (cd "$repo" && AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$state" \
+       AUTO_COMMIT_LOG="${AUTO_COMMIT_LOG:-$TEST_ROOT/unread.log}" \
        "$COMMAND" --hook 2>&1)
 }
 
@@ -89,6 +92,7 @@ fire_from() {
   jq -n --arg s "session-fixed" --arg workdir "$work_repo" \
     '{session_id: $s, cwd: $workdir, tool_name: "Bash", tool_input: {command: "ls", workdir: $workdir}}' \
     | (cd "$launch_repo" && AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$state" \
+       AUTO_COMMIT_LOG="${AUTO_COMMIT_LOG:-$TEST_ROOT/unread.log}" \
        "$COMMAND" --hook 2>&1)
 }
 
@@ -756,6 +760,112 @@ test_allowlist_matches_any_remote_and_is_overridable() {
   assert_eq 4 "$(count_commits "$repo")" "AUTO_COMMIT_REPOS overrides the default"
 }
 
+test_logs_why_it_did_not_commit() {
+  local repo state stub log
+  command -v jq >/dev/null 2>&1 || return 0
+  # In hook mode every refusal is silent and returns 0, so the log is the only
+  # place a run that saved nothing can be told apart from a run with nothing to
+  # save.
+  repo="$(make_repo logged)"
+  state="$(state_dir logged)"
+  stub="$(make_stub logged "chore: add a file")"
+  log="$TEST_ROOT/logged.log"
+  rm -f "$log"
+  git -C "$repo" remote set-url origin git@github.com:someone/private-thing.git
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_contains "$(cat "$log")" "not on the auto-commit allowlist" \
+    "the refusal and its reason reach the log"
+  # By basename: macOS resolves the temporary directory through /private.
+  assert_contains "$(cat "$log")" "$(basename "$repo")" "the log names the repository"
+
+  # The same refusal on every following tool call is recorded once, or an
+  # unchanging condition would bury everything else in the file.
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 1 "$(grep -c 'not on the auto-commit allowlist' "$log")" \
+    "a repeated refusal is logged once"
+}
+
+test_does_not_log_ordinary_runs() {
+  local repo state stub log
+  command -v jq >/dev/null 2>&1 || return 0
+  # A successful checkpoint and a clean tree are the normal case and fire on
+  # every tool call; logging them would make the file useless for debugging.
+  repo="$(make_repo unlogged)"
+  state="$(state_dir unlogged)"
+  stub="$(make_stub unlogged "chore: add a file")"
+  log="$TEST_ROOT/unlogged.log"
+  rm -f "$log"
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "the commit still happens"
+  assert_eq "" "$(cat "$log" 2>/dev/null || true)" \
+    "a commit and a clean tree write nothing"
+}
+
+test_commits_source_named_after_credentials() {
+  local repo state stub committed
+  command -v jq >/dev/null 2>&1 || return 0
+  # `secrets.rs` is code about credentials, not a credential. Withholding it on
+  # the name alone meant whole modules were never checkpointed; the content scan
+  # is what actually decides.
+  repo="$(make_repo credential-named)"
+  state="$(state_dir credential-named)"
+  stub="$(make_stub credentialnamed "chore: add the module")"
+  printf 'pub fn load_secret() -> String { String::new() }\n' > "$repo/secrets.rs"
+  printf '# Credentials\n\nHow to rotate them.\n' > "$repo/credentials.md"
+  printf '{"token": "AKIAIOSFODNN7EXAMPLE"}\n' > "$repo/credentials.json"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  committed="$(git -C "$repo" show --pretty=format: --name-only HEAD)"
+  assert_contains "$committed" "secrets.rs" "source named for secrets is committed"
+  assert_contains "$committed" "credentials.md" "prose named for credentials is committed"
+  assert_not_contains "$committed" "credentials.json" \
+    "a data file named for credentials is still withheld"
+}
+
+test_placeholder_keys_are_not_credentials() {
+  local repo state stub committed
+  command -v jq >/dev/null 2>&1 || return 0
+  # A key shape that spells out that it is fake is documentation. Treating it as
+  # a leak withheld the file from every future checkpoint, silently.
+  repo="$(make_repo placeholder-key)"
+  state="$(state_dir placeholder-key)"
+  stub="$(make_stub placeholderkey "docs: document the key")"
+  {
+    printf 'Set ANTHROPIC_API_KEY to sk-ant-api03-XXXXXXXXXXXXXXXXXXXXXXXXXX\n'
+    printf 'or export OPENROUTER_API_KEY=sk-or-v1-your-key-goes-here-example\n'
+  } > "$repo/README.md"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  committed="$(git -C "$repo" show --pretty=format: --name-only HEAD)"
+  assert_contains "$committed" "README.md" "a documented placeholder is committed"
+
+  # The relaxation must not extend to a token that only sits near the word.
+  printf 'AWS_KEY = "AKIA1QRSTUVWXYZ23456"  # example only\n' > "$repo/real.py"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null || true
+  assert_contains "$(git -C "$repo" status --porcelain)" "real.py" \
+    "a real key on a line saying 'example' is still withheld"
+}
+
+test_extra_skip_globs_are_honoured() {
+  local repo state stub committed
+  command -v jq >/dev/null 2>&1 || return 0
+  # AUTO_COMMIT_SKIP is expanded on an array that is usually empty, which is an
+  # unbound variable on the bash 3.2 macOS ships — it aborted the whole hook.
+  repo="$(make_repo extra-skip)"
+  state="$(state_dir extra-skip)"
+  stub="$(make_stub extraskip "chore: add files")"
+  printf 'keep\n' > "$repo/keep.txt"
+  printf 'drop\n' > "$repo/scratch.tmp"
+  AUTO_COMMIT_SKIP='*.tmp' AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  committed="$(git -C "$repo" show --pretty=format: --name-only HEAD)"
+  assert_contains "$committed" "keep.txt" "the ordinary file is committed"
+  assert_not_contains "$committed" "scratch.tmp" "the skipped glob is withheld"
+}
+
 run_test "commits only in allowlisted repositories" test_commits_only_in_allowlisted_repositories
 run_test "the allowlist matches any remote and is overridable" test_allowlist_matches_any_remote_and_is_overridable
 run_test "commits on every tool call by default" test_commits_on_every_tool_call_by_default
@@ -789,4 +899,9 @@ run_test "skips during a merge" test_skips_during_a_merge
 run_test "a clean tree commits nothing" test_clean_tree_commits_nothing
 run_test "dry run changes nothing" test_dry_run_changes_nothing
 run_test "cannot be disabled by any environment variable" test_cannot_be_disabled_by_environment
+run_test "logs why it did not commit" test_logs_why_it_did_not_commit
+run_test "does not log ordinary runs" test_does_not_log_ordinary_runs
+run_test "commits source named after credentials" test_commits_source_named_after_credentials
+run_test "placeholder keys are not credentials" test_placeholder_keys_are_not_credentials
+run_test "extra skip globs are honoured" test_extra_skip_globs_are_honoured
 printf '1..%s\n' "$PASS_COUNT"
