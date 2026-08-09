@@ -9,7 +9,16 @@
   },
   "model": "opus",
   "hooks": {
-    "Stop": [],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
+          }
+        ]
+      }
+    ],
     "Notification": [],
     "UserPromptSubmit": [],
     "PreToolUse": [],
