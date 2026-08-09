@@ -153,6 +153,30 @@ test_commits_the_tool_worktree_not_the_launch_checkout() {
     "the launch checkout, which changed nothing, is untouched"
 }
 
+test_commits_the_codex_workdir_not_the_session_cwd() {
+  local launch_repo work_repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  # Codex names the per-call directory in `tool_input.workdir` and never types
+  # `cd`, while its `cwd` stays on the checkout the session was launched in.
+  # Reading only `cwd` meant every invocation inspected the launch checkout,
+  # found it clean, and silently saved nothing for hours.
+  launch_repo="$(make_repo codex-launch)"
+  work_repo="$(make_repo codex-workdir)"
+  state="$(state_dir codex-workdir)"
+  stub="$(make_stub codexworkdir "chore: checkpoint the worktree codex is in")"
+  git -C "$launch_repo" switch -q main
+  printf 'worktree change\n' > "$work_repo/new.txt"
+
+  AUTO_COMMIT_EVERY=1 fire_codex "$launch_repo" "$work_repo" "$state" "$stub" >/dev/null
+
+  assert_eq 2 "$(count_commits "$work_repo")" \
+    "the checkout named by tool_input.workdir is committed"
+  assert_eq "" "$(git -C "$work_repo" status --porcelain)" \
+    "that worktree is clean afterwards"
+  assert_eq 1 "$(count_commits "$launch_repo")" \
+    "the launch checkout, which changed nothing, is untouched"
+}
+
 test_commits_only_every_nth_tool_call() {
   local repo state stub before
   command -v jq >/dev/null 2>&1 || return 0
