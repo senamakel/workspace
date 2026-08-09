@@ -25,6 +25,16 @@
       }
     ],
     "PostToolUseFailure": [],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
+          }
+        ]
+      }
+    ],
     "PermissionRequest": []
   },
   "statusLine": {
