@@ -378,6 +378,7 @@ fi
 # ── What changed ───────────────────────────────────────────────────
 # --porcelain omits ignored files, so build artifacts never appear here.
 CHANGED=()
+NESTED=()
 while IFS= read -r -d '' entry; do
   status="${entry:0:2}"
   path="${entry:3}"
