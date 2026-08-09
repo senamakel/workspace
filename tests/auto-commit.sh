@@ -222,8 +222,15 @@ test_subject_only_reply_still_commits() {
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq 2 "$(count_commits "$repo")" "a subject-only reply still commits"
   assert_eq "fix: handle empty input" "$(git -C "$repo" log -1 --format=%s)" "subject preserved"
-  assert_contains "$(git -C "$repo" log -1 --format=%b)" "Checkpoint of work in progress" \
-    "the fallback description says what was committed"
+  # No invented description: with nothing from the model there is nothing to
+  # summarise, so the body is the trailer alone.
+  assert_not_contains "$(git -C "$repo" log -1 --format=%b)" "Checkpoint of work in progress" \
+    "no boilerplate description is written"
+  assert_contains "$(git -C "$repo" log -1 --format=%b)" "Auto-committed-on:" \
+    "the trailer still parses as the final paragraph"
+  assert_eq "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | tr -d '\n')" \
+    "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | tr -d '\n')" \
+    "the trailer is readable by git interpret-trailers"
 }
 
 test_falls_back_without_a_model() {
