@@ -765,6 +765,7 @@ EOF
 # fell back to naming files looked identical to one that never had a key. Keep
 # the error, log it if the answer turns out to be unusable.
 MODEL_ERR="$(mktemp 2>/dev/null || printf '')"
+[ -z "$MODEL_ERR" ] || trap 'rm -f "$MODEL_ERR"' EXIT
 if [ -n "$MODEL_ERR" ]; then
   RESPONSE="$(ask_model 2>"$MODEL_ERR" || true)"
 else
