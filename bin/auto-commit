@@ -284,8 +284,10 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
 tinyhumansai/openhuman:tinyhumansai/opencompany:tinyhumansai/medulla:tinyhumansai/tinysweeper:\
 tinyhumansai/tinyagents:tinyhumansai/tinybus:tinyhumansai/tinychannels:tinyhumansai/tinycortex:tinyhumansai/tinyflows:\
+tinyhumansai/workspace:\
 senamakel/openhuman:senamakel/opencompany:senamakel/medulla:senamakel/tinysweeper:\
-senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:senamakel/tinycortex:senamakel/tinyflows}"
+senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:senamakel/tinycortex:senamakel/tinyflows:\
+senamakel/workspace}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
 # git@host:owner/repo.git, https://host/owner/repo, ssh://git@host/owner/repo/
