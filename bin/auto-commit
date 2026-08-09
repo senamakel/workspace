@@ -631,17 +631,12 @@ fallback_subject() {
   printf '%s: files changed %s' "$FALLBACK_TYPE" "$list"
 }
 
-# With no model there is nothing to summarise from, so the description just says
-# what was committed — still more use to a reader than an empty body.
-fallback_body() {
-  local n="${#STAGE[@]}"
-  if [ "$n" -eq 1 ]; then
-    printf 'Checkpoint of work in progress, touching %s.\n' "${STAGE[0]}"
-  else
-    printf 'Checkpoint of work in progress, touching %s files: %s.\n' \
-      "$n" "$(printf '%s\n' "${STAGE[@]}" | paste -sd, - || true)"
-  fi
-}
+# Deliberately empty. The old fallback body said "Checkpoint of work in progress,
+# touching <files>" on every message the model did not write, which restated the
+# subject and the diff to no one's benefit: every commit this command makes is a
+# checkpoint, and the trailer already says so. With nothing to summarise from,
+# say nothing.
+fallback_body() { printf ''; }
 
 # Run a command with a wall-clock bound. curl bounds itself with --max-time, but
 # an arbitrary AUTO_COMMIT_CMD does not, and macOS ships no `timeout`.
