@@ -961,6 +961,7 @@ run_test "commits only in allowlisted repositories" test_commits_only_in_allowli
 run_test "the allowlist matches any remote and is overridable" test_allowlist_matches_any_remote_and_is_overridable
 run_test "commits on every tool call by default" test_commits_on_every_tool_call_by_default
 run_test "commits the tool worktree instead of the launch checkout" test_commits_the_tool_worktree_not_the_launch_checkout
+run_test "commits the codex workdir instead of the session cwd" test_commits_the_codex_workdir_not_the_session_cwd
 run_test "commits only every Nth tool call when configured" test_commits_only_every_nth_tool_call
 run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim
