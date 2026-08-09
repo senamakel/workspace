@@ -279,6 +279,16 @@ if [ "$HOOK" = "1" ]; then
   EVENT_CWD="$(printf '%s' "$EVENT" | jq -r '.cwd // empty' 2>/dev/null || true)"
   LOG_TOOL="$(printf '%s' "$EVENT" | jq -r '.tool_name // "-"' 2>/dev/null || echo '-')"
   TARGET="$(event_target)"
+  # Under AUTO_COMMIT_LOG_ALL, say what the payload actually offered and which
+  # of it was used. Every "it isn't committing" investigation so far has come
+  # down to the hook running in the wrong directory, and guessing at a harness's
+  # payload shape from its documentation has been wrong twice; this prints the
+  # shape instead. Keys only — a tool_input carries file contents and commands.
+  if [ "${AUTO_COMMIT_LOG_ALL:-0}" = "1" ]; then
+    log_event payload "tool=$LOG_TOOL cwd=${EVENT_CWD:-<none>} target=${TARGET:-<none>} tool_input keys=$(
+      printf '%s' "$EVENT" | jq -rc '(.tool_input // {}) | if type == "object" then (keys | join(",")) else type end' 2>/dev/null || echo '?'
+    ) top keys=$(printf '%s' "$EVENT" | jq -rc 'keys | join(",")' 2>/dev/null || echo '?')"
+  fi
   if [ -n "$TARGET" ] && [ -d "$TARGET" ]; then
     cd -- "$TARGET"
   fi
