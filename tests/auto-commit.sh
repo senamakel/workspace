@@ -86,6 +86,18 @@ fire() {
        "$COMMAND" --hook 2>&1)
 }
 
+# Feeds a Codex-shaped event: the per-call directory is `tool_input.workdir`,
+# and `cwd` stays on whatever checkout the session was launched in.
+fire_codex() {
+  local launch_repo="$1" work_repo="$2" state="$3" stub="${4:-}"
+  jq -n --arg s "session-fixed" --arg launch "$launch_repo" --arg workdir "$work_repo" \
+    '{session_id: $s, cwd: $launch, hook_event_name: "PostToolUse", tool_name: "shell_command",
+      tool_input: {command: "cargo test", workdir: $workdir}, tool_response: {}}' \
+    | (cd "$launch_repo" && AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$state" \
+       AUTO_COMMIT_LOG="${AUTO_COMMIT_LOG:-$TEST_ROOT/unread.log}" \
+       "$COMMAND" --hook 2>&1)
+}
+
 # Feeds an event whose tool ran in a different checkout from the harness cwd.
 fire_from() {
   local launch_repo="$1" work_repo="$2" state="$3" stub="${4:-}"
