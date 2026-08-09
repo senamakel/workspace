@@ -760,6 +760,32 @@ test_allowlist_matches_any_remote_and_is_overridable() {
   assert_eq 4 "$(count_commits "$repo")" "AUTO_COMMIT_REPOS overrides the default"
 }
 
+test_commits_around_a_nested_checkout() {
+  local repo state stub log committed
+  command -v jq >/dev/null 2>&1 || return 0
+  # git will not descend into another repository, so an untracked clone inside
+  # this one is reported as a single directory entry. atomic-commit refuses a
+  # directory and that refusal aborts the whole call, so one vendored clone
+  # stopped a worktree from checkpointing anything, on every tool call.
+  repo="$(make_repo nested-checkout)"
+  state="$(state_dir nested-checkout)"
+  stub="$(make_stub nestedcheckout "chore: change the file")"
+  log="$TEST_ROOT/nested.log"
+  rm -f "$log"
+  printf 'hello\n' > "$repo/new.txt"
+  mkdir -p "$repo/vendor/other"
+  git -C "$repo/vendor/other" init -q
+  printf 'theirs\n' > "$repo/vendor/other/file.txt"
+
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  committed="$(git -C "$repo" show --pretty=format: --name-only HEAD)"
+  assert_contains "$committed" "new.txt" "the surrounding work is still committed"
+  assert_not_contains "$committed" "vendor/other" "the nested checkout is not committed"
+  assert_contains "$(cat "$log")" "a checkout inside this one" \
+    "the skipped checkout is named in the log"
+}
+
 test_logs_why_it_did_not_commit() {
   local repo state stub log
   command -v jq >/dev/null 2>&1 || return 0
