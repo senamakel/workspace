@@ -73,6 +73,20 @@ set -euo pipefail
 
 fail() { printf '[FAIL] %s\n' "$*" >&2; }
 
+# One trap for everything this command has to release. Set once, here, because a
+# second `trap ... EXIT` further down would silently replace the first and leak
+# whatever the first was holding — which for the checkpoint lock below would
+# block every later run in the repository until the stale-lock timeout.
+MODEL_ERR=""
+LOCK_DIR=""
+LOCK_HELD=0
+cleanup() {
+  [ -z "$MODEL_ERR" ] || rm -f "$MODEL_ERR"
+  [ "$LOCK_HELD" = "1" ] && [ -n "$LOCK_DIR" ] && rmdir "$LOCK_DIR" 2>/dev/null
+  return 0
+}
+trap cleanup EXIT
+
 # ── The log ────────────────────────────────────────────────────────
 # In hook mode this command is silent by design: every refusal above returns
 # exit 0 with `note` muted, so a checkpoint that never happens looks exactly
@@ -797,7 +811,6 @@ EOF
 # fell back to naming files looked identical to one that never had a key. Keep
 # the error, log it if the answer turns out to be unusable.
 MODEL_ERR="$(mktemp 2>/dev/null || printf '')"
-[ -z "$MODEL_ERR" ] || trap 'rm -f "$MODEL_ERR"' EXIT
 if [ -n "$MODEL_ERR" ]; then
   RESPONSE="$(ask_model 2>"$MODEL_ERR" || true)"
 else
@@ -903,6 +916,31 @@ fi
 # refused to touch cannot ride along on an index someone else left dirty. Paths
 # came from `git status` and are relative to the top level, so run it there —
 # atomic-commit resolves its arguments against the current prefix.
+# Seconds have passed since `git status` was read — the model call alone can take
+# eight of them — and the agent goes on working throughout. A path that has since
+# gone clean makes `atomic-commit` refuse, and that refusal takes every other
+# file in the checkpoint down with it, so drop those paths here instead. The lock
+# above rules out another *checkpoint* doing this; nothing rules out the agent
+# itself committing, stashing or reverting a file mid-run.
+STILL_DIRTY=()
+VANISHED=()
+for path in "${STAGE[@]}"; do
+  if [ -n "$(git status --porcelain=v1 --untracked-files=all -- "$path" 2>/dev/null)" ]; then
+    STILL_DIRTY+=("$path")
+  else
+    VANISHED+=("$path")
+  fi
+done
+if [ "${#VANISHED[@]}" -gt 0 ]; then
+  log_event note "no longer changed, dropped from the checkpoint: $(printf '%s ' "${VANISHED[@]}")"
+  STAGE=("${STILL_DIRTY[@]+"${STILL_DIRTY[@]}"}")
+  FILE_LIST="$(printf '%s\n' "${STAGE[@]+"${STAGE[@]}"}")"
+fi
+if [ "${#STAGE[@]}" -eq 0 ]; then
+  emit clean "every changed path was committed by something else first"
+  exit 0
+fi
+
 ATOMIC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/atomic-commit"
 if [ ! -x "$ATOMIC" ]; then
   emit skipped "atomic-commit not found beside this command"

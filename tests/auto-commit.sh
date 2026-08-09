@@ -766,6 +766,85 @@ test_allowlist_matches_any_remote_and_is_overridable() {
   assert_eq 4 "$(count_commits "$repo")" "AUTO_COMMIT_REPOS overrides the default"
 }
 
+test_one_checkpoint_at_a_time_per_repository() {
+  local repo state stub log held
+  command -v jq >/dev/null 2>&1 || return 0
+  # Two runs reading `git status` at once means the loser hands atomic-commit a
+  # path the winner already committed, gets "path has no changes to commit", and
+  # loses the whole checkpoint with it. The second run must stand down instead.
+  repo="$(make_repo lock)"
+  state="$(state_dir lock)"
+  stub="$(make_stub lock "chore: add a file")"
+  log="$TEST_ROOT/lock.log"
+  rm -f "$log"
+  printf 'hello\n' > "$repo/new.txt"
+
+  # Hold the lock the way a running checkpoint would.
+  mkdir -p "$state/auto-commit"
+  held="$state/auto-commit/lock-$(printf '%s' "$(cd "$repo" && pwd -P)" | shasum | cut -c1-32)"
+  mkdir -p "$held"
+
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 1 "$(count_commits "$repo")" "a run that loses the lock commits nothing"
+  assert_contains "$(git -C "$repo" status --porcelain)" "new.txt" "the work is left for the holder"
+
+  # Released, the next run commits normally.
+  rmdir "$held"
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "the next run commits once the lock is free"
+  [ -d "$held" ] && fail_test "the lock was not released after a successful run"
+  return 0
+}
+
+test_a_stale_lock_is_reclaimed() {
+  local repo state stub held
+  command -v jq >/dev/null 2>&1 || return 0
+  # A killed run would otherwise stop every future checkpoint in the repository.
+  repo="$(make_repo stale-lock)"
+  state="$(state_dir stale-lock)"
+  stub="$(make_stub stalelock "chore: add a file")"
+  printf 'hello\n' > "$repo/new.txt"
+  mkdir -p "$state/auto-commit"
+  held="$state/auto-commit/lock-$(printf '%s' "$(cd "$repo" && pwd -P)" | shasum | cut -c1-32)"
+  mkdir -p "$held"
+  # Older than the two-minute threshold.
+  touch -t "$(date -v-10M '+%Y%m%d%H%M' 2>/dev/null || date -d '10 minutes ago' '+%Y%m%d%H%M')" "$held"
+
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "a stale lock does not block the checkpoint"
+}
+
+test_a_path_committed_elsewhere_is_dropped() {
+  local repo state stub log committed
+  command -v jq >/dev/null 2>&1 || return 0
+  # The agent itself can commit or revert a file while this command is talking to
+  # the model. atomic-commit refuses such a path and that refusal used to abort
+  # the entire checkpoint; the rest of the work must still be saved.
+  repo="$(make_repo raced-path)"
+  state="$(state_dir raced-path)"
+  log="$TEST_ROOT/raced.log"
+  rm -f "$log"
+  printf 'first\n' > "$repo/one.txt"
+  printf 'second\n' > "$repo/two.txt"
+  # The stub stands in for the model, so it is also the moment mid-run at which
+  # somebody else can commit one of the paths.
+  cat > "$TEST_ROOT/stub-raced" <<EOF
+#!/usr/bin/env bash
+git -C "$repo" add one.txt >/dev/null 2>&1
+git -C "$repo" commit -qm "someone else got there first" >/dev/null 2>&1
+printf 'chore: add the other file\n'
+EOF
+  chmod +x "$TEST_ROOT/stub-raced"
+  stub="$TEST_ROOT/stub-raced"
+
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  committed="$(git -C "$repo" show --pretty=format: --name-only HEAD)"
+  assert_contains "$committed" "two.txt" "the untouched path is still committed"
+  assert_eq "" "$(git -C "$repo" status --porcelain)" "nothing is left behind"
+  assert_contains "$(cat "$log")" "no longer changed" "the dropped path is named in the log"
+}
+
 test_a_reply_opening_with_a_blank_line_is_used() {
   local repo state stub
   command -v jq >/dev/null 2>&1 || return 0
@@ -954,6 +1033,9 @@ run_test "skips during a merge" test_skips_during_a_merge
 run_test "a clean tree commits nothing" test_clean_tree_commits_nothing
 run_test "dry run changes nothing" test_dry_run_changes_nothing
 run_test "cannot be disabled by any environment variable" test_cannot_be_disabled_by_environment
+run_test "one checkpoint at a time per repository" test_one_checkpoint_at_a_time_per_repository
+run_test "a stale lock is reclaimed" test_a_stale_lock_is_reclaimed
+run_test "a path committed elsewhere is dropped" test_a_path_committed_elsewhere_is_dropped
 run_test "a reply opening with a blank line is used" test_a_reply_opening_with_a_blank_line_is_used
 run_test "commits around a nested checkout" test_commits_around_a_nested_checkout
 run_test "logs why it did not commit" test_logs_why_it_did_not_commit
