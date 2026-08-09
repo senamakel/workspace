@@ -13,7 +13,17 @@
     "Notification": [],
     "UserPromptSubmit": [],
     "PreToolUse": [],
-    "PostToolUse": [],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
+          }
+        ]
+      }
+    ],
     "PostToolUseFailure": [],
     "PermissionRequest": []
   },
