@@ -954,6 +954,7 @@ run_test "skips during a merge" test_skips_during_a_merge
 run_test "a clean tree commits nothing" test_clean_tree_commits_nothing
 run_test "dry run changes nothing" test_dry_run_changes_nothing
 run_test "cannot be disabled by any environment variable" test_cannot_be_disabled_by_environment
+run_test "a reply opening with a blank line is used" test_a_reply_opening_with_a_blank_line_is_used
 run_test "commits around a nested checkout" test_commits_around_a_nested_checkout
 run_test "logs why it did not commit" test_logs_why_it_did_not_commit
 run_test "does not log ordinary runs" test_does_not_log_ordinary_runs
