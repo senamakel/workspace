@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "id": "cond-probe",
+  "name": "Condition form probe",
+  "inputs": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "probe",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "gen",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "emit fixture",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\njq -n '{open:true, has_linked_pr:false}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "c1",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "bare and",
+      "config": {
+        "field": "=(.nodes.gen.item.json.output.open == true) and (.nodes.gen.item.json.output.has_linked_pr != true)"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "c2",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "wrapped and",
+      "config": {
+        "field": "=((.nodes.gen.item.json.output.open == true) and (.nodes.gen.item.json.output.has_linked_pr != true))"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "c3",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "single path",
+      "config": {
+        "field": "=.nodes.gen.item.json.output.open == true"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "c4",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "bare or",
+      "config": {
+        "field": "=(.nodes.gen.item.json.output.open == true) or (.nodes.gen.item.json.output.open == false)"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "y1",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c1 true",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c1\", branch:\"TRUE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "n1",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c1 false",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c1\", branch:\"FALSE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "y2",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c2 true",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c2\", branch:\"TRUE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "n2",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c2 false",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c2\", branch:\"FALSE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "y3",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c3 true",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c3\", branch:\"TRUE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "n3",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c3 false",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c3\", branch:\"FALSE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "y4",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c4 true",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c4\", branch:\"TRUE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "n4",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "c4 false",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "jq -n '{probe:\"c4\", branch:\"FALSE\"}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "gen",
+      "to_port": "main"
+    },
+    {
+      "from_node": "gen",
+      "from_port": "main",
+      "to_node": "c1",
+      "to_port": "main"
+    },
+    {
+      "from_node": "gen",
+      "from_port": "main",
+      "to_node": "c2",
+      "to_port": "main"
+    },
+    {
+      "from_node": "gen",
+      "from_port": "main",
+      "to_node": "c3",
+      "to_port": "main"
+    },
+    {
+      "from_node": "gen",
+      "from_port": "main",
+      "to_node": "c4",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c1",
+      "from_port": "true",
+      "to_node": "y1",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c1",
+      "from_port": "false",
+      "to_node": "n1",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c2",
+      "from_port": "true",
+      "to_node": "y2",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c2",
+      "from_port": "false",
+      "to_node": "n2",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c3",
+      "from_port": "true",
+      "to_node": "y3",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c3",
+      "from_port": "false",
+      "to_node": "n3",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c4",
+      "from_port": "true",
+      "to_node": "y4",
+      "to_port": "main"
+    },
+    {
+      "from_node": "c4",
+      "from_port": "false",
+      "to_node": "n4",
+      "to_port": "main"
+    }
+  ],
+  "description": "Throwaway: find which condition-expression form the engine actually evaluates truthfully.",
+  "enabled": true
+}

@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "id": "issue-implement",
+  "name": "Implement a GitHub issue",
+  "inputs": [
+    {
+      "name": "issue",
+      "type": "number",
+      "description": "The issue number to implement.",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "max_iterations",
+      "type": "number",
+      "description": "Passed to the babysitter child workflow: how many babysit-and-merge passes before giving up.",
+      "required": false,
+      "default": 8
+    },
+    {
+      "name": "ci_wait_secs",
+      "type": "number",
+      "description": "Passed to the babysitter child workflow: how long a pass waits for in-flight CI checks to settle.",
+      "required": false,
+      "default": 1200
+    }
+  ],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Implement an issue",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "resolve",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Resolve repo from remotes",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\ngit rev-parse --git-dir >/dev/null 2>&1 || { echo \"not a git checkout: $(pwd)\" >&2; exit 1; }\n# Same remote resolution the babysitter uses: prefer the canonical org, and\n# prefer `upstream` within it, so a fork checkout still names the real repo and\n# the pull request is raised against the canonical repository rather than a fork.\nnormalize() { printf '%s' \"$1\" | sed -E 's#^git\\+##; s#/+$##; s#\\.git$##; s#^(https?://|ssh://)?(git@)?[^/:]+[:/]##'; }\nslug=\"\"; remote=\"\"\nfor r in $(git remote); do\n  u=$(git remote get-url \"$r\" 2>/dev/null || true)\n  [ -n \"$u\" ] || continue\n  case \"$u\" in *github.com*) ;; *) continue ;; esac\n  s=$(normalize \"$u\")\n  case \"${s%%/*}\" in\n    tinyhumansai|tinyhumans)\n      if [ -z \"$slug\" ] || [ \"$r\" = upstream ]; then slug=\"$s\"; remote=\"$r\"; fi\n      ;;\n  esac\ndone\nif [ -z \"$slug\" ]; then\n  for r in upstream origin $(git remote); do\n    u=$(git remote get-url \"$r\" 2>/dev/null || true)\n    [ -n \"$u\" ] || continue\n    case \"$u\" in *github.com*) ;; *) continue ;; esac\n    slug=$(normalize \"$u\"); remote=\"$r\"; break\n  done\nfi\nif [ -z \"$slug\" ]; then\n  echo \"no github remote in $(pwd); remotes: $(git remote | tr '\\n' ' ')\" >&2\n  exit 1\nfi\nbase=$(gh repo view \"$slug\" --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || echo main)\njq -n --arg repo \"$slug\" --arg owner \"${slug%%/*}\" --arg name \"${slug##*/}\" \\\n      --arg remote \"$remote\" --arg dir \"$(pwd)\" --arg base \"$base\" \\\n  '{repo:$repo, owner:$owner, name:$name, remote:$remote, workdir:$dir, base_branch:$base}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "collect",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Read the issue and its discussion",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\ninfo=$(gh issue view \"$ISSUE\" --repo \"$REPO\" --json number,url,title,body,state,author,createdAt,updatedAt,labels,assignees,comments)\n\n# Any pull request that already mentions this issue. An issue with work already\n# in flight must not get a second, competing branch - the gate below routes\n# straight to the report when one exists.\n### `gh --jq` takes no --arg, so the issue number is interpolated by the shell.\nlinked=$(gh pr list --repo \"$REPO\" --state open --limit 100 --json number,title,headRefName,body \\\n  --jq \"[.[]|select(((.body // \\\"\\\")|test(\\\"#${ISSUE}\\\\\\\\b\\\")) or ((.headRefName)|test(\\\"issue[/-]${ISSUE}$\\\")))|{number,title,head:.headRefName}]\" 2>/dev/null || echo '[]')\n\njq -n --argjson i \"$info\" --argjson linked \"$linked\" --arg repo \"$REPO\" '\n{repo:$repo, issue:$i.number, url:$i.url, title:($i.title // \"\"),\n body:(($i.body // \"\")[0:8000]),\n state:$i.state, author:($i.author.login // \"\"),\n created:$i.createdAt, updated:$i.updatedAt,\n labels:(($i.labels // [])|map(.name)),\n assignees:(($i.assignees // [])|map(.login)),\n comments:(($i.comments // [])|map({author:(.author.login // \"\"), body:((.body // \"\")[0:2000])})),\n comment_count:(($i.comments // [])|length),\n linked_prs:$linked,\n has_linked_pr:(($linked|length) > 0),\n open:(($i.state // \"\") == \"OPEN\")}'\n",
+          "env": {
+            "ISSUE": "=.inputs.issue | tostring",
+            "REPO": "=nodes.resolve.item.json.output.repo"
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "actionable",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Open, and nothing already in flight?",
+      "config": {
+        "field": "=(.nodes.collect.item.json.output.open == true) and (.nodes.collect.item.json.output.has_linked_pr != true)"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "triage",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Is this issue still real?",
+      "config": {
+        "prompt": "=\"You are the gatekeeper for GitHub issue #\\(.inputs.issue) in \\(.nodes.resolve.item.json.output.repo). You decide exactly one thing: is this issue still real, still in scope, and worth an engineer implementing right now?\\n\\nWORK READ-ONLY. Do not edit files, do not commit, do not push, do not comment on the issue and do not close it. Do not create a branch or a worktree. Your entire output is a judgement; a later step acts on it. The repository checkout at \\(.nodes.resolve.item.json.output.workdir) belongs to someone else - cd there to READ the code, nothing more.\\n\\nWhat the issue says about itself, with its labels and full comment thread:\\n\\(.nodes.collect.item.json.output | tojson)\\n\\nNEVER GO SILENT FOR MORE THAN THREE MINUTES - IT KILLS THE RUN. Cap foreground commands at about three minutes (`timeout 180 <cmd>`), never use a bare `sleep` over 180 seconds, and break long stretches of thinking with short tool calls. This is a reading task, so it should be cheap: do not build the project and do not run its test suite. You are judging the issue, not fixing it.\\n\\nINVESTIGATE BEFORE YOU JUDGE. Everything above is the reporter making a claim, not evidence that it is true. An issue that reads plausibly may describe code that no longer exists; one that reads oddly may be a real defect. Go and look:\\n  - read the files the issue names IN THE CHECKOUT, and the code around them, and establish whether the behaviour it describes is actually there today\\n  - `git log` and `git log -S<token>` over that code, to see whether it was already fixed, or was deliberately written the way it is\\n  - the repository AGENTS.md, CLAUDE.md and README for what is in scope and what the conventions are\\n  - the issue's own comment thread - a maintainer may already have answered it, redirected it, or declared it out of scope\\n  - if the issue names a dependency, a vendored submodule pin, an upstream PR or another repository, CHECK THE ACTUAL STATE of that thing rather than trusting the issue's description. Issues go stale: a blocker named months ago may have landed, and a submodule pin may or may not include it. Say which, with the commit.\\n\\nSKIP it only when you can name the specific evidence for one of these:\\n  - it is already implemented - name the file, line or commit that does it\\n  - the behaviour it describes cannot be reproduced in this code, or the code it refers to no longer exists\\n  - a maintainer has already declined it or ruled it out of scope in the thread\\n  - it depends on something that has not landed yet, and cannot be built until it does - name the dependency and its current state\\n  - it is not a change to this repository at all - it belongs upstream, or in a vendored dependency this repository does not own\\n  - it is too vague to implement: no reproduction, no acceptance criteria, and no way to tell from the code what \\\"done\\\" would mean\\n\\nDO NOT SKIP an issue merely because it is large, awkward, touches unfamiliar code, has no assignee, needs a design decision you would make differently, or would be work you find tedious. Those are all ordinary implementation work.\\n\\nTHE BAR IS ASYMMETRIC, AND IT POINTS AT PROCEEDING. Attempting an issue that turns out to be stale costs machine time and produces a pull request a human closes. Skipping a real one means it silently does not get done and nobody is told why. The implementer that runs after you is separately instructed to stop and open no pull request if it finds the work already done, so a wrong 'proceed' gets caught downstream while a wrong 'skip' does not. So when the evidence is thin, when you are extrapolating, or when the honest answer is that you are not sure - set worthy to true and let it through. A downstream gate independently refuses to skip on a confidence below 0.8.\\n\\nFinish your reply with one JSON object and nothing after it:\\n  worthy       boolean - true to hand it to the implementer, false to skip it\\n  confidence   number between 0 and 1 - how sure you are of that call\\n  category     one of: actionable, already_implemented, not_reproducible, declined_by_maintainer, blocked_upstream, wrong_repository, too_vague\\n  reason       one or two sentences, for the run log\\n  evidence     array of strings; each one names the file and line, commit, PR number or command output that backs the call. An empty array means you did not investigate - go back and do it.\\n  notes        markdown passed to the implementer when worthy is true: what you learned that would save them time - which files matter, what the real current state is, which part of the issue is stale, and any interpretation the issue leaves open. Empty string when worthy is false.\"",
+        "_note": "No output_parser here on purpose: an agent node carrying one fails at run time on this host with 'capability error: agent node: no prompt', on both codex and claude, even though the prompt resolves correctly. The verdict is parsed out of the reply text by the `parse` node instead."
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "parse",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Read the triage verdict",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -uo pipefail\n# The triage agent is asked to end its reply with one JSON object. Pull the last\n# such object that actually carries a `worthy` key - the reply is prose with a\n# verdict at the end, and an earlier brace may belong to a quoted code snippet.\n#\n# This node exists because an `output_parser` on the agent node itself makes the\n# step fail outright on this host; see the note on the triage node.\ntext=\"${TRIAGE_TEXT:-}\"\nparsed=\"\"\nif [ -n \"$text\" ] && command -v python3 >/dev/null 2>&1; then\n  parsed=$(printf '%s' \"$text\" | python3 -c '\nimport sys, json\ns = sys.stdin.read()\nfound = None\nfor i, ch in enumerate(s):\n    if ch != \"{\":\n        continue\n    depth = 0\n    for j in range(i, len(s)):\n        if s[j] == \"{\":\n            depth += 1\n        elif s[j] == \"}\":\n            depth -= 1\n            if depth == 0:\n                try:\n                    o = json.loads(s[i:j+1])\n                except Exception:\n                    pass\n                else:\n                    if isinstance(o, dict) and \"worthy\" in o:\n                        found = o\n                break\nsys.stdout.write(json.dumps(found) if found is not None else \"\")\n' 2>/dev/null) || parsed=\"\"\nfi\n\n# Failing open is deliberate. A verdict we cannot read must not silently skip a\n# real issue: the implementer is separately instructed to stop and open no pull\n# request if it finds the work already done, so a wrong \"proceed\" is caught\n# downstream while a wrong \"skip\" is invisible.\nif [ -z \"$parsed\" ]; then\n  head=$(printf '%s' \"$text\" | tail -c 500)\n  jq -n --arg head \"$head\" '\n  {worthy:true, confidence:0, category:\"unparsed\",\n   reason:\"the triage reply contained no JSON verdict object, so this failed open to implementation\",\n   evidence:[], notes:\"\", parsed:false, reply_tail:$head}'\nelse\n  printf '%s' \"$parsed\" | jq '\n  {worthy:(if (.worthy|type) == \"boolean\" then .worthy else true end),\n   confidence:(if (.confidence|type) == \"number\" then .confidence else 0 end),\n   category:(.category // \"unknown\"),\n   reason:(.reason // \"\"),\n   evidence:(if (.evidence|type) == \"array\" then .evidence else [] end),\n   notes:(.notes // \"\"),\n   parsed:true}'\nfi\n",
+          "env": {
+            "TRIAGE_TEXT": "=nodes.triage.item.json.text // \"\""
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "verdict",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Worth implementing?",
+      "config": {
+        "field": "=(.nodes.parse.item.json.output.worthy != false) or ((.nodes.parse.item.json.output.confidence // 0) < 0.8)"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "prepare",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Cut a worktree branch for the issue",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\n# stdout is this node's return value and must be JSON and nothing else. git is\n# chatty on stdout, so stdout goes to stderr for the whole script and the result\n# is written to the saved descriptor at the end. Chasing individual commands\n# with >/dev/null is how a stray line silently turns this node's output into a\n# string and every `=nodes.prepare...` binding into null.\nexec 3>&1 1>&2\n\nTOPLEVEL=$(git rev-parse --show-toplevel)\nBRANCH=\"issue/$ISSUE\"\nWT_DIR=\"$TOPLEVEL/worktrees/issue-$ISSUE\"\n\n# Take the issue up, so it is visibly owned while the work happens. Non-fatal:\n# lacking write access is an ordinary state and must not stop a run that can\n# still produce a branch and a pull request from a fork.\nassigned=false\nif gh issue edit \"$ISSUE\" --repo \"$REPO\" --add-assignee \"@me\"; then\n  assigned=true\nelse\n  echo \"could not assign issue #$ISSUE to @me; continuing\" >&2\nfi\n\ngit fetch \"$BASE_REMOTE\" \"$BASE_BRANCH\" --prune || true\n\nreused=false\nif [ -d \"$WT_DIR\" ]; then\n  reused=true\nelse\n  # A branch left over from an earlier attempt is reset onto the current base,\n  # so a re-run starts from today's main rather than a stale one.\n  if git show-ref --verify --quiet \"refs/heads/$BRANCH\"; then\n    git branch -f \"$BRANCH\" \"refs/remotes/${BASE_REMOTE}/${BASE_BRANCH}\"\n  else\n    git branch \"$BRANCH\" \"refs/remotes/${BASE_REMOTE}/${BASE_BRANCH}\"\n  fi\n  mkdir -p \"$TOPLEVEL/worktrees\"\n  git worktree add \"$WT_DIR\" \"$BRANCH\"\nfi\ncd \"$WT_DIR\"\n\n# A plain `git push` from the worktree must land on the canonical repository,\n# which is where the pull request is raised.\ngit config \"branch.${BRANCH}.pushRemote\" \"$BASE_REMOTE\"\n\n# Shared cargo build cache. A fresh worktree otherwise compiles the whole\n# dependency graph from cold, and on a big workspace that cold build - not the\n# model - is where the wall clock goes. The cache lives under the primary\n# checkout's already-ignored target/, so it is invisible to git and survives\n# worktree removal.\n#\n# Written only for a cargo project with no config of its own: a checked-in\n# .cargo/config.toml is the repository's own build setup and must never be\n# clobbered. The file is excluded locally so it cannot be committed by accident.\nshared_target=\"\"\nif [ -f Cargo.toml ] && [ ! -e .cargo/config.toml ] && [ ! -e .cargo/config ]; then\n  shared_target=\"$TOPLEVEL/target/_workflow-shared\"\n  mkdir -p \"$shared_target\" .cargo\n  printf '[build]\\ntarget-dir = \"%s\"\\n' \"$shared_target\" > .cargo/config.toml\n  if ! git ls-files --error-unmatch .cargo/config.toml >/dev/null 2>&1; then\n    common=$(cd \"$(git rev-parse --git-common-dir)\" && pwd)\n    mkdir -p \"$common/info\"\n    grep -qxF '/.cargo/' \"$common/info/exclude\" 2>/dev/null \\\n      || printf '/.cargo/\\n' >> \"$common/info/exclude\"\n  fi\nfi\n\nif command -v submodule-init >/dev/null 2>&1; then\n  submodule-init \"$WT_DIR\" --quiet || true\nfi\n\njq -n --arg wt \"$WT_DIR\" --arg rel \"worktrees/issue-$ISSUE\" --arg branch \"$BRANCH\" \\\n      --arg base \"$BASE_BRANCH\" --arg remote \"$BASE_REMOTE\" \\\n      --argjson reused \"$reused\" --argjson assigned \"$assigned\" --arg shared \"$shared_target\" '\n{worktree:$wt, worktree_rel:$rel, branch:$branch, base_branch:$base,\n push_remote:$remote, reused_worktree:$reused, assigned_to_me:$assigned,\n shared_target_dir:(if $shared==\"\" then null else $shared end)}' >&3\n",
+          "env": {
+            "ISSUE": "=.inputs.issue | tostring",
+            "REPO": "=nodes.resolve.item.json.output.repo",
+            "BASE_REMOTE": "=nodes.resolve.item.json.output.remote",
+            "BASE_BRANCH": "=nodes.resolve.item.json.output.base_branch"
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "implement",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Implement it and open the PR",
+      "config": {
+        "prompt": "=\"You are implementing GitHub issue #\\(.inputs.issue) in \\(.nodes.resolve.item.json.output.repo), and opening the pull request for it. A later step drives that pull request to green and merged, so your job ends when the PR exists and is a genuine, complete piece of work.\\n\\nA worktree has already been prepared for you - do not check anything out again, and never touch the primary checkout:\\n\\(.nodes.prepare.item.json.output | tojson)\\n\\ncd to that `worktree` path and stay there. It is on local branch `\\(.nodes.prepare.item.json.output.branch)`, cut fresh from \\(.nodes.prepare.item.json.output.push_remote)/\\(.nodes.prepare.item.json.output.base_branch), with pushes wired to \\(.nodes.prepare.item.json.output.push_remote), so a plain `git push -u \\(.nodes.prepare.item.json.output.push_remote) \\(.nodes.prepare.item.json.output.branch)` publishes it on the canonical repository.\\n\\nThe issue, its labels and its full discussion:\\n\\(.nodes.collect.item.json.output | tojson)\\n\\nA triage step has already read this issue against the code and judged it worth doing. Its findings are a head start, not gospel - it did not build or test anything, so verify anything you are about to rely on:\\n  verdict:    \\(.nodes.parse.item.json.output.category // \"unknown\") at confidence \\(.nodes.parse.item.json.output.confidence // 0)\\n  reasoning:  \\(.nodes.parse.item.json.output.reason // \"\")\\n  evidence:   \\(.nodes.parse.item.json.output.evidence // [] | tojson)\\n  notes:      \\(.nodes.parse.item.json.output.notes // \"\")\\n\\nNEVER GO SILENT FOR MORE THAN THREE MINUTES - IT KILLS THE RUN. The worker hosting this session kills it after 10 minutes with no event, and a foreground command emits nothing until it returns, so ONE `cargo test --workspace` or one `--watch` ends the whole run and everything you have not yet committed and pushed is thrown away. This is the single most common way this work dies. So:\\n  - Cap every foreground command at about three minutes: prefer `timeout 180 <cmd>`, and run long suites in slices (per crate, per test target, per lint) rather than one whole-workspace invocation.\\n  - For anything genuinely long - a cold build, a full test suite - start it in the BACKGROUND writing to a log, e.g. `nohup cargo test --workspace >/tmp/issue\\(.inputs.issue)-test.log 2>&1 &`, then poll it every couple of minutes with a short `tail -5 /tmp/issue\\(.inputs.issue)-test.log` until it finishes. Each poll is its own tool call, which is what keeps the session alive.\\n  - Never use a bare `sleep` over 180 seconds. If you need a long stretch of thinking, break it with short tool calls.\\n\\nBANK YOUR WORK AS YOU GO. Commit each coherent piece as you finish it rather than saving one commit for the end - that is exactly the moment that gets killed. A branch with three good commits and an unfinished fourth is recoverable; an unstaged tree is not.\\n\\nUNDERSTAND BEFORE YOU BUILD. The issue is a claim about the code, not a specification of it:\\n  - Read every file the issue touches, and the code around them, before writing anything.\\n  - Read the repository's AGENTS.md, CLAUDE.md, README and package manifest (Cargo.toml, package.json, Makefile, pyproject.toml, go.mod) for the conventions and the real build, lint and test commands. Do not invent commands for a toolchain this repository does not use.\\n  - `git log` and `git log -S<token>` over the code in question, to see whether it was already changed, or was deliberately written the way it is.\\n  - If the issue names an upstream dependency, a vendored submodule pin, or another repository, check the actual state of it rather than trusting the issue's description - issues go stale.\\n\\nIF THE ISSUE IS WRONG OR ALREADY DONE, SAY SO AND STOP. Do not invent work to have something to show. If the behaviour it asks for already exists, if the problem it describes cannot be reproduced in this code, or if it depends on something that has not landed, make no commits, open no pull request, and report that finding with the evidence - the file, line, or commit that shows it. That is a complete and useful outcome.\\n\\nIF THE ISSUE IS UNDERSPECIFIED, implement the smallest reading of it that is defensible, and say plainly in the PR body which interpretation you took and what you left out. Do not expand the scope beyond what the issue asks for, and do not refactor surrounding code that is merely not to your taste.\\n\\nHOW TO DO THE WORK:\\n1. Implement the change, following the conventions of the code you are editing - its naming, its error handling, its module layout, its comment density.\\n2. Cover it with tests in the style the repository already uses. A behaviour change with no test is not finished. Put them where that repository puts them, not where you would prefer.\\n3. Run the repository's own build, lint, format and test commands from inside the worktree - in slices or in the background, per the three-minute rule above. Fix what you break. Never skip hooks, disable tests, or weaken an assertion to make something pass.\\n4. Commit in atomic commits with conventional subjects matching the repository's history.\\n5. Push with `git push -u \\(.nodes.prepare.item.json.output.push_remote) \\(.nodes.prepare.item.json.output.branch)`.\\n6. Open the pull request against \\(.nodes.prepare.item.json.output.base_branch) on \\(.nodes.resolve.item.json.output.repo), NOT as a draft:\\n   gh pr create --repo \\(.nodes.resolve.item.json.output.repo) --base \\(.nodes.prepare.item.json.output.base_branch) --head \\(.nodes.prepare.item.json.output.branch) --title \\\"<conventional subject>\\\" --body \\\"<body>\\\"\\n   The body must say what changed and why, state `Closes #\\(.inputs.issue)`, name the commands you ran to validate it, and call out any interpretation you had to make or anything you deliberately left out.\\n\\nDo not merge the PR and do not review it - a separate babysitter workflow takes it from here. Report the PR number and URL, what you implemented, what you tested and with which commands, and anything you left undone.\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "locate",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Find the PR that was opened",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "script": "set -euo pipefail\n# The agent reports its PR number in prose, which is not a contract. The branch\n# is: whatever it actually opened against this head branch is the pull request\n# the babysitter must be handed. No PR is a legitimate outcome - the agent is\n# told to open none when the issue is already satisfied or cannot be built.\nnum=$(gh pr list --repo \"$REPO\" --head \"$BRANCH\" --state open --json number \\\n        --jq 'sort_by(.number)|last|.number // empty' 2>/dev/null || true)\nif [ -z \"$num\" ]; then\n  jq -n --arg repo \"$REPO\" --arg branch \"$BRANCH\" \\\n    '{repo:$repo, branch:$branch, pr:0, found:false, url:\"\"}'\nelse\n  url=$(gh pr view \"$num\" --repo \"$REPO\" --json url --jq .url 2>/dev/null || echo \"\")\n  jq -n --arg repo \"$REPO\" --arg branch \"$BRANCH\" --argjson pr \"$num\" --arg url \"$url\" \\\n    '{repo:$repo, branch:$branch, pr:$pr, found:true, url:$url}'\nfi\n",
+          "env": {
+            "REPO": "=nodes.resolve.item.json.output.repo",
+            "BRANCH": "=nodes.prepare.item.json.output.branch"
+          }
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "opened",
+      "kind": "condition",
+      "type_version": 1,
+      "name": "Was a PR opened?",
+      "config": {
+        "field": "=.nodes.locate.item.json.output.found == true"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "babysit",
+      "kind": "sub_workflow",
+      "type_version": 1,
+      "name": "Babysit it to green and merged",
+      "config": {
+        "workflow_id": "pr-babysitter",
+        "inputs": {
+          "pr": "=nodes.locate.item.json.output.pr",
+          "max_iterations": "=.inputs.max_iterations",
+          "ci_wait_secs": "=.inputs.ci_wait_secs"
+        }
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "report",
+      "kind": "tool_call",
+      "type_version": 1,
+      "name": "Final report",
+      "config": {
+        "slug": "medulla:shell",
+        "execution": "once",
+        "args": {
+          "language": "shell",
+          "env": {
+            "ISSUE": "=.inputs.issue | tostring",
+            "REPO": "=(.nodes.resolve.item.json.output.repo // \"\")",
+            "META": "=(.nodes.collect.item.json.output // null) | tojson",
+            "TRIAGE": "=(.nodes.parse.item.json.output // null) | tojson",
+            "PRINFO": "=(.nodes.locate.item.json.output // null) | tojson",
+            "BABYSAT": "=(.nodes.babysit.item.json // null) | tojson"
+          },
+          "script": "set -euo pipefail\njq -n --argjson issue \"${ISSUE:-null}\" --arg repo \"${REPO:-}\" \\\n      --argjson meta \"${META:-null}\" --argjson triage \"${TRIAGE:-null}\" \\\n      --argjson pr \"${PRINFO:-null}\" --argjson babysat \"${BABYSAT:-null}\" '\n{repo:$repo, issue:$issue,\n title:($meta.title // \"\"), url:($meta.url // \"\"),\n outcome:(if ($babysat.merged // false) then \"implemented_and_merged\"\n          elif ($pr.found // false) then \"pr_open_not_merged\"\n          elif (($meta.has_linked_pr // false) == true) then \"skipped_work_already_in_flight\"\n          elif (($meta.open // false) != true) then \"skipped_issue_not_open\"\n          elif ($triage != null and ($triage.worthy // true) == false) then \"skipped_by_triage\"\n          elif ($triage == null) then \"never_triaged\"\n          else \"no_pr_opened\" end),\n triage:(if $triage == null then null else\n   {worthy:$triage.worthy, confidence:$triage.confidence, category:$triage.category,\n    reason:$triage.reason, evidence:($triage.evidence // [])} end),\n pr:($pr.pr // 0), pr_url:($pr.url // \"\"),\n linked_prs:($meta.linked_prs // []),\n babysit_result:$babysat}'\n"
+        }
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "resolve",
+      "to_port": "main"
+    },
+    {
+      "from_node": "resolve",
+      "from_port": "main",
+      "to_node": "collect",
+      "to_port": "main"
+    },
+    {
+      "from_node": "collect",
+      "from_port": "main",
+      "to_node": "actionable",
+      "to_port": "main"
+    },
+    {
+      "from_node": "actionable",
+      "from_port": "true",
+      "to_node": "triage",
+      "to_port": "main"
+    },
+    {
+      "from_node": "actionable",
+      "from_port": "false",
+      "to_node": "report",
+      "to_port": "main"
+    },
+    {
+      "from_node": "triage",
+      "from_port": "main",
+      "to_node": "parse",
+      "to_port": "main"
+    },
+    {
+      "from_node": "parse",
+      "from_port": "main",
+      "to_node": "verdict",
+      "to_port": "main"
+    },
+    {
+      "from_node": "verdict",
+      "from_port": "true",
+      "to_node": "prepare",
+      "to_port": "main"
+    },
+    {
+      "from_node": "verdict",
+      "from_port": "false",
+      "to_node": "report",
+      "to_port": "main"
+    },
+    {
+      "from_node": "prepare",
+      "from_port": "main",
+      "to_node": "implement",
+      "to_port": "main"
+    },
+    {
+      "from_node": "implement",
+      "from_port": "main",
+      "to_node": "locate",
+      "to_port": "main"
+    },
+    {
+      "from_node": "locate",
+      "from_port": "main",
+      "to_node": "opened",
+      "to_port": "main"
+    },
+    {
+      "from_node": "opened",
+      "from_port": "true",
+      "to_node": "babysit",
+      "to_port": "main"
+    },
+    {
+      "from_node": "opened",
+      "from_port": "false",
+      "to_node": "report",
+      "to_port": "main"
+    },
+    {
+      "from_node": "babysit",
+      "from_port": "main",
+      "to_node": "report",
+      "to_port": "main"
+    }
+  ],
+  "description": "Take a GitHub issue in any checked-out repository, implement it on its own worktree branch, open a pull request for it, then hand that PR to the pr-babysitter sub-workflow to drive to green and merged.",
+  "enabled": true,
+  "defaults": {
+    "harness": "codex"
+  }
+}
