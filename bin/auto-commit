@@ -392,6 +392,17 @@ while IFS= read -r -d '' entry; do
     *R*) is_rename=1; IFS= read -r -d '' source_path || true ;;
     *C*) IFS= read -r -d '' source_path || true ;;
   esac
+  # `--untracked-files=all` still stops at the boundary of another repository:
+  # an untracked nested checkout — a vendored dependency, a stray clone — is
+  # reported as one entry with a trailing slash and git will not name the files
+  # inside it. `atomic-commit` refuses a directory, correctly, and because that
+  # refusal aborts the whole call the entire checkpoint was being lost: on
+  # dragonfly one vendored clone stopped a worktree committing anything at all,
+  # on every tool call, silently. Its contents belong to that other repository,
+  # so drop the entry and commit everything around it.
+  case "$path" in
+    */) NESTED+=("$path"); continue ;;
+  esac
   [ -n "$path" ] && CHANGED+=("$path")
   # `atomic-commit` first restores the index, so it needs the old side too in
   # order to re-stage the deletion that completes a rename.
