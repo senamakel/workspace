@@ -288,13 +288,33 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # `medulla-v1` or `medulla-backend`. Both owners are listed because `origin` is
 # routinely the personal fork of an allowlisted upstream; only those two remotes
 # are consulted, so an incidental third remote cannot admit a repository.
+# The list below is every public, non-archived, non-fork repository in the
+# tinyhumansai organization as of 2026-08-09, plus `workspace`, and nothing
+# else. Public is the line that matters: these are repositories whose contents
+# are already readable by anyone, so sending a diff to a model gives away
+# nothing that was not already given away. Every private repository in the
+# organization — the backends, `medulla-v1`, the `workflow-*` superprojects, the
+# security-advisory forks — is deliberately absent, and so are the forks of
+# third-party projects (`tauri-cef`, `homebrew-core` and the rest), which carry
+# somebody else's code and belong to their upstream's review, not to a
+# checkpoint.
+#
+# Refresh it with:
+#   gh repo list tinyhumansai --limit 200 --no-archived --source \
+#     --visibility public --json name --jq '.[].name'
+# and add the `senamakel/` twin of anything new: `origin` is routinely the
+# personal fork of an allowlisted upstream.
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
-tinyhumansai/openhuman:tinyhumansai/opencompany:tinyhumansai/medulla:tinyhumansai/tinysweeper:\
-tinyhumansai/tinyagents:tinyhumansai/tinybus:tinyhumansai/tinychannels:tinyhumansai/tinycortex:tinyhumansai/tinyflows:\
-tinyhumansai/workspace:\
-senamakel/openhuman:senamakel/opencompany:senamakel/medulla:senamakel/tinysweeper:\
-senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:senamakel/tinycortex:senamakel/tinyflows:\
-senamakel/workspace}"
+tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai/medulla:\
+tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/sdk:tinyhumansai/skill-registry:\
+tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybus:tinyhumansai/tinychannels:\
+tinyhumansai/tinycortex:tinyhumansai/tinyflows:tinyhumansai/tinyjuice:tinyhumansai/tinysweeper:\
+tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
+senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
+senamakel/opencompany:senamakel/openhuman:senamakel/sdk:senamakel/skill-registry:\
+senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:\
+senamakel/tinycortex:senamakel/tinyflows:senamakel/tinyjuice:senamakel/tinysweeper:\
+senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
 # git@host:owner/repo.git, https://host/owner/repo, ssh://git@host/owner/repo/
