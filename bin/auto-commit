@@ -156,10 +156,17 @@ CONVENTIONAL_TYPES="${AUTO_COMMIT_TYPES:-feat|fix|chore|docs|refactor|test|perf|
 FALLBACK_TYPE="${AUTO_COMMIT_FALLBACK_TYPE:-chore}"
 FALLBACK_MAX_FILES="${AUTO_COMMIT_FALLBACK_MAX_FILES:-5}"
 BODY_MAX_LINES="${AUTO_COMMIT_BODY_MAX_LINES:-6}"
-# Five seconds is the whole budget for the subject line. Past that the commit
-# matters more than the wording: a checkpoint that arrives late is a checkpoint
-# the next tool call has already raced, so it falls back to naming the files.
-TIMEOUT="${AUTO_COMMIT_TIMEOUT:-5}"
+# The whole budget for the subject line. Past it the commit matters more than
+# the wording: a checkpoint that arrives late is a checkpoint the next tool call
+# has already raced, so it falls back to naming the files.
+#
+# Eight rather than five. A bare round trip to the endpoint measures under two
+# seconds, but the request that matters carries up to 40 KB of diff and asks for
+# 300 tokens back, and at five seconds dragonfly hit `curl (28) timed out ...
+# with 88 bytes received` on every call it logged — the answer was arriving,
+# always just too late, so every message there was a file listing. Three more
+# seconds in the worst case buys back the wording.
+TIMEOUT="${AUTO_COMMIT_TIMEOUT:-8}"
 MAX_DIFF="${AUTO_COMMIT_MAX_DIFF:-40000}"
 MODEL="${AUTO_COMMIT_MODEL:-deepseek/deepseek-v4-flash}"
 API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
