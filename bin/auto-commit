@@ -801,7 +801,13 @@ DEVICE="$(device_name)"
 # Subject, blank line, description, blank line, trailer — the shape git and every
 # tool expect, with the trailer alone in the final paragraph so that
 # `git interpret-trailers` and `%(trailers)` both see it.
-MESSAGE="$(printf '%s\n\n%s\n\n%s\n' "$SUBJECT" "$BODY" "Auto-committed-on: $DEVICE")"
+if [ -n "$BODY" ]; then
+  MESSAGE="$(printf '%s\n\n%s\n\n%s\n' "$SUBJECT" "$BODY" "Auto-committed-on: $DEVICE")"
+else
+  # No description at all rather than a paragraph restating the subject: the
+  # trailer still needs its own blank line before it to parse as a trailer.
+  MESSAGE="$(printf '%s\n\n%s\n' "$SUBJECT" "Auto-committed-on: $DEVICE")"
+fi
 
 FILE_LIST="$(printf '%s\n' "${STAGE[@]}")"
 
