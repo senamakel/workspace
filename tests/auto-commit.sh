@@ -766,6 +766,29 @@ test_allowlist_matches_any_remote_and_is_overridable() {
   assert_eq 4 "$(count_commits "$repo")" "AUTO_COMMIT_REPOS overrides the default"
 }
 
+test_a_reply_opening_with_a_blank_line_is_used() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  # `head -1` on a reply that opens with a newline returns the empty string, and
+  # an empty subject means "the model gave nothing" — so a perfectly good message
+  # was thrown away and the commit fell back to listing files, leaving no error
+  # behind to explain it.
+  repo="$(make_repo leading-blank)"
+  state="$(state_dir leading-blank)"
+  stub="$(make_stub leadingblank "
+
+feat: add the greeting
+
+It greets.")"
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+
+  assert_eq "feat: add the greeting" "$(git -C "$repo" log -1 --format=%s)" \
+    "the subject is taken from the first non-blank line"
+  assert_contains "$(git -C "$repo" log -1 --format=%b)" "It greets." \
+    "the description survives too"
+}
+
 test_commits_around_a_nested_checkout() {
   local repo state stub log committed
   command -v jq >/dev/null 2>&1 || return 0
