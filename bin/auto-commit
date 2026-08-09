@@ -777,8 +777,12 @@ if [ -z "$SUBJECT" ]; then
   else
     MODEL_REASON="no usable subject: $API_KEY_VAR is unset"
   fi
+  # Whichever of the two exists: the command's stderr when it failed, or the
+  # reply itself when it succeeded and still yielded no subject. Without the
+  # second, a parsing failure and a network failure logged the same line.
   log_event "model-fallback" "$MODEL_REASON" \
-    "$([ -n "$MODEL_ERR" ] && head -c 2000 "$MODEL_ERR" 2>/dev/null || true)"
+    "$([ -n "$MODEL_ERR" ] && head -c 2000 "$MODEL_ERR" 2>/dev/null || true)$(
+      [ -z "$RESPONSE" ] || printf 'reply was: %s' "$(printf '%s' "$RESPONSE" | tr '\n' ' ' | cut -c1-400)")"
   SUBJECT="$(fallback_subject)"
   BODY="$(fallback_body)"
 elif ! printf '%s' "$SUBJECT" \
