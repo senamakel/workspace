@@ -341,7 +341,7 @@ tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinysweeper:tinyhu
 tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
 senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
 senamakel/opencompany:senamakel/openhuman:senamakel/sdk:senamakel/skill-registry:\
-senamakel/rust-template:\
+senamakel/riemann:senamakel/rust-template:\
 senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:\
 senamakel/tinycortex:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyjuice:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinysweeper:senamakel/tinywallet:\

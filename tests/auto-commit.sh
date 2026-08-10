@@ -748,7 +748,7 @@ test_commits_only_in_allowlisted_repositories() {
   for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla tinyhumansai/rust-template \
               tinyhumansai/tinyagents tinyhumansai/tinybus tinyhumansai/tinychannels tinyhumansai/tinycortex \
               tinyhumansai/tinydocs tinyhumansai/tinyflows tinyhumansai/tinymemory tinyhumansai/tinyruntime tinyhumansai/tinysweeper tinyhumansai/tinywallet \
-              senamakel/openhuman senamakel/opencompany senamakel/medulla senamakel/rust-template \
+              senamakel/openhuman senamakel/opencompany senamakel/medulla senamakel/riemann senamakel/rust-template \
               senamakel/tinyagents senamakel/tinybus senamakel/tinychannels senamakel/tinycortex \
               senamakel/tinydocs senamakel/tinyflows senamakel/tinymemory senamakel/tinyruntime senamakel/tinysweeper senamakel/tinywallet; do
     git -C "$repo" remote add origin "git@github.com:$slug.git"
