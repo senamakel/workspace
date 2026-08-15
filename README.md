@@ -538,8 +538,15 @@ failure up to a configurable number of attempts with a delay between tries.
 This supports more resilient operations without duplicating retry logic.
 ```
 
-`OPENROUTER_API_KEY` is exported from `~/.zshenv` on every machine, so real
-messages are generated everywhere. It lives in `.zshenv` rather than `.zshrc`
+`AUTOCOMMIT_API_KEY` is exported from `~/.zshenv` on every machine, so real
+messages are generated everywhere. The hook has its own OpenRouter key rather
+than sharing `OPENROUTER_API_KEY`: it is the noisiest consumer of a key by far —
+it fires on nearly every tool call — so separating them keeps its spend and rate
+limits legible, and rotating one does not silently stop the other. When
+`AUTOCOMMIT_API_KEY` is unset the hook falls back to `OPENROUTER_API_KEY`, so a
+box that has not been given the dedicated key yet still writes real messages;
+`AUTO_COMMIT_API_KEY_VAR` overrides both. The key lives in `.zshenv` rather than
+`.zshrc`
 deliberately: zsh sources `.zshrc` **only for interactive shells**, so a hook
 launched from cron, a systemd unit, or a bare `ssh host cmd` would never see the
 key and would silently fall back. `.zshenv` is sourced for every invocation.
