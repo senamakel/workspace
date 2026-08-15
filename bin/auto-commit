@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # auto-commit — commit whatever is dirty, with a message written from the diff.
 #
-# Usage: auto-commit [--hook] [--now] [--dry-run] [--json]
+# Usage: auto-commit [--hook] [--now] [--dry-run] [--json] [-f]
 #
 #   auto-commit --now        commit the working tree right now
 #   auto-commit --dry-run    show the message and the files, commit nothing
 #   auto-commit --hook       read a Claude Code PostToolUse event on stdin and
 #                            commit once every AUTO_COMMIT_EVERY tool calls (1)
+#   auto-commit -f, --force  commit even in a repository off the allowlist
 #
 # Wired as a PostToolUse hook, this keeps work committed continuously instead of
 # relying on an agent to remember. Every AUTO_COMMIT_EVERY tool calls (1 by
