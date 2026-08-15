@@ -485,7 +485,11 @@ Guards, all deliberate and all tested:
   sending the diff to a third-party model. The default list is `openhuman`,
   `opencompany`, and `medulla` under either `tinyhumansai` or `senamakel`, matched
   whole against the `origin` and `upstream` remotes — so `medulla-v1` and the
-  backends never match. Override with `AUTO_COMMIT_REPOS` / `AUTO_COMMIT_REMOTES`
+  backends never match. Override with `AUTO_COMMIT_REPOS` / `AUTO_COMMIT_REMOTES`.
+  `auto-commit --now -f` (`--force`) waives the list for one hand-typed run and
+  says so in its output; the hook can never waive it, because a per-tool-call
+  waiver would send diffs out of every checkout an agent wandered into without
+  anyone deciding to
 - refuses on a detached HEAD, where the commit would be unreachable from any
   branch and collected as soon as HEAD moves. There is **no** protected-branch
   guard: those repositories are worked on `main` directly, so refusing there meant
