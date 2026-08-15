@@ -170,7 +170,18 @@ TIMEOUT="${AUTO_COMMIT_TIMEOUT:-8}"
 MAX_DIFF="${AUTO_COMMIT_MAX_DIFF:-40000}"
 MODEL="${AUTO_COMMIT_MODEL:-deepseek/deepseek-v4-flash}"
 API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
-API_KEY_VAR="${AUTO_COMMIT_API_KEY_VAR:-OPENROUTER_API_KEY}"
+# The hook runs on nearly every tool call, so it is by far the noisiest consumer
+# of an OpenRouter key. It gets its own — AUTOCOMMIT_API_KEY — so its spend and
+# rate limits are separable from interactive use, and so a key rotated for one
+# does not silently stop the other. OPENROUTER_API_KEY stays the fallback for
+# boxes that have not been given the dedicated key yet.
+if [ -n "${AUTO_COMMIT_API_KEY_VAR:-}" ]; then
+  API_KEY_VAR="$AUTO_COMMIT_API_KEY_VAR"
+elif [ -n "${AUTOCOMMIT_API_KEY:-}" ]; then
+  API_KEY_VAR="AUTOCOMMIT_API_KEY"
+else
+  API_KEY_VAR="OPENROUTER_API_KEY"
+fi
 CRITIC_CMD="${AUTO_COMMIT_CMD:-}"
 # A machine-local, one-line friendly name for this box, used in the trailer that
 # marks a commit as automatic. Not in this repository: it differs per machine,
