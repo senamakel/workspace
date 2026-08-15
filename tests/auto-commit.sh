@@ -727,7 +727,8 @@ test_commits_only_in_allowlisted_repositories() {
   for url in \
     git@github.com:tinyhumansai/medulla-v1.git \
     git@github.com:tinyhumansai/medulla-backend.git \
-    git@github.com:someone-else/openhuman.git
+    git@github.com:someone-else/openhuman.git \
+    git@github.com:senamakel/math-superagent.git
   do
     git -C "$repo" remote set-url origin "$url"
     printf 'hello\n' > "$repo/new.txt"
