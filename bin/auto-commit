@@ -331,6 +331,15 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 #     --visibility public --json name --jq '.[].name'
 # and add the `senamakel/` twin of anything new: `origin` is routinely the
 # personal fork of an allowlisted upstream.
+#
+# `senamakel/math-superagent` (the riemann checkout) was removed on 2026-08-15.
+# It hosts long-running conjecture runs that write to `workspace/` continuously,
+# so the hook fired constantly and every firing sent up to AUTO_COMMIT_MAX_DIFF
+# bytes to the endpoint — billed to the same OPENROUTER_API_KEY the run itself
+# spends, where it competed with the run for credits and helped exhaust them.
+# Its own `WorkspaceCheckpoint` already keeps a fine-grained per-run history in
+# each workspace's `.workspace-history`, so what is lost here is the git
+# checkpoint, not the record. Commit that repository by hand.
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
 tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai/medulla:\
 tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/sdk:tinyhumansai/skill-registry:\
@@ -339,7 +348,7 @@ tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybus:tinyhumansa
 tinyhumansai/tinycortex:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyjuice:\
 tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
 tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
-senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/math-superagent:senamakel/medulla:\
+senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
 senamakel/opencompany:senamakel/openhuman:senamakel/sdk:senamakel/skill-registry:\
 senamakel/riemann:senamakel/rust-template:\
 senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:\
@@ -522,7 +531,7 @@ fi
 # false positive here silently withholds a file from every future commit.
 SECRET_PATTERNS=(
   'aws-access-key|AKIA[0-9A-Z]{16}'
-  'openai-or-anthropic-key|sk-(ant-)?[A-Za-z0-9_-]{24,}'
+  'openai-or-anthropic-key|\bsk-(ant-)?[A-Za-z0-9_-]{24,}'
   'openrouter-key|sk-or-v1-[A-Za-z0-9]{16,}'
   'github-token|gh[pousr]_[A-Za-z0-9]{30,}'
   'slack-token|xox[baprs]-[A-Za-z0-9-]{10,}'
