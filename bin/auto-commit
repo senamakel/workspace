@@ -29,7 +29,8 @@
 #
 # Guards, all deliberate:
 #   * commits only in repositories on the allowlist, because the message is
-#     written by sending the diff to a third-party model
+#     written by sending the diff to a third-party model. `--force` waives this
+#     for one hand-typed run; the hook can never waive it.
 #   * refuses on a detached HEAD, where a commit would be unreachable
 #   * never stages a path that looks like a credential, whatever .gitignore says
 #   * bails on any merge conflict — an unmerged index or leftover conflict
