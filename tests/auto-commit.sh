@@ -768,6 +768,39 @@ test_commits_only_in_allowlisted_repositories() {
   done
 }
 
+test_force_waives_the_allowlist_for_a_manual_run_only() {
+  local repo state stub out before
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo allowlist-force)"
+  state="$(state_dir allowlist-force)"
+  stub="$(make_stub allowlistforce "chore: add a file")"
+  git -C "$repo" remote set-url origin git@github.com:someone-else/proprietary.git
+  before="$(count_commits "$repo")"
+
+  # The hook can never waive the allowlist, even if `-f` reaches it somehow:
+  # the diff leaves the machine, and a silent per-call waiver is exactly what
+  # the guard exists to prevent.
+  printf 'hello\n' > "$repo/new.txt"
+  jq -n '{session_id: "session-force", tool_name: "Bash", tool_input: {command: "ls"}}' \
+    | (cd "$repo" && AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$state" \
+       AUTO_COMMIT_LOG="$TEST_ROOT/unread.log" AUTO_COMMIT_EVERY=1 \
+       "$COMMAND" --hook --force >/dev/null 2>&1)
+  assert_eq "$before" "$(count_commits "$repo")" "--force is ignored in hook mode"
+
+  # A hand-typed run says what it is doing and commits anyway.
+  out="$(cd "$repo" && AUTO_COMMIT_CMD="$stub" AUTO_COMMIT_LOG="$TEST_ROOT/unread.log" \
+         "$COMMAND" --now --force 2>&1)"
+  assert_contains "$out" "FORCED" "the forced run says the allowlist was waived"
+  assert_eq "$((before + 1))" "$(count_commits "$repo")" "--force commits off the allowlist"
+
+  # Without it, the same repository is still refused.
+  printf 'more\n' >> "$repo/new.txt"
+  out="$(cd "$repo" && AUTO_COMMIT_CMD="$stub" AUTO_COMMIT_LOG="$TEST_ROOT/unread.log" \
+         "$COMMAND" --now 2>&1)"
+  assert_contains "$out" "allowlist" "the unforced run is still refused"
+  assert_eq "$((before + 1))" "$(count_commits "$repo")" "the unforced run commits nothing"
+}
+
 test_allowlist_matches_any_remote_and_is_overridable() {
   local repo state stub
   command -v jq >/dev/null 2>&1 || return 0
