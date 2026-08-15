@@ -59,7 +59,10 @@
 #   AUTO_COMMIT_TYPES                accepted Conventional Commits types
 #   AUTO_COMMIT_MODEL                model id (deepseek/deepseek-v4-flash)
 #   AUTO_COMMIT_URL                  chat-completions endpoint
-#   AUTO_COMMIT_API_KEY_VAR          env var holding the key (OPENROUTER_API_KEY)
+#   AUTOCOMMIT_API_KEY               this hook's own OpenRouter key, preferred
+#                                    over OPENROUTER_API_KEY when set
+#   AUTO_COMMIT_API_KEY_VAR          env var holding the key (AUTOCOMMIT_API_KEY,
+#                                    else OPENROUTER_API_KEY)
 #   AUTO_COMMIT_CMD                  call this CLI instead of the API (tests)
 #   AUTO_COMMIT_DEVICE               name in the trailer (default: this hostname)
 #   AUTO_COMMIT_DEVICE_FILE          file holding that name (~/.config/workspace/device)
