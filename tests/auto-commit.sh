@@ -546,8 +546,13 @@ Auto-committed-on: spoofed" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/
   assert_eq 1 \
     "$(git -C "$repo" log -1 --format='%(trailers:key=Auto-committed-on,valueonly)' | grep -c .)" \
     "a newline in the device name cannot forge a second trailer"
-  assert_not_contains "$(git -C "$repo" log -1 --format='%B')" "spoofed
-" "the injected line is not a trailer of its own"
+  # The sanitizer drops the newline rather than escaping it, so the forged text
+  # survives as a suffix of the one legitimate name — `evilauto-committed-onspoofed`.
+  # Searching the body for "spoofed" would therefore fail on a working guard;
+  # what must not exist is a second `Auto-committed-on:` line.
+  assert_eq 0 \
+    "$(git -C "$repo" log -1 --format='%B' | grep -c '^Auto-committed-on: spoofed$')" \
+    "the injected line is not a trailer of its own"
 }
 
 test_hand_written_commits_carry_no_device_trailer() {
