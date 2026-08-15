@@ -404,9 +404,17 @@ repo_allowed() {
   return 1
 }
 
+# `--force` is a deliberate, typed decision to send this repository's diff to the
+# model anyway. It is accepted from a human at a terminal, never from the hook:
+# the allowlist exists because the diff leaves the machine, and a hook that could
+# waive it would waive it silently in every checkout the agent wandered into.
 if ! repo_allowed; then
-  emit skipped "'$TOP' is not on the auto-commit allowlist (AUTO_COMMIT_REPOS)"
-  exit 0
+  if [ "$FORCE" = "1" ] && [ "$HOOK" != "1" ]; then
+    note "[FORCED] '$TOP' is off the allowlist; committing anyway (--force)"
+  else
+    emit skipped "'$TOP' is not on the auto-commit allowlist (AUTO_COMMIT_REPOS)"
+    exit 0
+  fi
 fi
 
 # ── Tool-call counter ──────────────────────────────────────────────
