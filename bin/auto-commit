@@ -129,11 +129,12 @@ log_event() {
     [ -z "$extra" ] || printf '%s\n' "$extra" | sed 's/^/    /'
   } >>"$LOG_FILE" 2>/dev/null || true
 }
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
 
 HOOK=0
 NOW=0
 DRY=0
+FORCE=0
 FORMAT="text"
 
 while [ $# -gt 0 ]; do
@@ -141,6 +142,7 @@ while [ $# -gt 0 ]; do
     --hook)    HOOK=1; shift ;;
     --now)     NOW=1; shift ;;
     --dry-run) DRY=1; shift ;;
+    -f|--force) FORCE=1; shift ;;
     --json)    FORMAT="json"; shift ;;
     -h|--help) usage; exit 0 ;;
     *)         fail "unknown argument: $1"; usage; exit 1 ;;
