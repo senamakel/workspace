@@ -994,6 +994,7 @@ test_extra_skip_globs_are_honoured() {
 }
 
 run_test "commits only in allowlisted repositories" test_commits_only_in_allowlisted_repositories
+run_test "--force waives the allowlist for a manual run only" test_force_waives_the_allowlist_for_a_manual_run_only
 run_test "the allowlist matches any remote and is overridable" test_allowlist_matches_any_remote_and_is_overridable
 run_test "commits on every tool call by default" test_commits_on_every_tool_call_by_default
 run_test "commits the tool worktree instead of the launch checkout" test_commits_the_tool_worktree_not_the_launch_checkout
