@@ -1,11 +1,14 @@
 {
+  "env": {
+    "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT": "1800000"
+  },
   "attribution": {
     "commit": "",
     "pr": "",
     "sessionUrl": false
   },
   "permissions": {
-    "defaultMode": "bypassPermissions"
+    "defaultMode": "auto"
   },
   "model": "opus",
   "hooks": {
@@ -64,8 +67,5 @@
   "theme": "auto",
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true,
-  "env": {
-    "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT": "1800000"
-  }
+  "voiceEnabled": true
 }
