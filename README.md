@@ -549,7 +549,17 @@ it fires on nearly every tool call — so separating them keeps its spend and ra
 limits legible, and rotating one does not silently stop the other. When
 `AUTOCOMMIT_API_KEY` is unset the hook falls back to `OPENROUTER_API_KEY`, so a
 box that has not been given the dedicated key yet still writes real messages;
-`AUTO_COMMIT_API_KEY_VAR` overrides both. The key lives in `.zshenv` rather than
+`AUTO_COMMIT_API_KEY_VAR` overrides both. `AUTOCOMMIT_API_KEY` is deliberately
+the *same* key everywhere: it funds one workload, and one key keeps that
+workload's spend readable as a single number.
+
+`OPENROUTER_API_KEY` goes the other way — **one key per box**, so a runaway
+agent, a leak, or a rate limit is traceable to a machine and revocable there
+without taking the other boxes down with it. Which box holds which key is not
+recorded here, and must not be: keys never enter this repository. Read a box's
+own key from its `~/.zshenv` when you need to know.
+
+Both keys live in `.zshenv` rather than
 `.zshrc`
 deliberately: zsh sources `.zshrc` **only for interactive shells**, so a hook
 launched from cron, a systemd unit, or a bare `ssh host cmd` would never see the
