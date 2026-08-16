@@ -521,6 +521,14 @@ Guards, all deliberate and all tested:
   HEAD
 - commits with a plain `wip:` subject when the model is unreachable — a
   checkpoint with a dull message beats a lost checkpoint
+- ignores dirty *content* inside a submodule (`--ignore-submodules=dirty`), and
+  commits a submodule only when its gitlink actually moved. A submodule with an
+  untracked directory in it reports as modified, but `git add` on that path
+  stages nothing, so `atomic-commit` refuses the batch — and takes the
+  superproject's own dirty files down with it. That stalled every checkpoint in
+  `workflow-opencompany` on dragonfly, on every tool call, indefinitely. The
+  content belongs to the submodule's own repository and its own hook commits it
+  there
 - never pushes
 
 The subject comes from one HTTPS request to OpenRouter (~3s) carrying the stat
