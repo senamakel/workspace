@@ -182,12 +182,36 @@ API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
 # rate limits are separable from interactive use, and so a key rotated for one
 # does not silently stop the other. OPENROUTER_API_KEY stays the fallback for
 # boxes that have not been given the dedicated key yet.
+#
+# The key file is read *before* either variable, and that order is the whole
+# point of it. A hook inherits the environment of whatever process spawned it,
+# and the harnesses are long-lived: a Medulla daemon or tmux server started days
+# ago hands every session it spawns the environment it booted with, so a key
+# rotated in ~/.zshenv today does not reach a hook running under a parent from
+# last week — .zshenv is read when a *new* shell starts, and no new shell is
+# involved. On dragonfly every hook was still presenting a key that had since
+# been revoked, and got `401 User not found` on every call for days, while
+# `zsh -lc` in the same account showed the new key and worked. A file is read
+# fresh by each hook process, so rotating it takes effect on the next tool call
+# without restarting a single session.
+KEY_FILE="${AUTO_COMMIT_KEY_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/workspace/autocommit-key}"
+API_KEY=""
+API_KEY_SOURCE=""
 if [ -n "${AUTO_COMMIT_API_KEY_VAR:-}" ]; then
-  API_KEY_VAR="$AUTO_COMMIT_API_KEY_VAR"
-elif [ -n "${AUTOCOMMIT_API_KEY:-}" ]; then
-  API_KEY_VAR="AUTOCOMMIT_API_KEY"
-else
-  API_KEY_VAR="OPENROUTER_API_KEY"
+  API_KEY="${!AUTO_COMMIT_API_KEY_VAR:-}"
+  API_KEY_SOURCE="\$$AUTO_COMMIT_API_KEY_VAR"
+elif [ -r "$KEY_FILE" ]; then
+  API_KEY="$(head -1 "$KEY_FILE" 2>/dev/null | tr -d '[:space:]' || true)"
+  API_KEY_SOURCE="$KEY_FILE"
+fi
+if [ -z "$API_KEY" ]; then
+  if [ -n "${AUTOCOMMIT_API_KEY:-}" ]; then
+    API_KEY="$AUTOCOMMIT_API_KEY"
+    API_KEY_SOURCE="\$AUTOCOMMIT_API_KEY"
+  else
+    API_KEY="${OPENROUTER_API_KEY:-}"
+    API_KEY_SOURCE="\$OPENROUTER_API_KEY"
+  fi
 fi
 CRITIC_CMD="${AUTO_COMMIT_CMD:-}"
 # A machine-local, one-line friendly name for this box, used in the trailer that
@@ -812,7 +836,7 @@ EOF
     run_bounded "$TIMEOUT" "$CRITIC_CMD" -p "$prompt"
     return
   fi
-  [ -n "${!API_KEY_VAR:-}" ] || return 1
+  [ -n "$API_KEY" ] || return 1
   # Reasoning off, deliberately. This question does not need deliberation, and
   # leaving it on doubles the wait (3.3s vs 1.7s measured) while consuming the
   # token budget before any content is emitted — the reason an answer-sized
@@ -823,7 +847,7 @@ EOF
       messages: [{role: "user", content: $content}]}')"
   local raw content
   raw="$(curl -sS --fail-with-body --max-time "$TIMEOUT" --connect-timeout "$TIMEOUT" \
-    -H "Authorization: Bearer ${!API_KEY_VAR}" \
+    -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -d "$payload" "$API_URL" || true)"
   content="$(printf '%s' "$raw" | jq -r '.choices[0].message.content // ""' 2>/dev/null || true)"
@@ -871,10 +895,10 @@ BODY="$(printf '%s\n' "$RESPONSE" | tail -n +2 \
   | head -"$BODY_MAX_LINES" || true)"
 
 if [ -z "$SUBJECT" ]; then
-  if [ -n "${!API_KEY_VAR:-}" ] || [ -n "$CRITIC_CMD" ]; then
+  if [ -n "$API_KEY" ] || [ -n "$CRITIC_CMD" ]; then
     MODEL_REASON="no usable subject from $MODEL"
   else
-    MODEL_REASON="no usable subject: $API_KEY_VAR is unset"
+    MODEL_REASON="no usable subject: no key in $KEY_FILE, \$AUTOCOMMIT_API_KEY or \$OPENROUTER_API_KEY"
   fi
   # Whichever of the two exists: the command's stderr when it failed, or the
   # reply itself when it succeeded and still yielded no subject. Without the
