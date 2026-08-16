@@ -1144,6 +1144,8 @@ run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim
 run_test "commits a description body" test_commits_a_description_body
 run_test "a subject-only reply still commits" test_subject_only_reply_still_commits
+run_test "the key file outranks a stale environment" test_the_key_file_outranks_a_stale_environment
+run_test "a dirty submodule does not stall the checkpoint" test_dirty_submodule_content_does_not_stall_the_checkpoint
 run_test "falls back to a plain subject without a model" test_falls_back_without_a_model
 run_test "falls back when the model is slow" test_falls_back_when_the_model_is_slow
 run_test "the fallback names the changed files" test_fallback_names_the_changed_files
