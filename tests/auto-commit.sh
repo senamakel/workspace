@@ -276,7 +276,10 @@ test_subject_only_reply_still_commits() {
 start_key_capture() {
   local name="$1" dir="$TEST_ROOT/capture-$name"
   rm -rf "$dir"; mkdir -p "$dir"
-  python3 - "$dir" <<'PY' &
+  # stdout and stderr go nowhere on purpose: a background process holding the
+  # suite's stdout keeps the pipe open after the suite exits, so `… | tail`
+  # hangs forever on a server that is otherwise working fine.
+  python3 - "$dir" >/dev/null 2>&1 <<'PY' &
 import http.server, os, sys, threading
 d = sys.argv[1]
 class H(http.server.BaseHTTPRequestHandler):
