@@ -8,7 +8,16 @@ set -euo pipefail
 COMMAND="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)/bin/auto-commit"
 PASS_COUNT=0
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/auto-commit-test.XXXXXX")"
-trap 'rm -rf "$TEST_ROOT"' EXIT
+# Any capture server still running is killed too, so a test that returns early
+# cannot leave one behind holding a port.
+cleanup() {
+  local p
+  for p in "$TEST_ROOT"/capture-*/pid; do
+    [ -f "$p" ] && kill "$(cat "$p" 2>/dev/null)" 2>/dev/null
+  done
+  rm -rf "$TEST_ROOT"
+}
+trap cleanup EXIT
 
 fail_test() { printf 'not ok - %s\n' "$*" >&2; exit 1; }
 
