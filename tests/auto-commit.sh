@@ -350,9 +350,11 @@ test_the_key_file_outranks_a_stale_environment() {
     "the dedicated variable is used when there is no file"
 
   # And the shared one is the last resort, so a box given neither still works.
+  # AUTOCOMMIT_API_KEY is blanked rather than left alone: the machine running
+  # these tests exports a real one, and inheriting it would test nothing.
   rm -f "$dir/auth"
   printf 'yet more\n' >> "$repo/new.txt"
-  AUTO_COMMIT_URL="$url" AUTO_COMMIT_KEY_FILE="$dir/key" \
+  AUTO_COMMIT_URL="$url" AUTO_COMMIT_KEY_FILE="$dir/key" AUTOCOMMIT_API_KEY= \
     OPENROUTER_API_KEY=sk-shared AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "" >/dev/null
   assert_eq "sk-shared" "$(cat "$dir/auth" 2>/dev/null || true)" \
     "the shared variable is the last resort"
