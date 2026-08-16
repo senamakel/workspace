@@ -559,7 +559,21 @@ without taking the other boxes down with it. Which box holds which key is not
 recorded here, and must not be: keys never enter this repository. Read a box's
 own key from its `~/.zshenv` when you need to know.
 
-Both keys live in `.zshenv` rather than
+The hook reads its key from `~/.config/workspace/autocommit-key` **before** it
+reads either variable, and that order is the whole point of the file. A hook
+inherits the environment of the process that spawned it, and the harnesses are
+long-lived: a Medulla daemon or tmux server started days ago hands every session
+it spawns the environment it booted with. A key rotated in `~/.zshenv` today
+therefore never reaches a hook running under last week's parent — `.zshenv` is
+read when a *new shell* starts, and no new shell is involved. On dragonfly that
+produced a perfect false negative: `zsh -lc` in the same account showed the new
+key and worked, while every hook presented a key that had since been revoked and
+got `401 User not found` on every call. A file is read fresh by each hook
+process, so rotating it takes effect on the next tool call without restarting a
+single session. `AUTO_COMMIT_KEY_FILE` moves it; `AUTO_COMMIT_API_KEY_VAR` still
+overrides everything.
+
+Both variables live in `.zshenv` rather than
 `.zshrc`
 deliberately: zsh sources `.zshrc` **only for interactive shells**, so a hook
 launched from cron, a systemd unit, or a bare `ssh host cmd` would never see the
