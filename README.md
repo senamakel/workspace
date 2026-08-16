@@ -524,8 +524,8 @@ Guards, all deliberate and all tested:
 - never pushes
 
 The subject comes from one HTTPS request to OpenRouter (~3s) carrying the stat
-and truncated diff. `OPENROUTER_API_KEY` stays on the laptop, so the remote boxes
-fall back to the plain subject rather than failing.
+and truncated diff. Every machine carries a key, so every machine writes real
+subjects; a box without one falls back to the plain subject rather than failing.
 
 Subjects follow Conventional Commits (`type(scope): description`), followed by a
 blank line and a short prose description of what changed and why — both come from
