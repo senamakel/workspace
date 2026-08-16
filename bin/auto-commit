@@ -504,7 +504,20 @@ while IFS= read -r -d '' entry; do
 # collapses an untracked directory to (for example) `src/`; `atomic-commit`
 # correctly refuses directory arguments, so a freshly initialized checkout
 # could never receive its first checkpoint.
-done < <(git status --porcelain=v1 -z --untracked-files=all 2>/dev/null || true)
+#
+# `--ignore-submodules=dirty` is the same lesson one level down. A submodule
+# whose *content* is dirty — an untracked directory inside it, an edited tracked
+# file — is reported as ` M vendor/openhuman` by default, but `git add` on that
+# path stages nothing: only the gitlink is committable from here, and it has not
+# moved. `atomic-commit` then refuses the whole call with "explicit paths
+# produced no staged changes", and because that refusal is a batch, everything
+# else dirty in the superproject goes uncommitted with it. On dragonfly one
+# untracked directory inside `vendor/openhuman` stalled every checkpoint in
+# `workflow-opencompany` on every tool call, indefinitely. `dirty` still reports
+# a submodule whose gitlink genuinely moved, which is the case that *is*
+# committable here; the content belongs to the submodule's own repository and is
+# committed there, by its own hook.
+done < <(git status --porcelain=v1 -z --untracked-files=all --ignore-submodules=dirty 2>/dev/null || true)
 
 if [ "${#NESTED[@]}" -gt 0 ]; then
   emit warned "not staging $(printf '%s ' "${NESTED[@]}")— a checkout inside this one, commit it in its own repository"
