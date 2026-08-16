@@ -13,7 +13,10 @@ TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/auto-commit-test.XXXXXX")"
 cleanup() {
   local p
   for p in "$TEST_ROOT"/capture-*/pid; do
-    [ -f "$p" ] && kill "$(cat "$p" 2>/dev/null)" 2>/dev/null
+    # `|| true`: a server already stopped by its own test is the normal case,
+    # and under `set -e` that failed kill would become the suite's exit status
+    # — reporting 44 passes and a failure in the same breath.
+    [ -f "$p" ] && { kill "$(cat "$p" 2>/dev/null)" 2>/dev/null || true; }
   done
   rm -rf "$TEST_ROOT"
 }
