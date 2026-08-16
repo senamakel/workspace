@@ -268,6 +268,141 @@ test_subject_only_reply_still_commits() {
     || fail_test "git does not parse the trailer when the body is empty"
 }
 
+# Starts a one-shot HTTP endpoint that records the Authorization header it was
+# sent and answers like the chat-completions API. Asserting the *order* of key
+# sources without watching the wire proves nothing: the bug this guards against
+# was the command confidently presenting a key that had been revoked, which
+# looks identical from inside the script.
+start_key_capture() {
+  local name="$1" dir="$TEST_ROOT/capture-$name"
+  rm -rf "$dir"; mkdir -p "$dir"
+  python3 - "$dir" <<'PY' &
+import http.server, os, sys, threading
+d = sys.argv[1]
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get('Content-Length', 0) or 0))
+        with open(os.path.join(d, 'auth'), 'w') as f:
+            f.write((self.headers.get('Authorization') or '').removeprefix('Bearer '))
+        body = b'{"choices":[{"message":{"content":"chore: from the endpoint"}}]}'
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a): pass
+s = http.server.HTTPServer(('127.0.0.1', 0), H)
+with open(os.path.join(d, 'port'), 'w') as f:
+    f.write(str(s.server_port))
+s.serve_forever()
+PY
+  printf '%s\n' "$!" > "$dir/pid"
+  local i=0
+  while [ ! -s "$dir/port" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+  printf '%s\n' "$dir"
+}
+
+stop_key_capture() { kill "$(cat "$1/pid" 2>/dev/null)" 2>/dev/null || true; }
+
+test_the_key_file_outranks_a_stale_environment() {
+  local repo state dir port url sent
+  command -v jq >/dev/null 2>&1 || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  repo="$(make_repo keyfile)"
+  state="$(state_dir keyfile)"
+  dir="$(start_key_capture keyfile)"
+  port="$(cat "$dir/port" 2>/dev/null || true)"
+  [ -n "$port" ] || { stop_key_capture "$dir"; return 0; }
+  url="http://127.0.0.1:$port/"
+  printf 'sk-from-the-file\n' > "$dir/key"
+
+  # A hook inherits its parent's environment, and the harnesses outlive a key
+  # rotation by days. The file is read fresh every run, so it must win over both
+  # variables — that is the entire reason it exists.
+  printf 'hello\n' > "$repo/new.txt"
+  AUTO_COMMIT_URL="$url" AUTO_COMMIT_KEY_FILE="$dir/key" \
+    AUTOCOMMIT_API_KEY=sk-stale-dedicated OPENROUTER_API_KEY=sk-stale-shared \
+    AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "" >/dev/null
+  sent="$(cat "$dir/auth" 2>/dev/null || true)"
+  assert_eq "sk-from-the-file" "$sent" "the key file outranks a stale environment"
+  assert_contains "$(git -C "$repo" log -1 --format=%s)" "chore: from the endpoint" \
+    "the subject comes from the endpoint the key reached"
+
+  # Without a file, the dedicated variable is preferred over the shared one.
+  rm -f "$dir/key" "$dir/auth"
+  printf 'more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_URL="$url" AUTO_COMMIT_KEY_FILE="$dir/key" \
+    AUTOCOMMIT_API_KEY=sk-dedicated OPENROUTER_API_KEY=sk-shared \
+    AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "" >/dev/null
+  assert_eq "sk-dedicated" "$(cat "$dir/auth" 2>/dev/null || true)" \
+    "the dedicated variable is used when there is no file"
+
+  # And the shared one is the last resort, so a box given neither still works.
+  rm -f "$dir/auth"
+  printf 'yet more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_URL="$url" AUTO_COMMIT_KEY_FILE="$dir/key" \
+    OPENROUTER_API_KEY=sk-shared AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "" >/dev/null
+  assert_eq "sk-shared" "$(cat "$dir/auth" 2>/dev/null || true)" \
+    "the shared variable is the last resort"
+
+  # An explicit AUTO_COMMIT_API_KEY_VAR still overrides everything, file included.
+  printf 'sk-from-the-file\n' > "$dir/key"
+  rm -f "$dir/auth"
+  printf 'and more\n' >> "$repo/new.txt"
+  AUTO_COMMIT_URL="$url" AUTO_COMMIT_KEY_FILE="$dir/key" \
+    AUTO_COMMIT_API_KEY_VAR=MY_OWN_KEY MY_OWN_KEY=sk-explicit \
+    AUTOCOMMIT_API_KEY=sk-dedicated AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "" >/dev/null
+  assert_eq "sk-explicit" "$(cat "$dir/auth" 2>/dev/null || true)" \
+    "an explicit key variable overrides the file"
+
+  stop_key_capture "$dir"
+}
+
+test_dirty_submodule_content_does_not_stall_the_checkpoint() {
+  local repo state stub sub before
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo submodule)"
+  state="$(state_dir submodule)"
+  stub="$(make_stub submodule "chore: change things")"
+
+  # A real submodule, registered and committed.
+  sub="$TEST_ROOT/submodule-origin"
+  rm -rf "$sub"; mkdir -p "$sub"
+  git -C "$sub" init -q -b main
+  git -C "$sub" config user.email test@example.com
+  git -C "$sub" config user.name "Test"
+  printf 'lib\n' > "$sub/lib.txt"
+  git -C "$sub" add -A
+  git -C "$sub" commit -qm "init"
+  git -C "$repo" -c protocol.file.allow=always submodule add -q "$sub" vendor/dep 2>/dev/null || return 0
+  git -C "$repo" commit -qm "add the submodule"
+  before="$(count_commits "$repo")"
+
+  # Untracked content *inside* the submodule. The superproject reports the path
+  # as modified, but `git add` on it stages nothing — only the gitlink is
+  # committable from here and it has not moved. Handing that path to
+  # `atomic-commit` refuses the whole batch, which used to take the
+  # superproject's own dirty files down with it, on every tool call, forever.
+  mkdir -p "$repo/vendor/dep/build"
+  printf 'artifact\n' > "$repo/vendor/dep/build/out.txt"
+  printf 'real work\n' > "$repo/own.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq "$((before + 1))" "$(count_commits "$repo")" \
+    "a dirty submodule does not stall the superproject's checkpoint"
+  assert_contains "$(git -C "$repo" show --pretty=format: --name-only HEAD)" "own.txt" \
+    "the superproject's own file is committed"
+
+  # A gitlink that genuinely moved is still committed from here: that is the
+  # one submodule change this repository owns.
+  printf 'more lib\n' >> "$repo/vendor/dep/lib.txt"
+  git -C "$repo/vendor/dep" commit -qam "advance the submodule"
+  before="$(count_commits "$repo")"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq "$((before + 1))" "$(count_commits "$repo")" "a moved gitlink is committed"
+  assert_contains "$(git -C "$repo" show --pretty=format: --name-only HEAD)" "vendor/dep" \
+    "the moved gitlink is what was committed"
+}
+
 test_falls_back_without_a_model() {
   local repo state broken
   command -v jq >/dev/null 2>&1 || return 0
