@@ -359,7 +359,8 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # routinely the personal fork of an allowlisted upstream; only those two remotes
 # are consulted, so an incidental third remote cannot admit a repository.
 # The list below is every public, non-archived, non-fork repository in the
-# tinyhumansai organization as of 2026-08-10, plus `workspace`, and nothing
+# tinyhumansai organization as of 2026-08-18, plus the explicitly maintained
+# public personal repositories below, and nothing else. Public is the line that matters: these are repositories whose contents
 # else. Public is the line that matters: these are repositories whose contents
 # are already readable by anyone, so sending a diff to a model gives away
 # nothing that was not already given away. Every private repository in the
@@ -388,11 +389,11 @@ tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai
 tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/sdk:tinyhumansai/skill-registry:\
 tinyhumansai/rust-template:\
 tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybus:tinyhumansai/tinychannels:\
-tinyhumansai/tinycortex:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyjuice:\
+tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyjuice:\
 tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
-tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
+tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
 senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
-senamakel/opencompany:senamakel/openhuman:senamakel/sdk:senamakel/skill-registry:\
+senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/sdk:senamakel/skill-registry:\
 senamakel/riemann:senamakel/rust-template:\
 senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:\
 senamakel/tinycortex:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyjuice:\
