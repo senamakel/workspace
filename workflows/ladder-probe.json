@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "id": "deepseek-claude-probe",
-  "name": "DeepSeek Claude probe",
+  "id": "ladder-probe",
+  "name": "Ladder probe",
   "inputs": [],
   "nodes": [
     {
@@ -21,7 +21,7 @@
       "type_version": 1,
       "name": "Dump own argv and env",
       "config": {
-        "prompt": "Reply with exactly one line: MODEL_SELF_REPORT: <the model id you are running as>. Do not use any tools."
+        "prompt": "Run `git rev-parse --abbrev-ref HEAD` with your shell tool, then reply with exactly two lines: the branch name, and MODEL_SELF_REPORT: <model id you are>."
       },
       "ports": [],
       "position": null
@@ -38,7 +38,7 @@
   "description": "Ask a deepseek-codex agent to dump its own process argv and environment, so what the harness actually launched is visible rather than inferred.",
   "enabled": true,
   "defaults": {
-    "harness": "deepseek",
-    "model": "~deepseek/deepseek-v4-flash-latest"
+    "harness": "ladder",
+    "model": "reasoning"
   }
 }
