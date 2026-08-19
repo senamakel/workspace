@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "id": "deepseek-claude-probe",
+  "name": "DeepSeek Claude probe",
+  "inputs": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Probe the harness",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Dump own argv and env",
+      "config": {
+        "prompt": "Reply with exactly one line: MODEL_SELF_REPORT: <the model id you are running as>. Do not use any tools."
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "probe",
+      "to_port": "main"
+    }
+  ],
+  "description": "Ask a deepseek-codex agent to dump its own process argv and environment, so what the harness actually launched is visible rather than inferred.",
+  "enabled": true,
+  "defaults": {
+    "harness": "deepseek",
+    "model": "~deepseek/deepseek-v4-flash-latest"
+  }
+}
