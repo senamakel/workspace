@@ -115,7 +115,14 @@ command = "\"$HOME/work/workspace/bin/auto-commit\" --hook"
 #
 # It needs the router actually listening on 6969 and LADDER_API_KEY exported on
 # that box; a machine missing either fails at dispatch, so check both before
-# pointing a run at it.
+# pointing a run at it. That variable holds the router's own loopback token, not
+# a marketplace credential — the router matches it against `api_key` in
+# ~/.config/ladder/config.toml, and every box is set to the value the router's
+# README documents as its default. It lives in each box's ~/.zshenv rather than
+# this repository's zshrc because this repository is public, and a token that is
+# worthless today is still a habit worth not forming. The marketplace keys the
+# router spends (SURPLUS_API_KEY, MISTRAL_API_KEY, OPENROUTER_API_KEY) are real
+# and stay per-box.
 [[customHarnesses]]
 id = "ladder"
 name = "Ladder (reasoning) via Claude"
