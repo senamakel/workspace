@@ -106,14 +106,16 @@ command = "\"$HOME/work/workspace/bin/auto-commit\" --hook"
 # That is the reason to prefer it over a fixed OpenRouter preset: failover and
 # marketplace pricing instead of one hard-coded model id.
 #
-# The main turn takes the `reasoning` ladder; Claude's Sonnet/Haiku/subagent
-# tiers take `flash`. Swap `model` to "flash" for a cheaper sweep, or
-# "max-reasoning" for the deepest one.
+# The preset's own main turn takes the `reasoning` ladder; Claude's
+# Sonnet/Haiku/subagent tiers take `flash`. A workflow overrides the main turn
+# by pinning `defaults.model` to a ladder name — the PR-babysitting flows pin
+# `flash`, because a babysit pass is mostly reading CI output and answering
+# review threads rather than reasoning hard, and it is run over and over.
+# `max-reasoning` is the other direction, for the deepest single pass.
 #
-# This is what the PR-babysitting workflows now dispatch to. It needs the router
-# actually listening on 6969 and LADDER_API_KEY exported on that box; a machine
-# missing either falls back to nothing, so check both before pointing a run at
-# it.
+# It needs the router actually listening on 6969 and LADDER_API_KEY exported on
+# that box; a machine missing either fails at dispatch, so check both before
+# pointing a run at it.
 [[customHarnesses]]
 id = "ladder"
 name = "Ladder (reasoning) via Claude"
