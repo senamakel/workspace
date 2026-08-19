@@ -282,6 +282,7 @@
   "description": "Scrutinise a pull request against the actual codebase before spending any effort on it: hand it to the PR babysitter if it is a genuine, relevant contribution, or close it with a specific, evidenced reason if it is not. PRs by allowlisted authors skip scrutiny entirely.",
   "enabled": true,
   "defaults": {
-    "harness": "deepseek-codex"
+    "harness": "ladder",
+    "model": "reasoning"
   }
 }

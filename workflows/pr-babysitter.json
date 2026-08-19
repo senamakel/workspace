@@ -239,7 +239,7 @@
   "description": "Babysit a pull request in any checked-out repository: infer the repo from its git remotes, then loop - read CI, review threads, review verdicts and issue comments; fix and reply; attempt the merge - until every comment and review is resolved and the PR is merged, or the iteration cap is hit.",
   "enabled": true,
   "defaults": {
-    "harness": "deepseek",
-    "model": "~deepseek/deepseek-v4-flash-latest"
+    "harness": "ladder",
+    "model": "reasoning"
   }
 }
