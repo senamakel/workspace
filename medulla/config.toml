@@ -78,3 +78,93 @@ event = "PostToolUse"
 matcher = "*"
 type = "command"
 command = "\"$HOME/work/workspace/bin/auto-commit\" --hook"
+
+# ---------------------------------------------------------------------------
+# customHarnesses — the named model capacity every box must be able to serve
+# ---------------------------------------------------------------------------
+# These are presets, not credentials: a preset names a coding CLI, a model (or a
+# ladder), and the *name* of the environment variable holding the key. The key
+# itself stays in that box's ~/.zshenv and never enters this repository.
+#
+# They belong here because the workflows in `workflows/` ask for harnesses by
+# id, and this directory is symlinked onto every box. A workflow that names
+# `ladder` on a machine whose config never declared it fails at dispatch with
+# `custom harness "ladder" is not configured on this host` — so the flows were
+# portable while the capacity they depend on was not. Every preset below sets
+# `hostId = "this-device"`, which is Medulla's own default host id, so the same
+# text is correct on all four machines.
+#
+# This whole section is replaced wholesale on every install, like the rest of
+# the file. Add a preset in Medulla's UI and it survives exactly until the next
+# `./install.sh`; add it here and it exists everywhere.
+
+# The local llm-ladder-router on 127.0.0.1:6969. It serves the Anthropic wire
+# format at /v1/messages, so Claude Code needs no translating proxy: `model`
+# names a *ladder*, not a model, and the router prices every rung against the
+# live order books and dispatches to the best value the budget allows —
+# stepping across surplus/mistral/openrouter sellers on failure or on price.
+# That is the reason to prefer it over a fixed OpenRouter preset: failover and
+# marketplace pricing instead of one hard-coded model id.
+#
+# The main turn takes the `reasoning` ladder; Claude's Sonnet/Haiku/subagent
+# tiers take `flash`. Swap `model` to "flash" for a cheaper sweep, or
+# "max-reasoning" for the deepest one.
+#
+# This is what the PR-babysitting workflows now dispatch to. It needs the router
+# actually listening on 6969 and LADDER_API_KEY exported on that box; a machine
+# missing either falls back to nothing, so check both before pointing a run at
+# it.
+[[customHarnesses]]
+id = "ladder"
+name = "Ladder (reasoning) via Claude"
+baseHarness = "claude"
+model = "reasoning"
+fastModel = "flash"
+hostId = "this-device"
+default = false
+apiKeyEnv = "LADDER_API_KEY"
+baseUrl = "http://127.0.0.1:6969"
+contextWindow = 300000
+
+# DeepSeek through the coding CLIs, via OpenRouter. Kept because the probe
+# workflows (`deepseek-preset-probe`, `harness-probe`) name them directly, and
+# because they are the fallback when the ladder is not running on a box.
+#
+# contextWindow mirrors bin/deepcode: DeepSeek V4 advertises ~1M but loses
+# accuracy well before it fills, so Claude Code auto-compacts at ~300k instead.
+[[customHarnesses]]
+id = "deepseek"
+name = "DeepSeek via Claude"
+baseHarness = "claude"
+model = "~deepseek/deepseek-v4-flash-latest"
+fastModel = "~deepseek/deepseek-v4-flash-latest"
+hostId = "this-device"
+default = false
+apiKeyEnv = "OPENROUTER_API_KEY"
+contextWindow = 300000
+
+[[customHarnesses]]
+id = "deepseek-codex"
+name = "DeepSeek via Codex"
+baseHarness = "codex"
+model = "~deepseek/deepseek-v4-flash-latest"
+hostId = "this-device"
+default = false
+apiKeyEnv = "OPENROUTER_API_KEY"
+codexOverrides = true
+contextWindow = 400000
+reasoningEffort = "high"
+
+# GLM 5.2, pinned to the one serving provider that answers correctly for this
+# account. Declared here so it stops being a dragonfly-only preset.
+[[customHarnesses]]
+id = "glm-5.2"
+name = "GLM 5.2 via Claude"
+baseHarness = "claude"
+model = "z-ai/glm-5.2"
+fastModel = "z-ai/glm-4.7-flash"
+hostId = "this-device"
+default = false
+apiKeyEnv = "OPENROUTER_API_KEY"
+contextWindow = 200000
+providerOnly = ["streamlake"]
