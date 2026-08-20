@@ -203,15 +203,21 @@ COMMENTS=$(gh api graphql --paginate --slurp \
     }
   ') || { fail "could not read pull request comments for PR #$PR"; exit 1; }
 
+REPORT_INPUT_DIR=$(mktemp -d)
+trap 'rm -rf -- "$REPORT_INPUT_DIR"' EXIT
+printf '%s\n' "$THREADS" >"$REPORT_INPUT_DIR/threads.json"
+printf '%s\n' "$REVIEWS" >"$REPORT_INPUT_DIR/reviews.json"
+printf '%s\n' "$COMMENTS" >"$REPORT_INPUT_DIR/comments.json"
+
 REPORT=$(jq -n \
   --arg repository "$REPO" \
   --argjson number "$PR" \
   --argjson includeResolved "$INCLUDE_RESOLVED" \
   --argjson threadsOnly "$THREADS_ONLY" \
   --argjson authors "$AUTHORS" \
-  --argjson threadPages "$THREADS" \
-  --argjson reviewPages "$REVIEWS" \
-  --argjson commentPages "$COMMENTS" '
+  --slurpfile threadPages "$REPORT_INPUT_DIR/threads.json" \
+  --slurpfile reviewPages "$REPORT_INPUT_DIR/reviews.json" \
+  --slurpfile commentPages "$REPORT_INPUT_DIR/comments.json" '
   def compact_text:
     gsub("[[:space:]]+"; " ") | sub("^ "; "") | sub(" $"; "");
   def summarize:
@@ -223,11 +229,11 @@ REPORT=$(jq -n \
   def by_author($login):
     ($authors | length) == 0 or ($authors | index($login) != null);
 
-  [$threadPages[].data.repository.pullRequest.reviewThreads.nodes[]]
+  [$threadPages[0][].data.repository.pullRequest.reviewThreads.nodes[]]
     as $allThreads
-  | [$reviewPages[].data.repository.pullRequest.reviews.nodes[]]
+  | [$reviewPages[0][].data.repository.pullRequest.reviews.nodes[]]
     as $allReviews
-  | [$commentPages[].data.repository.pullRequest.comments.nodes[]]
+  | [$commentPages[0][].data.repository.pullRequest.comments.nodes[]]
     as $allComments
 
   # A review still demands action while it is that reviewer latest verdict: a
