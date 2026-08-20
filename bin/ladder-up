@@ -80,19 +80,18 @@ docker info >/dev/null 2>&1 || { fail "docker daemon is not responding"; exit 1;
 [ -f "$CONFIG" ] || { fail "no router config at $CONFIG"; exit 1; }
 
 # Read the keys out of ~/.zshenv. They live there rather than in this repository
-# because the repository is public; cron does not source it, so parse the
-# handful of names we need rather than sourcing a zsh file with bash.
+# because the repository is public; cron does not source it, so pull them in
+# explicitly. zsh does the reading, not a grep: robot1 defines LADDER_API_KEY as
+# a command substitution that reads the router's own config, and a parser that
+# copies the line's text hands the container the literal `$(sed ...)` and every
+# caller a key that 401s.
 ENVFILE="$HOME/.zshenv"
-if [ -f "$ENVFILE" ]; then
-  for key in "${KEYS[@]}"; do
+if [ -f "$ENVFILE" ] && command -v zsh >/dev/null 2>&1; then
+  while IFS='=' read -r key value; do
+    [ -n "$key" ] || continue
     [ -n "${!key:-}" ] && continue
-    line="$(grep -E "^[[:space:]]*export[[:space:]]+$key=" "$ENVFILE" | tail -1 || true)"
-    [ -n "$line" ] || continue
-    value="${line#*=}"
-    value="${value%\"}"; value="${value#\"}"
-    value="${value%\'}"; value="${value#\'}"
-    export "$key=$value"
-  done
+    [ -n "$value" ] && export "$key=$value"
+  done < <(zsh -fc 'source "$1" >/dev/null 2>&1; for k in '"${KEYS[*]}"'; do print -r -- "$k=${(P)k}"; done' zsh "$ENVFILE" 2>/dev/null || true)
 fi
 
 missing=()
@@ -185,21 +184,40 @@ else
   esac
 fi
 
-# Health. A container in `running` proves nothing; ask the router.
+# Health. A container in `running` proves nothing; ask the router, and ask it
+# something only a working key can answer. `/v1/models` is unauthenticated, so a
+# check against it passes with any key at all — which is how robot1 sat there
+# looking healthy while every real call to it came back 401. A POST of `{}` is
+# rejected for auth before it is rejected for shape, so the reply separates
+# "alive and the key is right" (400) from "alive and the key is wrong" (401)
+# without buying a single upstream token.
 [ "$CHECK" -eq 1 ] && [ "$ACTION" != "none" ] && exit 0
 
+probe() {
+  curl -s -m 5 -o /dev/null -w '%{http_code}' \
+    -X POST "http://$BIND:$PORT/v1/messages" \
+    -H "x-api-key: $LADDER_API_KEY" \
+    -H 'content-type: application/json' \
+    -d '{}' 2>/dev/null || true
+}
+
 deadline=$((SECONDS + 45))
-# Errors are swallowed per attempt: a container that has not finished binding
-# yet refuses the connection, and a watchdog that mails a stack of `curl: (52)`
-# for every ordinary restart is a watchdog nobody reads.
-until curl -fs -m 5 -o /dev/null \
-    -H "Authorization: Bearer $LADDER_API_KEY" \
-    "http://$BIND:$PORT/v1/models" 2>/dev/null; do
+while :; do
+  code="$(probe)"
+  case "$code" in
+    400)
+      log "[ok] router answering on $BIND:$PORT"
+      exit 0
+      ;;
+    401)
+      fail "router is up but rejected LADDER_API_KEY; it must match api_key in $CONFIG"
+      exit 1
+      ;;
+  esac
   if [ "$SECONDS" -ge "$deadline" ]; then
-    fail "router did not answer /v1/models within 45s"
+    fail "router did not come up within 45s (last status: ${code:-none})"
     docker logs --tail 20 "$NAME" >&2 2>&1 || true
     exit 1
   fi
   sleep 2
 done
-log "[ok] router answering on $BIND:$PORT"
