@@ -189,9 +189,12 @@ fi
 [ "$CHECK" -eq 1 ] && [ "$ACTION" != "none" ] && exit 0
 
 deadline=$((SECONDS + 45))
-until curl -fsS -m 5 -o /dev/null \
+# Errors are swallowed per attempt: a container that has not finished binding
+# yet refuses the connection, and a watchdog that mails a stack of `curl: (52)`
+# for every ordinary restart is a watchdog nobody reads.
+until curl -fs -m 5 -o /dev/null \
     -H "Authorization: Bearer $LADDER_API_KEY" \
-    "http://$BIND:$PORT/v1/models"; do
+    "http://$BIND:$PORT/v1/models" 2>/dev/null; do
   if [ "$SECONDS" -ge "$deadline" ]; then
     fail "router did not answer /v1/models within 45s"
     docker logs --tail 20 "$NAME" >&2 2>&1 || true
