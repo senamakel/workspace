@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+# ladder-up — make sure this box's llm-ladder-router container is up and answering.
+#
+# Usage: ladder-up [--check] [--pull] [--recreate] [--quiet]
+#
+# Idempotent, and safe to run from cron every few minutes: a healthy container
+# is left strictly alone. It starts a stopped one, recreates one whose run
+# arguments no longer match what this script would build, and always finishes by
+# asking the router for a real answer over its own API — a container that is
+# "running" but wedged is not up.
+#
+# --check reports what it would do and changes nothing.
+# --pull refreshes the image first; the cron watchdog deliberately does not, so
+# a routine health check never swaps the binary underneath a running agent.
+# --recreate forces a rebuild even when the spec matches, which is how a newly
+# exported key reaches the container: docker copies the environment in at create
+# time and a running container never sees a later one.
+set -euo pipefail
+
+NAME="ladder"
+IMAGE="ghcr.io/senamakel/llm-ladder-router:latest"
+CONFIG="$HOME/.config/ladder/config.toml"
+PORT="6969"
+# Loopback only. Every box runs its own; nothing here is meant to be reachable
+# from the tailnet.
+BIND="127.0.0.1"
+# The router is a proxy: it holds order books and session pins, not model state.
+# The cap exists so that a box under memory pressure kills the workload rather
+# than the thing every agent on it dispatches through — dragonfly lost this
+# container to a cgroup OOM kill on 2026-08-20 while a `lean` process was taking
+# 4GB a time.
+MEMORY="512m"
+# The credentials the container needs, in the order the router reports them.
+# Absent ones are passed as empty and the router skips that provider with a
+# warning rather than failing to start.
+KEYS=(LADDER_API_KEY SURPLUS_API_KEY OPENROUTER_API_KEY MISTRAL_API_KEY)
+
+CHECK=0
+PULL=0
+RECREATE=0
+QUIET=0
+
+log() {
+  [ "$QUIET" -eq 1 ] && return 0
+  printf '%s\n' "$*"
+}
+
+# Always printed, even under --quiet, because cron mail is the only place a
+# failing watchdog gets to speak.
+fail() {
+  printf 'ladder-up: %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) CHECK=1 ;;
+    --pull) PULL=1 ;;
+    --recreate) RECREATE=1 ;;
+    --quiet|-q) QUIET=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1"; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# cron gives us almost no PATH and no shell profile, so find docker where the
+# three platforms actually put it before giving up.
+if ! command -v docker >/dev/null 2>&1; then
+  for candidate in /usr/local/bin/docker /opt/homebrew/bin/docker /usr/bin/docker; do
+    [ -x "$candidate" ] && PATH="$(dirname "$candidate"):$PATH" && break
+  done
+fi
+command -v docker >/dev/null 2>&1 || { fail "docker not found on PATH"; exit 1; }
+docker info >/dev/null 2>&1 || { fail "docker daemon is not responding"; exit 1; }
+
+[ -f "$CONFIG" ] || { fail "no router config at $CONFIG"; exit 1; }
+
+# Read the keys out of ~/.zshenv. They live there rather than in this repository
+# because the repository is public; cron does not source it, so parse the
+# handful of names we need rather than sourcing a zsh file with bash.
+ENVFILE="$HOME/.zshenv"
+if [ -f "$ENVFILE" ]; then
+  for key in "${KEYS[@]}"; do
+    [ -n "${!key:-}" ] && continue
+    line="$(grep -E "^[[:space:]]*export[[:space:]]+$key=" "$ENVFILE" | tail -1 || true)"
+    [ -n "$line" ] || continue
+    value="${line#*=}"
+    value="${value%\"}"; value="${value#\"}"
+    value="${value%\'}"; value="${value#\'}"
+    export "$key=$value"
+  done
+fi
+
+missing=()
+for key in "${KEYS[@]}"; do
+  [ -n "${!key:-}" ] || missing+=("$key")
+done
+[ ${#missing[@]} -gt 0 ] && log "[warn] unset, provider will be skipped: ${missing[*]}"
+[ -n "${LADDER_API_KEY:-}" ] || { fail "LADDER_API_KEY is unset; callers could not authenticate"; exit 1; }
+
+# The laptop is arm64 and the image is published for amd64 only, so it runs
+# under emulation there. Fine for a router: the work is network I/O.
+PLATFORM=()
+case "$(uname -s)/$(uname -m)" in
+  Darwin/arm64) PLATFORM=(--platform linux/amd64) ;;
+esac
+
+ARGS=(
+  --name "$NAME"
+  # `always` rather than `unless-stopped`: this container is infrastructure, and
+  # a stop nobody meant to be permanent should not outlive the next boot.
+  --restart always
+  --memory "$MEMORY"
+  -p "$BIND:$PORT:$PORT"
+  -v "$CONFIG:/etc/ladder/config.toml:ro"
+)
+for key in "${KEYS[@]}"; do
+  ARGS+=(-e "$key")
+done
+ARGS+=("${PLATFORM[@]}" "$IMAGE" --config /etc/ladder/config.toml)
+
+# What the container was built from, so a changed port, cap, key set or image
+# is a recreate and an unchanged one is a no-op. The key *values* are not in the
+# hash — rotating a key in place is what --recreate is for.
+spec_hash() {
+  printf '%s\n' "${ARGS[@]}" | shasum -a 256 2>/dev/null | cut -c1-16 ||
+    printf '%s\n' "${ARGS[@]}" | sha256sum | cut -c1-16
+}
+SPEC="$(spec_hash)"
+
+state() {
+  docker inspect -f '{{.State.Status}}' "$NAME" 2>/dev/null || echo "absent"
+}
+current_spec() {
+  docker inspect -f '{{index .Config.Labels "ladder.spec"}}' "$NAME" 2>/dev/null || true
+}
+
+if [ "$PULL" -eq 1 ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    log "[check] would pull $IMAGE"
+  else
+    log "[pull] $IMAGE"
+    docker pull "${PLATFORM[@]}" "$IMAGE" >/dev/null
+    RECREATE=1
+  fi
+fi
+
+STATE="$(state)"
+ACTION="none"
+if [ "$STATE" = "absent" ]; then
+  ACTION="create"
+elif [ "$RECREATE" -eq 1 ]; then
+  ACTION="recreate"
+elif [ "$(current_spec)" != "$SPEC" ]; then
+  log "[stale] run arguments changed since this container was created"
+  ACTION="recreate"
+elif [ "$STATE" != "running" ]; then
+  ACTION="start"
+fi
+
+if [ "$CHECK" -eq 1 ]; then
+  log "[check] container is $STATE, would $ACTION"
+else
+  case "$ACTION" in
+    create|recreate)
+      [ "$ACTION" = "recreate" ] && docker rm -f "$NAME" >/dev/null 2>&1 || true
+      log "[$ACTION] $NAME"
+      docker run -d --label "ladder.spec=$SPEC" "${ARGS[@]}" >/dev/null
+      ;;
+    start)
+      log "[start] $NAME (was $STATE)"
+      docker start "$NAME" >/dev/null
+      ;;
+    none)
+      log "[ok] $NAME is running"
+      ;;
+  esac
+fi
+
+# Health. A container in `running` proves nothing; ask the router.
+[ "$CHECK" -eq 1 ] && [ "$ACTION" != "none" ] && exit 0
+
+deadline=$((SECONDS + 45))
+until curl -fsS -m 5 -o /dev/null \
+    -H "Authorization: Bearer $LADDER_API_KEY" \
+    "http://$BIND:$PORT/v1/models"; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    fail "router did not answer /v1/models within 45s"
+    docker logs --tail 20 "$NAME" >&2 2>&1 || true
+    exit 1
+  fi
+  sleep 2
+done
+log "[ok] router answering on $BIND:$PORT"
