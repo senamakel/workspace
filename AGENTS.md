@@ -14,6 +14,8 @@ There is no compilation step or centralized test suite. Validate the part you ch
 - `bin/check-skills` validates every canonical skill’s directory and frontmatter.
 - `bin/check-open-source-state` validates the shared repository catalog and
   contribution queue.
+- `bin/ladder-up --check` reports whether this box's LLM router container is
+  running and what it would change, without touching it.
 - `tests/open-source-state.sh` and `tests/open-source-agent.sh` exercise the
   open-source pipeline state and launcher.
 - `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
@@ -30,6 +32,35 @@ There is no compilation step or centralized test suite. Validate the part you ch
 - `git diff --check` catches whitespace errors before committing.
 
 Run `./install.sh` only from the primary checkout, because links created from a disposable worktree will break when that worktree is removed.
+
+## The LLM Router
+
+Every box runs its own `llm-ladder-router` container on `127.0.0.1:6969`, and
+Medulla's shared `ladder` harness preset plus the PR-babysitting workflows
+dispatch to it. Nothing about it is meant to be reachable from the tailnet; a
+box routes only for itself.
+
+`bin/ladder-up` is what keeps it up. It is idempotent and cron-safe: a healthy
+container is left alone, a stopped one is started, and one whose run arguments
+no longer match — a changed port, memory cap, key set, or image — is recreated.
+It finishes by asking the router for a real answer, because a container in
+`running` that is wedged is not up. Use `--recreate` after exporting a new key,
+since docker copies the environment in at create time and a running container
+never sees a later one, and `--pull` to move to a new image.
+
+Each box runs it every five minutes from cron, which is what makes the router
+survive the ways it actually dies — a cgroup OOM kill under a heavy local
+workload, or a `docker stop` nobody meant to be permanent:
+
+```cron
+PATH=/usr/local/bin:/usr/bin:/bin
+*/5 * * * * $HOME/work/workspace/bin/ladder-up --quiet >> $HOME/.cache/ladder-up.log 2>&1
+```
+
+Use an absolute path: cron runs from `$HOME` with almost no environment, which
+is also why the script finds `docker` itself and reads the marketplace keys out
+of `~/.zshenv` rather than expecting a profile. Those keys stay in `~/.zshenv`
+on each box and never in this repository, which is public.
 
 ## Syncing Remote Workspaces
 
