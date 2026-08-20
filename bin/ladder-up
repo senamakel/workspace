@@ -121,14 +121,18 @@ ARGS=(
 for key in "${KEYS[@]}"; do
   ARGS+=(-e "$key")
 done
-ARGS+=("${PLATFORM[@]}" "$IMAGE" --config /etc/ladder/config.toml)
+ARGS+=(${PLATFORM[@]+"${PLATFORM[@]}"} "$IMAGE" --config /etc/ladder/config.toml)
 
 # What the container was built from, so a changed port, cap, key set or image
 # is a recreate and an unchanged one is a no-op. The key *values* are not in the
 # hash — rotating a key in place is what --recreate is for.
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA=(sha256sum)
+else
+  SHA=(shasum -a 256)
+fi
 spec_hash() {
-  printf '%s\n' "${ARGS[@]}" | shasum -a 256 2>/dev/null | cut -c1-16 ||
-    printf '%s\n' "${ARGS[@]}" | sha256sum | cut -c1-16
+  printf '%s\n' "${ARGS[@]}" | "${SHA[@]}" | cut -c1-16
 }
 SPEC="$(spec_hash)"
 
@@ -144,7 +148,7 @@ if [ "$PULL" -eq 1 ]; then
     log "[check] would pull $IMAGE"
   else
     log "[pull] $IMAGE"
-    docker pull "${PLATFORM[@]}" "$IMAGE" >/dev/null
+    docker pull ${PLATFORM[@]+"${PLATFORM[@]}"} "$IMAGE" >/dev/null
     RECREATE=1
   fi
 fi
