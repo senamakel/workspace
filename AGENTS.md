@@ -48,9 +48,14 @@ It finishes by asking the router for a real answer, because a container in
 since docker copies the environment in at create time and a running container
 never sees a later one, and `--pull` to move to a new image.
 
-Each box runs it every five minutes from cron, which is what makes the router
-survive the ways it actually dies — a cgroup OOM kill under a heavy local
-workload, or a `docker stop` nobody meant to be permanent:
+Each box runs it every five minutes, which is what makes the router survive the
+ways it actually dies. Docker's own `--restart always` is not enough: it covers
+a crashed process and a rebooted daemon, but a container stopped or killed by
+hand stays down until something starts it, and dragonfly's sat exited for three
+hours after a cgroup OOM kill took it out alongside a `lean` process. The
+watchdog is the guarantee; the restart policy is the fast path.
+
+Three of the boxes run it from cron:
 
 ```cron
 PATH=/usr/local/bin:/usr/bin:/bin
@@ -59,8 +64,18 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 Use an absolute path: cron runs from `$HOME` with almost no environment, which
 is also why the script finds `docker` itself and reads the marketplace keys out
-of `~/.zshenv` rather than expecting a profile. Those keys stay in `~/.zshenv`
-on each box and never in this repository, which is public.
+of `~/.zshenv` rather than expecting a profile. It reads them by sourcing that
+file with `zsh`, not by parsing it — robot1 defines `LADDER_API_KEY` as a
+command substitution over the router's own config, and a line-parser hands the
+container the literal `$(sed ...)`. Those keys stay in `~/.zshenv` on each box
+and never in this repository, which is public.
+
+mac-mini is the exception: `crontab` there fails with `Operation not permitted`
+over ssh, because macOS withholds the access it needs from a non-interactive
+session. It runs the same command from a launchd agent instead,
+`~/Library/LaunchAgents/ai.tinyhumans.ladder-up.plist`, with `StartInterval`
+300 and `RunAtLoad`. Check it with
+`launchctl print gui/$(id -u)/ai.tinyhumans.ladder-up`.
 
 ## Syncing Remote Workspaces
 
