@@ -359,9 +359,9 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # routinely the personal fork of an allowlisted upstream; only those two remotes
 # are consulted, so an incidental third remote cannot admit a repository.
 # The list below is every public, non-archived, non-fork repository in the
-# tinyhumansai organization as of 2026-08-18, plus the explicitly maintained
-# public personal repositories below, and nothing else. Public is the line that matters: these are repositories whose contents
-# else. Public is the line that matters: these are repositories whose contents
+# tinyhumansai organization as of 2026-08-21, plus the explicitly maintained
+# public personal repositories below, and nothing else. Public is the line that
+# matters: these are repositories whose contents
 # are already readable by anyone, so sending a diff to a model gives away
 # nothing that was not already given away. Every private repository in the
 # organization — the backends, `medulla-v1`, the `workflow-*` superprojects, the
@@ -386,18 +386,20 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # checkpoint, not the record. Commit that repository by hand.
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
 tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai/medulla:\
-tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/sdk:tinyhumansai/skill-registry:\
+tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
 tinyhumansai/rust-template:\
-tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybus:tinyhumansai/tinychannels:\
+tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:\
 tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyjuice:\
-tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
+tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
+tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
 senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
-senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/sdk:senamakel/skill-registry:\
-senamakel/riemann:senamakel/rust-template:\
-senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybus:senamakel/tinychannels:\
-senamakel/tinycortex:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyjuice:\
-senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinysweeper:senamakel/tinywallet:\
+senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
+senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
+senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:\
+senamakel/tinycortex:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyjuice:senamakel/tinymcp:\
+senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
+senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyvoice:senamakel/tinywallet:\
 senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
