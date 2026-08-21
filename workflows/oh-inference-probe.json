@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "id": "oh-inference-probe",
+  "name": "OpenHuman inference probe",
+  "inputs": [
+    {
+      "name": "target",
+      "type": "string",
+      "description": "Which inference route to run the turn on: `openrouter` (the oh-openrouter preset), `ladder` (the oh-ladder preset, the local llm-ladder-router), or anything else for the account's own OpenHuman configuration.",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "model",
+      "type": "string",
+      "description": "Model id handed to the turn as model_override — an OpenRouter model id, a ladder rung (flash / reasoning / max-reasoning / scribe), or a managed tier.",
+      "required": true,
+      "default": null
+    }
+  ],
+  "agents": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Probe",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "route",
+      "kind": "switch",
+      "type_version": 1,
+      "name": "By requested target",
+      "config": {
+        "expression": "=.inputs.target"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe_openrouter",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Via OpenRouter",
+      "config": {
+        "harness": "oh-openrouter",
+        "model": "=.inputs.model",
+        "prompt": "=\"Answer in exactly two lines and run no tools.\\nLine 1 — MODEL: the model family and version you are, as specifically as you can state it.\\nLine 2 — VENDOR: the company that trained you.\\nThe route under test asked for model '\\(.inputs.model)' on OpenRouter.\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe_ladder",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Via the local ladder router",
+      "config": {
+        "harness": "oh-ladder",
+        "model": "=.inputs.model",
+        "prompt": "=\"Answer in exactly two lines and run no tools.\\nLine 1 — MODEL: the model family and version you are, as specifically as you can state it.\\nLine 2 — VENDOR: the company that trained you.\\nThe route under test asked for rung '\\(.inputs.model)' on the local ladder router.\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe_account",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "On the account's own configuration",
+      "config": {
+        "harness": "openhuman",
+        "model": "=.inputs.model",
+        "prompt": "=\"Answer in exactly two lines and run no tools.\\nLine 1 — MODEL: the model family and version you are, as specifically as you can state it.\\nLine 2 — VENDOR: the company that trained you.\\nThe route under test asked for model '\\(.inputs.model)' with no preset, so this turn runs on the account's own OpenHuman configuration.\""
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "route",
+      "to_port": "main"
+    },
+    {
+      "from_node": "route",
+      "from_port": "openrouter",
+      "to_node": "probe_openrouter",
+      "to_port": "main"
+    },
+    {
+      "from_node": "route",
+      "from_port": "ladder",
+      "to_node": "probe_ladder",
+      "to_port": "main"
+    },
+    {
+      "from_node": "route",
+      "from_port": "default",
+      "to_node": "probe_account",
+      "to_port": "main"
+    }
+  ],
+  "description": "Run one embedded OpenHuman turn on an argument-selected inference route, with the model supplied as an argument too, and have the turn report which model actually answered. The route is a `[[customHarnesses]]` preset with baseHarness=openhuman: `target` picks the preset (a literal per branch, because the engine forbids a =-expression from choosing which harness runs a step) and `model` rides down as the turn's model_override.",
+  "enabled": true
+}

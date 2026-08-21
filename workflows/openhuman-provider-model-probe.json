@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "id": "openhuman-provider-model-probe",
+  "name": "OpenHuman provider/model probe",
+  "inputs": [
+    {
+      "name": "provider",
+      "type": "string",
+      "description": "Inference provider key. One of: openrouter, anthropic, ladder. Anything else falls to OpenHuman's own default provider.",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "model",
+      "type": "string",
+      "description": "Model id to hand OpenHuman via config.model (e.g. a ladder preset id or a raw model id).",
+      "required": true,
+      "default": null
+    }
+  ],
+  "agents": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Probe OpenHuman",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "route",
+      "kind": "switch",
+      "type_version": 1,
+      "name": "By requested provider",
+      "config": {
+        "field": "=.inputs.provider"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe_openrouter",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Probe via openrouter",
+      "config": {
+        "harness": "openhuman",
+        "provider": "openrouter",
+        "model": "=.inputs.model",
+        "prompt": "=\"Run these shell commands and report their raw output verbatim. Do not summarise, interpret, or skip any.\\n\\n1. tr '\\\\0' ' ' < /proc/$PPID/cmdline; echo\\n2. env | grep -iE 'openrouter|openai|provider|model|anthropic|api_key|ladder' | sed -E 's/(KEY|TOKEN)=.{6}.*/\\\\1=<redacted>/'\\n\\nRequested provider input was: openrouter. Requested model input was: \\(.inputs.model)\\n\\nThen, on final lines, state:\\nPROVIDER_SELF_REPORT: <the inference provider you believe you are being routed through, or \\\"unknown\\\">\\nMODEL_SELF_REPORT: <the exact model id you believe you are>\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe_anthropic",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Probe via anthropic",
+      "config": {
+        "harness": "openhuman",
+        "provider": "anthropic",
+        "model": "=.inputs.model",
+        "prompt": "=\"Run these shell commands and report their raw output verbatim. Do not summarise, interpret, or skip any.\\n\\n1. tr '\\\\0' ' ' < /proc/$PPID/cmdline; echo\\n2. env | grep -iE 'openrouter|openai|provider|model|anthropic|api_key|ladder' | sed -E 's/(KEY|TOKEN)=.{6}.*/\\\\1=<redacted>/'\\n\\nRequested provider input was: anthropic. Requested model input was: \\(.inputs.model)\\n\\nThen, on final lines, state:\\nPROVIDER_SELF_REPORT: <the inference provider you believe you are being routed through, or \\\"unknown\\\">\\nMODEL_SELF_REPORT: <the exact model id you believe you are>\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe_ladder",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Probe via ladder",
+      "config": {
+        "harness": "openhuman",
+        "provider": "ladder",
+        "model": "=.inputs.model",
+        "prompt": "=\"Run these shell commands and report their raw output verbatim. Do not summarise, interpret, or skip any.\\n\\n1. tr '\\\\0' ' ' < /proc/$PPID/cmdline; echo\\n2. env | grep -iE 'openrouter|openai|provider|model|anthropic|api_key|ladder' | sed -E 's/(KEY|TOKEN)=.{6}.*/\\\\1=<redacted>/'\\n\\nRequested provider input was: ladder. Requested model input was: \\(.inputs.model)\\n\\nThen, on final lines, state:\\nPROVIDER_SELF_REPORT: <the inference provider you believe you are being routed through, or \\\"unknown\\\">\\nMODEL_SELF_REPORT: <the exact model id you believe you are>\""
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe_default",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Probe via OpenHuman's own default provider",
+      "config": {
+        "harness": "openhuman",
+        "model": "=.inputs.model",
+        "prompt": "=\"Run these shell commands and report their raw output verbatim. Do not summarise, interpret, or skip any.\\n\\n1. tr '\\\\0' ' ' < /proc/$PPID/cmdline; echo\\n2. env | grep -iE 'openrouter|openai|provider|model|anthropic|api_key|ladder' | sed -E 's/(KEY|TOKEN)=.{6}.*/\\\\1=<redacted>/'\\n\\nRequested provider input was: \\(.inputs.provider) (unrecognized, so no provider override was set). Requested model input was: \\(.inputs.model)\\n\\nThen, on final lines, state:\\nPROVIDER_SELF_REPORT: <the inference provider you believe you are being routed through, or \\\"unknown\\\">\\nMODEL_SELF_REPORT: <the exact model id you believe you are>\""
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "route",
+      "to_port": "main"
+    },
+    {
+      "from_node": "route",
+      "from_port": "openrouter",
+      "to_node": "probe_openrouter",
+      "to_port": "main"
+    },
+    {
+      "from_node": "route",
+      "from_port": "anthropic",
+      "to_node": "probe_anthropic",
+      "to_port": "main"
+    },
+    {
+      "from_node": "route",
+      "from_port": "ladder",
+      "to_node": "probe_ladder",
+      "to_port": "main"
+    },
+    {
+      "from_node": "route",
+      "from_port": "default",
+      "to_node": "probe_default",
+      "to_port": "main"
+    }
+  ],
+  "description": "Route to an OpenHuman agent step on one of a few literal providers, selected by the `provider` input, with the model itself passed through as an expression. Then have it dump its own process argv/env so we can see what actually got wired through.",
+  "enabled": true
+}
