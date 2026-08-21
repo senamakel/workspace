@@ -397,7 +397,8 @@ senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
 senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
 senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:\
-senamakel/tinycortex:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyjuice:senamakel/tinymcp:\
+senamakel/tinybox:senamakel/tinycortex:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
+senamakel/tinyjuice:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
 senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyvoice:senamakel/tinywallet:\
 senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace}"
