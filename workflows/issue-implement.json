@@ -25,6 +25,7 @@
       "default": 1200
     }
   ],
+  "agents": [],
   "nodes": [
     {
       "id": "t",
