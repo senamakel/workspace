@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "id": "cwd-probe",
+  "name": "Agent cwd probe",
+  "inputs": [],
+  "agents": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Probe agent cwd",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "probe",
+      "kind": "agent",
+      "type_version": 1,
+      "name": "Report own working directory",
+      "config": {
+        "prompt": "Run exactly these two commands and report their raw output verbatim, nothing else:\n1. pwd\n2. git rev-parse --abbrev-ref HEAD\n\nDo not cd anywhere first. Do not edit any file. Finish with a line of the form CWD_REPORT: <the pwd output>.",
+        "workspace": "/home/enamakel/work/workflow-opencompany/opencompany/worktrees/issue-1113",
+        "working_dir": "/home/enamakel/work/workflow-opencompany/opencompany/worktrees/issue-1113",
+        "workdir": "/home/enamakel/work/workflow-opencompany/opencompany/worktrees/issue-1113"
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "probe",
+      "to_port": "main"
+    }
+  ],
+  "description": "Check whether an agent node honours a config.cwd, so the harness boots inside a prepared worktree instead of the run workspace.",
+  "enabled": true,
+  "defaults": {
+    "harness": "codex"
+  }
+}

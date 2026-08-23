@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "cwd-probe-parent",
+  "name": "Agent cwd probe (sub-workflow)",
+  "inputs": [],
+  "agents": [],
+  "nodes": [
+    {
+      "id": "t",
+      "kind": "trigger",
+      "type_version": 1,
+      "name": "Probe sub-workflow workspace",
+      "config": {
+        "trigger_kind": "manual"
+      },
+      "ports": [],
+      "position": null
+    },
+    {
+      "id": "child",
+      "kind": "sub_workflow",
+      "type_version": 1,
+      "name": "Run the cwd probe in a worktree",
+      "config": {
+        "workflow_id": "cwd-probe",
+        "workspace": "/home/enamakel/work/workflow-opencompany/opencompany/worktrees/issue-1113",
+        "inputs": {}
+      },
+      "ports": [],
+      "position": null
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "t",
+      "from_port": "main",
+      "to_node": "child",
+      "to_port": "main"
+    }
+  ],
+  "description": "Check whether a sub_workflow node can point its child at a different workspace, so the child's agent boots inside a prepared worktree.",
+  "enabled": true,
+  "defaults": {
+    "harness": "codex"
+  }
+}
