@@ -389,7 +389,7 @@ tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai
 tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
 tinyhumansai/rust-template:\
 tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:\
-tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyjuice:\
+tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyjuice:\
 tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
@@ -397,7 +397,7 @@ senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
 senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
 senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:\
-senamakel/tinybox:senamakel/tinycortex:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
+senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
 senamakel/tinyjuice:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
 senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyvoice:senamakel/tinywallet:\
