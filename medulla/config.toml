@@ -135,6 +135,39 @@ apiKeyEnv = "LADDER_API_KEY"
 baseUrl = "http://127.0.0.1:6969"
 contextWindow = 300000
 
+# The same router, reached by a `codex`-based CLI instead of a Claude-based one.
+# Worth declaring because the two base harnesses speak different surfaces, and a
+# workflow that wants codex's tool loop cannot use the preset above at all.
+#
+# Note the `/v1` on the base URL, which the preset above deliberately does not
+# have. It is not a typo and the two cannot be made to match: the Claude base
+# appends `/v1/messages` to whatever it is given, while the codex base appends
+# only `/responses`. Point this at a bare `http://127.0.0.1:6969` and every
+# dispatch dies with `unexpected status 404 Not Found, url:
+# http://127.0.0.1:6969/responses` — and the failure is silent in the worst way,
+# because the workflow records the errored step as a *success*, so a run burns
+# its whole iteration cap in a couple of minutes without doing any work. That
+# cost a full sweep of five PRs on 2026-08-23 before it was spotted.
+#
+# The router only grew the surface this needs that same day
+# (senamakel/llm-ladder-router#3, `POST /v1/responses`), so this preset requires
+# an image at or after that merge; an older router 404s whatever base URL it is
+# given. Both marketplaces serve the format natively, so it relays rather than
+# translating, exactly as the other two surfaces do.
+[[customHarnesses]]
+id = "ladder-codex"
+name = "Ladder (flash) via Codex"
+baseHarness = "codex"
+model = "flash"
+fastModel = "flash"
+hostId = "this-device"
+default = false
+apiKeyEnv = "LADDER_API_KEY"
+baseUrl = "http://127.0.0.1:6969/v1"
+codexOverrides = true
+contextWindow = 200000
+reasoningEffort = "high"
+
 # DeepSeek through the coding CLIs, via OpenRouter. Kept because the probe
 # workflows (`deepseek-preset-probe`, `harness-probe`) name them directly, and
 # because they are the fallback when the ladder is not running on a box.
