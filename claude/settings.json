@@ -20,6 +20,15 @@
             "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /tmp/tmp.5lZeweICKJ/app/hooks/turn-end.mjs",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Notification": [],
