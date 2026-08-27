@@ -176,13 +176,39 @@ BODY_MAX_LINES="${AUTO_COMMIT_BODY_MAX_LINES:-6}"
 # seconds in the worst case buys back the wording.
 TIMEOUT="${AUTO_COMMIT_TIMEOUT:-8}"
 MAX_DIFF="${AUTO_COMMIT_MAX_DIFF:-40000}"
-MODEL="${AUTO_COMMIT_MODEL:-deepseek/deepseek-v4-flash}"
-API_URL="${AUTO_COMMIT_URL:-https://openrouter.ai/api/v1/chat/completions}"
-# The hook runs on nearly every tool call, so it is by far the noisiest consumer
-# of an OpenRouter key. It gets its own — AUTOCOMMIT_API_KEY — so its spend and
-# rate limits are separable from interactive use, and so a key rotated for one
-# does not silently stop the other. OPENROUTER_API_KEY stays the fallback for
-# boxes that have not been given the dedicated key yet.
+# ── Where the subject is written ───────────────────────────────────
+# The box's own `llm-ladder-router` on 127.0.0.1:6969, not a provider directly.
+# It is the same OpenAI-compatible shape, so this is a URL and a model name and
+# nothing else, and `flash` is the ladder's cheapest rung — the right one for a
+# one-line subject read off a diff.
+#
+# It used to call OpenRouter directly, and that is what made this hook fragile.
+# The hook is the noisiest consumer on the machine, firing on nearly every tool
+# call, and it was billed to an account it shares with `deepcode`, `deepcodex`,
+# `ocr` and three Medulla harnesses across four boxes. On 2026-08-27 that account
+# reached zero — 941 credits of 941 spent — and every call started returning
+# `402 Insufficient credits`. Nothing announced it: the hook degraded silently to
+# `chore: files changed <paths>` and kept committing, so a day of checkpoints
+# carries no wording at all. A per-key cap does not help, because the 402 comes
+# from the account balance and fires however much headroom the key itself has —
+# this hook's own key had spent $1.08 of its $5.
+#
+# The ladder is funded by different providers (SURPLUS_API_KEY and the rest),
+# `ladder-up` keeps it alive from cron on every box every five minutes, and the
+# request never leaves the machine. Point somewhere else with AUTO_COMMIT_URL
+# and AUTO_COMMIT_MODEL if a box genuinely has no router.
+MODEL="${AUTO_COMMIT_MODEL:-flash}"
+API_URL="${AUTO_COMMIT_URL:-http://127.0.0.1:6969/v1/chat/completions}"
+# The key file holds whatever key $API_URL wants — the router's LADDER_API_KEY
+# now that the default is the ladder. The router rejects an absent key with 401
+# and a wrong one with 400, so a box that has not had its file written falls
+# through to the variables below, sends a key the router does not know, and gets
+# the file-listing subject. That is a setup step per box, not a code path.
+#
+# AUTOCOMMIT_API_KEY and OPENROUTER_API_KEY remain the fallback for a box
+# pointed back at OpenRouter with AUTO_COMMIT_URL: the hook gets its own key
+# there so its spend and rate limits are separable from interactive use, and so
+# a key rotated for one does not silently stop the other.
 #
 # The key file is read *before* either variable, and that order is the whole
 # point of it. A hook inherits the environment of whatever process spawned it,
