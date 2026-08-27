@@ -358,14 +358,22 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # `medulla-v1` or `medulla-backend`. Both owners are listed because `origin` is
 # routinely the personal fork of an allowlisted upstream; only those two remotes
 # are consulted, so an incidental third remote cannot admit a repository.
-# The list below is every public, non-archived, non-fork repository in the
+# The bulk of the list is every public, non-archived, non-fork repository in the
 # tinyhumansai organization as of 2026-08-21, plus the explicitly maintained
-# public personal repositories below, and nothing else. Public is the line that
-# matters: these are repositories whose contents
-# are already readable by anyone, so sending a diff to a model gives away
-# nothing that was not already given away. Every private repository in the
-# organization — the backends, `medulla-v1`, the `workflow-*` superprojects, the
-# security-advisory forks — is deliberately absent, and so are the forks of
+# public personal repositories below. Public was the original line, and it is
+# the safe one: those repositories' contents are already readable by anyone, so
+# sending a diff to a model gives away nothing that was not already given away.
+#
+# Four private repositories were added deliberately on 2026-08-27, at the
+# owner's request, because they are worked on daily and going uncheckpointed was
+# the bigger loss: `medulla-src` (both twins), `prmptcash-core`, and — for
+# symmetry with the checkout it is a submodule of — the public `prmpt.click` and
+# `prmpt.cash`. Adding a private repository is a real trade: its diff now leaves
+# the machine for the message-writing model on every checkpoint, so add one only
+# with that understood, and never a client's or a third party's code.
+#
+# Still deliberately absent: the backends, `medulla-v1`, `medulla-v2`, the
+# `workflow-*` superprojects and the security-advisory forks, and the forks of
 # third-party projects (`tauri-cef`, `homebrew-core` and the rest), which carry
 # somebody else's code and belong to their upstream's review, not to a
 # checkpoint.
@@ -386,7 +394,7 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # checkpoint, not the record. Commit that repository by hand.
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
 tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai/medulla:\
-tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
+tinyhumansai/medulla-src:tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
 tinyhumansai/rust-template:\
 tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:\
 tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyjuice:\
@@ -394,8 +402,9 @@ tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumans
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
 senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
-senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
+senamakel/llm-ladder-router:senamakel/medulla-src:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
+senamakel/prmptcash-core:senamakel/prmpt.click:senamakel/prmpt.cash:\
 senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:\
 senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
 senamakel/tinyjuice:senamakel/tinymcp:\
