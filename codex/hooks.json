@@ -10,17 +10,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node /tmp/tmp.6n5yUUafjt/app/hooks/turn-end.mjs",
-            "timeout": 5
-          }
-        ]
-      }
     ]
   }
 }

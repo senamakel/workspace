@@ -22,9 +22,6 @@
         ]
       }
     ],
-    "Notification": [],
-    "UserPromptSubmit": [],
-    "PreToolUse": [],
     "PostToolUse": [
       {
         "matcher": "*",
@@ -36,7 +33,6 @@
         ]
       }
     ],
-    "PostToolUseFailure": [],
     "SubagentStop": [
       {
         "hooks": [
@@ -46,8 +42,7 @@
           }
         ]
       }
-    ],
-    "PermissionRequest": []
+    ]
   },
   "statusLine": {
     "type": "command",
