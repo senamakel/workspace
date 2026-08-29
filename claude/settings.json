@@ -32,17 +32,6 @@
       }
     ],
     "Notification": [],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/home/enamakel/.local/share/prmpt/hooks/prompt-start.mjs\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "PreToolUse": [],
     "PostToolUse": [
       {
@@ -68,8 +57,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node \"/home/enamakel/.local/share/prmpt/hooks/statusline.mjs\"",
-    "padding": 0
+    "command": "bash \"$HOME/.claude/statusline-command.sh\""
   },
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
