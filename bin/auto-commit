@@ -398,6 +398,9 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # the machine for the message-writing model on every checkpoint, so add one only
 # with that understood, and never a client's or a third party's code.
 #
+# `senamakel/math-agent` was added on 2026-08-30, on the same terms: it is
+# private, so its diff now leaves the machine on every checkpoint.
+#
 # Still deliberately absent: the backends, `medulla-v1`, `medulla-v2`, the
 # `workflow-*` superprojects and the security-advisory forks, and the forks of
 # third-party projects (`tauri-cef`, `homebrew-core` and the rest), which carry
@@ -427,7 +430,7 @@ tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumans
 tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
-senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
+senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/mascots:senamakel/math-agent:senamakel/medulla:\
 senamakel/llm-ladder-router:senamakel/medulla-src:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
 senamakel/prmptcash-core:senamakel/prmpt.click:senamakel/prmpt.cash:\
