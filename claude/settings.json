@@ -20,8 +20,30 @@
             "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/enamakel/.local/share/prmpt/hooks/turn-end.mjs\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
+    "Notification": [],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/home/enamakel/.local/share/prmpt/hooks/prompt-start.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [],
     "PostToolUse": [
       {
         "matcher": "*",
@@ -46,7 +68,8 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash \"$HOME/.claude/statusline-command.sh\""
+    "command": "node \"/home/enamakel/.local/share/prmpt/hooks/statusline.mjs\"",
+    "padding": 0
   },
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
