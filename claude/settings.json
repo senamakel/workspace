@@ -20,19 +20,8 @@
             "command": "\"$HOME/work/workspace/bin/auto-commit\" --hook"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/home/enamakel/.local/share/prmpt/hooks/turn-end.mjs\"",
-            "timeout": 5
-          }
-        ]
       }
     ],
-    "Notification": [],
-    "PreToolUse": [],
     "PostToolUse": [
       {
         "matcher": "*",
