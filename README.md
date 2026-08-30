@@ -345,7 +345,8 @@ box r1 --takeover
 ### `worktree-clean [--dry-run] [--force] [--root <dir>]`
 
 Reclaims the disk space held by finished worktrees. It walks `<root>` (default:
-**the current directory**, or `$WORKTREE_CLEAN_ROOT`) for repositories with a `worktrees/`
+**the current directory**, or `$WORKTREE_CLEAN_ROOT`) for repositories with a
+`worktrees/`
 directory — superprojects **and submodules**, whose `.git` is a file rather than
 a directory — and removes each registered worktree that has nothing left to lose:
 no uncommitted changes and no commits missing from a remote — checked both in
