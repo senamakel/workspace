@@ -425,7 +425,7 @@ ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
 tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai/medulla:\
 tinyhumansai/medulla-src:tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
 tinyhumansai/rust-template:\
-tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:\
+tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:tinyhumansai/tinyconnectors:\
 tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyjuice:tinyhumansai/tinyloops:\
 tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
@@ -434,7 +434,7 @@ senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/mascots:s
 senamakel/llm-ladder-router:senamakel/medulla-src:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
 senamakel/prmptcash-core:senamakel/prmpt.click:senamakel/prmpt.cash:\
-senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:\
+senamakel/tiny.place:senamakel/tinyagents:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:senamakel/tinyconnectors:\
 senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
 senamakel/tinyjuice:senamakel/tinyloops:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
