@@ -4,9 +4,8 @@
 # Usage: repo-remotes [--dry-run] [--root <dir>] [--quiet]
 #
 # For each clone and submodule under <root> (default: the current directory)
-# whose canonical
-# home is github.com/tinyhumansai/<name>, sets origin to the senamakel fork and
-# upstream to the canonical repo. Repos with no fork are reported, never
+# whose canonical home is github.com/tinyhumansai/<name>, sets origin to the
+# senamakel fork and upstream to the canonical repo. Repos with no fork are reported, never
 # rewritten — create those deliberately with `gh-fork-clone <owner/repo>
 # --clone=false`. Workflow superprojects and medulla-v1 are always skipped:
 # their gitlinks are shared state, so they are consumed from upstream directly.
