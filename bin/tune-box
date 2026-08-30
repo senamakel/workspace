@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # tune-box — apply build, memory, and I/O tuning appropriate to this machine.
 #
-# Usage: tune-box [--dry-run] [--clean-targets] [--report]
+# Usage: tune-box [--dry-run] [--clean-targets] [--report] [--root <dir>]
 #
 #   tune-box                 apply everything this OS supports
 #   tune-box --dry-run       print what would change, touch nothing
 #   tune-box --report        show current state only
 #   tune-box --clean-targets also delete stale cargo target/ dirs (see below)
+#   tune-box --root <dir>    scan <dir> for target/ dirs (default: cwd)
 #
 # Everything here is sized from the machine's own CPU and RAM rather than
 # hardcoded, because these boxes differ by 3x in cores and RAM. Re-running is
@@ -39,12 +40,20 @@ set -euo pipefail
 DRY=0
 CLEAN=0
 REPORT=0
+# The target-dir scan is rooted at the current directory, not ~/work: rooted at
+# the whole work folder it reaches every checkout on the box, so running it from
+# inside one repository still found — and with --clean-targets deleted — target
+# dirs belonging to every other one. Pass --root ~/work (or set
+# TUNE_BOX_TARGET_ROOT) for the fleet-wide sweep.
+SCAN_ROOT="${TUNE_BOX_TARGET_ROOT:-$PWD}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)       DRY=1; shift ;;
     --clean-targets) CLEAN=1; shift ;;
     --report)        REPORT=1; shift ;;
-    -h|--help)       sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --root)          [ $# -ge 2 ] || { printf '[FAIL] --root requires a directory\n' >&2; exit 1; }
+                     SCAN_ROOT="$2"; shift 2 ;;
+    -h|--help)       sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               printf '[FAIL] unknown argument: %s\n' "$1" >&2; exit 1 ;;
   esac
 done
