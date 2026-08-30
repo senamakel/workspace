@@ -4,12 +4,11 @@
 # Usage: worktree-clean [--dry-run] [--force] [--root <dir>]
 #
 # Scans <root> (default: the current directory, or $WORKTREE_CLEAN_ROOT) for
-# repositories with a
-# worktrees/ directory and removes each registered worktree that has nothing left
-# to lose: no uncommitted changes and no commits missing from a remote, checked in
-# the worktree and in every submodule under it. Anything unsafe is kept and
-# reported. --force removes kept worktrees anyway (destroys uncommitted and
-# unpushed work); --dry-run reports without deleting.
+# repositories with a worktrees/ directory and removes each registered worktree
+# that has nothing left to lose: no uncommitted changes and no commits missing
+# from a remote, checked in the worktree and in every submodule under it.
+# Anything unsafe is kept and reported. --force removes kept worktrees anyway
+# (destroys uncommitted and unpushed work); --dry-run reports without deleting.
 set -euo pipefail
 
 fail() {
