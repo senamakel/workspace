@@ -3,7 +3,8 @@
 #
 # Usage: worktree-clean [--dry-run] [--force] [--root <dir>]
 #
-# Scans <root> (default ~/work, or $WORKTREE_CLEAN_ROOT) for repositories with a
+# Scans <root> (default: the current directory, or $WORKTREE_CLEAN_ROOT) for
+# repositories with a
 # worktrees/ directory and removes each registered worktree that has nothing left
 # to lose: no uncommitted changes and no commits missing from a remote, checked in
 # the worktree and in every submodule under it. Anything unsafe is kept and
@@ -27,7 +28,11 @@ require() {
   done
 }
 
-ROOT="${WORKTREE_CLEAN_ROOT:-$HOME/work}"
+# The default is the current directory, not ~/work: a scan rooted at the whole
+# work folder reaches every checkout on the box, so running it from inside one
+# repository still walked — and could delete worktrees in — every other one.
+# Pass --root ~/work (or set WORKTREE_CLEAN_ROOT) for the fleet-wide sweep.
+ROOT="${WORKTREE_CLEAN_ROOT:-$PWD}"
 DRY_RUN=0
 FORCE=0
 
