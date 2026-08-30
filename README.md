@@ -344,8 +344,8 @@ box r1 --takeover
 
 ### `worktree-clean [--dry-run] [--force] [--root <dir>]`
 
-Reclaims the disk space held by finished worktrees. It walks `<root>` (default
-`~/work`, or `$WORKTREE_CLEAN_ROOT`) for repositories with a `worktrees/`
+Reclaims the disk space held by finished worktrees. It walks `<root>` (default:
+**the current directory**, or `$WORKTREE_CLEAN_ROOT`) for repositories with a `worktrees/`
 directory — superprojects **and submodules**, whose `.git` is a file rather than
 a directory — and removes each registered worktree that has nothing left to lose:
 no uncommitted changes and no commits missing from a remote — checked both in
@@ -355,9 +355,13 @@ the reason is printed. Branches are never deleted, only their working trees, and
 the worktree registry is pruned afterwards. `--force` removes kept worktrees
 anyway, destroying that uncommitted and unpushed work.
 
+The default root is the current directory rather than `~/work`, so running it
+inside one checkout stays inside that checkout. Pass `--root ~/work` for the
+fleet-wide sweep.
+
 ```sh
-worktree-clean --dry-run
-worktree-clean
+worktree-clean --dry-run          # this checkout
+worktree-clean --root ~/work      # every checkout on the box
 worktree-clean --root ~/work/medulla --force
 ```
 
@@ -365,8 +369,9 @@ worktree-clean --root ~/work/medulla --force
 
 Points every cloned TinyHumans repository at the right pair of remotes: `origin`
 at the `senamakel` fork, `upstream` at the canonical `tinyhumansai` repo. It
-covers both top-level clones and submodules under `<root>` (default `~/work`),
-and `install.sh` runs it on every box so the layout converges everywhere.
+covers both top-level clones and submodules under `<root>` (default: **the
+current directory**, or `$REPO_REMOTES_ROOT`), and `install.sh` runs it with an
+explicit `--root ~/work` on every box so the layout converges everywhere.
 
 A repository with no fork is **reported, never rewritten** — the installer does
 not create repositories on your GitHub account as a side effect. Fork those
@@ -638,7 +643,7 @@ codex-trust-hooks --list      # show which hooks are enabled
 codex-trust-hooks             # enable the repo's hooks
 ```
 
-### `tune-box [--dry-run] [--clean-targets] [--report]`
+### `tune-box [--dry-run] [--clean-targets] [--report] [--root <dir>]`
 
 Applies build, memory, and I/O tuning appropriate to the machine it runs on.
 Every value is derived from that box's own cores and RAM rather than hardcoded,
@@ -668,10 +673,17 @@ no swappiness knob, and APFS issues TRIM itself.
 and reclaims, the latter kills, and this fleet has already had systemd-oomd
 killing tmux panes once.
 
+The stale-`target/` scan is rooted at the current directory (override with
+`--root` or `$TUNE_BOX_TARGET_ROOT`), so `--clean-targets` run inside a checkout
+cannot delete another checkout's build output. Temp-dir targets under `$TMPDIR`
+and `/tmp` are still found wherever the scan is rooted, because those are the
+urgent ones — on a tmpfs `/tmp` they are spending RAM.
+
 ```sh
-tune-box --dry-run        # show what would change
-tune-box                  # apply
-tune-box --clean-targets  # also delete stale cargo target dirs
+tune-box --dry-run                          # show what would change
+tune-box                                    # apply
+tune-box --clean-targets                    # delete this checkout's stale target dirs
+tune-box --root ~/work --clean-targets      # every checkout on the box
 ```
 
 ### `pr-list [--json] [--limit <count>] [--include-drafts] [-R|--repo <owner/name>]`
