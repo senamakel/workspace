@@ -350,7 +350,16 @@ elif [ "$OS" = "Darwin" ] && [ "$REPORT" != "1" ]; then
 fi
 
 # ── Stale target dirs ──────────────────────────────────────────────
-head_ "cargo target dirs"
+# Resolved here rather than at parse time so --help and --report still work in a
+# directory that has since gone away; the prefix test below compares against the
+# paths `find` prints, which are this exact string.
+if [ -d "$SCAN_ROOT" ]; then
+  SCAN_ROOT="$(cd "$SCAN_ROOT" && pwd -P)"
+else
+  printf '[FAIL] --root is not a directory: %s\n' "$SCAN_ROOT" >&2
+  exit 1
+fi
+head_ "cargo target dirs ($SCAN_ROOT)"
 TARGETS=()
 TMP_TARGETS=()
 while IFS= read -r t; do
