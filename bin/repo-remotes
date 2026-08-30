@@ -3,7 +3,8 @@
 #
 # Usage: repo-remotes [--dry-run] [--root <dir>] [--quiet]
 #
-# For each clone and submodule under <root> (default ~/work) whose canonical
+# For each clone and submodule under <root> (default: the current directory)
+# whose canonical
 # home is github.com/tinyhumansai/<name>, sets origin to the senamakel fork and
 # upstream to the canonical repo. Repos with no fork are reported, never
 # rewritten — create those deliberately with `gh-fork-clone <owner/repo>
@@ -13,7 +14,11 @@ set -euo pipefail
 
 FORK_OWNER="${REPO_REMOTES_FORK_OWNER:-senamakel}"
 CANONICAL_OWNER="${REPO_REMOTES_CANONICAL_OWNER:-tinyhumansai}"
-ROOT="${REPO_REMOTES_ROOT:-$HOME/work}"
+# The current directory, not ~/work: rooted at the whole work folder this
+# rewrites remotes in every checkout on the box, so running it from inside one
+# repository still touched all the others. Pass --root ~/work (or set
+# REPO_REMOTES_ROOT) for the fleet-wide sweep.
+ROOT="${REPO_REMOTES_ROOT:-$PWD}"
 DRY_RUN=0
 QUIET=0
 
