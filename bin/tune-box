@@ -357,12 +357,12 @@ while IFS= read -r t; do
   [ -f "$t/CACHEDIR.TAG" ] || [ -d "$t/debug" ] || [ -d "$t/release" ] || continue
   TARGETS+=("$t")
   case "$t" in
-    "$HOME"/work/*) ;;
+    "$SCAN_ROOT"/*) ;;
     *) TMP_TARGETS+=("$t") ;;
   esac
 done < <(
   {
-    find "$HOME/work" -maxdepth 7 -type d -name target \
+    find "$SCAN_ROOT" -maxdepth 7 -type d -name target \
       -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null || true
     # Temp dirs too, matching `<slug>-target` as well as a plain `target`.
     #
@@ -370,7 +370,7 @@ done < <(
     # workflow writes into a worktree's .cargo/config.toml, so an agent that
     # exports one silently opts that build out of the shared target dir — and
     # what it exports is typically a path under /tmp. Those were invisible here
-    # twice over: this search never left ~/work, and `-name target` does not
+    # twice over: this search never left the scan root, and `-name target` does not
     # match `medulla-pr220-target`. On a tmpfs /tmp they are charged against RAM,
     # so a couple of them exhaust the mount and every later build — and any shell
     # wanting a temp file — fails with EDQUOT while `df` still shows free space.
@@ -390,7 +390,8 @@ else
   # Named individually because a temp-dir target is the urgent kind: on tmpfs it
   # is spending RAM, and nothing else on this box will ever clean it up.
   if [ "${#TMP_TARGETS[@]}" -gt 0 ]; then
-    printf '  %s of them are outside ~/work and owned by nothing:\n' "${#TMP_TARGETS[@]}"
+    printf '  %s of them are outside %s and owned by nothing:\n' \
+      "${#TMP_TARGETS[@]}" "$SCAN_ROOT"
     for t in "${TMP_TARGETS[@]}"; do
       printf '    %6s  %s\n' "$(du -sh "$t" 2>/dev/null | cut -f1)" "$t"
     done
