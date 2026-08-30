@@ -77,6 +77,43 @@ EOF
   : > "$log"
 }
 
+expected_repository_names() {
+  cat <<'EOF'
+workflow-openhuman
+workflow-medulla
+workflow-tinyplace
+workflow-opencompany
+workflow-dashboard
+tiny.place
+tinyagents
+tinyanalyzer
+tinybox
+tinybrowser
+tinybus
+tinychannels
+tinyconnectors
+tinycortex
+tinydesktop
+tinydocs
+tinyflows
+tinyhosts
+tinyinference
+tinyjuice
+tinyloops
+tinymcp
+tinymemory
+tinyruntime
+tinyruntime-nodejs
+tinyruntime-python
+tinyskills
+tinysweeper
+tinytools
+tinyvoice
+tinywallet
+tinyworkspaces
+EOF
+}
+
 run_init() {
   local home="$1" fake_bin="$2"
   shift 2
@@ -99,7 +136,7 @@ assert_invalid() {
 }
 
 test_clones_exact_repository_set() {
-  local home fake_bin log output expected repository_name
+  local home fake_bin log output actual_names repository_name
   home="$(new_home clone-set)"
   fake_bin="$home/fake-bin"
   log="$home/git.log"
@@ -107,13 +144,11 @@ test_clones_exact_repository_set() {
 
   output="$(run_init "$home" "$fake_bin" --workspace "$home/custom")"
 
-  expected="clone --recurse-submodules git@github.com:tinyhumansai/workflow-openhuman.git $home/custom/workflow-openhuman
-clone --recurse-submodules git@github.com:tinyhumansai/workflow-medulla.git $home/custom/workflow-medulla
-clone --recurse-submodules git@github.com:tinyhumansai/workflow-tinyplace.git $home/custom/workflow-tinyplace
-clone --recurse-submodules git@github.com:tinyhumansai/workflow-opencompany.git $home/custom/workflow-opencompany
-clone --recurse-submodules git@github.com:tinyhumansai/workflow-dashboard.git $home/custom/workflow-dashboard"
-  assert_eq "$expected" "$(grep '^clone ' "$log")" \
-    "exactly five recursive SSH clones are issued in manifest order"
+  actual_names="$(awk '/^clone / { sub(/^.*\//, "", $NF); print $NF }' "$log")"
+  assert_eq "$(expected_repository_names)" "$actual_names" \
+    "the complete workflow and tiny-library set is cloned in manifest order"
+  assert_line_count 32 "clone --recurse-submodules" "$log" \
+    "exactly 32 recursive SSH clones are issued"
   assert_line_count 5 "workflow-remotes " "$log" \
     "every cloned workflow is configured"
   for repository_name in openhuman medulla tinyplace opencompany dashboard; do
@@ -122,6 +157,15 @@ clone --recurse-submodules git@github.com:tinyhumansai/workflow-dashboard.git $h
   done
   assert_contains "$output" "[clone] workflow-openhuman" \
     "clone progress is reported"
+  assert_contains "$(cat "$log")" \
+    "clone --recurse-submodules git@github.com:senamakel/tinyagents.git $home/custom/tinyagents" \
+    "forked libraries clone from the fork"
+  assert_contains "$(cat "$log")" \
+    "remote set-url upstream git@github.com:tinyhumansai/tinyagents.git" \
+    "forked libraries point upstream at TinyHumans"
+  assert_contains "$(cat "$log")" \
+    "clone --recurse-submodules git@github.com:tinyhumansai/tinytools.git $home/custom/tinytools" \
+    "libraries without a fork clone from TinyHumans"
   assert_exists "$home/bin" "HOME/bin is created"
 }
 
@@ -141,6 +185,7 @@ test_existing_destinations_are_preserved_and_git_checkouts_are_configured() {
   printf 'preserve file\n' > "$file_marker"
   symlink_target="$home/nonexistent-symlink-target"
   ln -s "$symlink_target" "$workspace/workflow-tinyplace"
+  mkdir -p "$workspace/tinyagents/.git"
 
   run_init "$home" "$fake_bin" >/dev/null
 
@@ -153,11 +198,17 @@ test_existing_destinations_are_preserved_and_git_checkouts_are_configured() {
   assert_contains "$(cat "$log")" \
     "workflow-remotes $workspace/workflow-openhuman" \
     "existing Git checkout is configured"
+  assert_contains "$(cat "$log")" \
+    "-C $workspace/tinyagents remote set-url origin git@github.com:senamakel/tinyagents.git" \
+    "existing forked library keeps the fork as origin"
+  assert_contains "$(cat "$log")" \
+    "-C $workspace/tinyagents remote set-url upstream git@github.com:tinyhumansai/tinyagents.git" \
+    "existing forked library points upstream at TinyHumans"
   assert_line_count 0 "workflow-medulla.git" "$log" \
     "existing file makes no Git call"
   assert_line_count 0 "workflow-tinyplace.git" "$log" \
     "existing symlink makes no Git call"
-  assert_line_count 2 "clone --recurse-submodules" "$log" \
+  assert_line_count 28 "clone --recurse-submodules" "$log" \
     "only missing repositories are cloned"
   assert_contains "$(cat "$log")" "workflow-opencompany.git" \
     "missing opencompany repository is cloned"
@@ -177,7 +228,34 @@ EOF
     workflow-medulla \
     workflow-tinyplace \
     workflow-opencompany \
-    workflow-dashboard
+    workflow-dashboard \
+    tiny.place \
+    tinyagents \
+    tinyanalyzer \
+    tinybox \
+    tinybrowser \
+    tinybus \
+    tinychannels \
+    tinyconnectors \
+    tinycortex \
+    tinydesktop \
+    tinydocs \
+    tinyflows \
+    tinyhosts \
+    tinyinference \
+    tinyjuice \
+    tinyloops \
+    tinymcp \
+    tinymemory \
+    tinyruntime \
+    tinyruntime-nodejs \
+    tinyruntime-python \
+    tinyskills \
+    tinysweeper \
+    tinytools \
+    tinyvoice \
+    tinywallet \
+    tinyworkspaces
   do
     mkdir "$no_git_home/work/$repository_name"
   done
@@ -204,6 +282,12 @@ test_dry_run_and_argument_handling() {
   assert_contains "$output" \
     "[would configure] recursive remotes in $home/preview/workflow-dashboard" \
     "remote configuration is previewed"
+  assert_contains "$output" \
+    "[would clone] git@github.com:senamakel/tinyagents.git -> $home/preview/tinyagents" \
+    "fork clone actions are previewed"
+  assert_contains "$output" \
+    "[would configure] origin senamakel/tinyagents, upstream tinyhumansai/tinyagents" \
+    "fork remote configuration is previewed"
   assert_line_count 0 "" "$log" "dry run never calls Git"
   assert_missing "$home/preview" "dry run does not create workspace"
   assert_missing "$home/bin" "dry run does not create HOME/bin"

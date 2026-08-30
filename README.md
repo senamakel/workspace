@@ -79,10 +79,16 @@ workspace-init
 workspace-init --workspace /another/work
 ```
 
-The default root is `~/work`. The command recursively clones missing
-`workflow-openhuman`, `workflow-medulla`, `workflow-tinyplace`,
-`workflow-opencompany`, and `workflow-dashboard` repositories over SSH.
-Existing destinations are skipped without inspection or updates.
+The default root is `~/work`. The command recursively clones the five workflow
+superprojects plus every public, non-archived `tiny*` source repository in the
+TinyHumans organization over SSH. For libraries with a `senamakel` fork,
+`origin` points to the fork and `upstream` points to `tinyhumansai`; libraries
+without a fork use the canonical repository as `origin`. Existing destination
+contents are preserved, while Git checkouts have their expected remotes
+reapplied.
+
+`install.sh` runs this bootstrap too, so a normal install provisions the
+repository set as well as the shell and agent configuration.
 
 The bootstrap also installs `~/bin/mosh-tmux` as a link to
 `bin/workspace-tmux`. A conflicting destination is backed up under

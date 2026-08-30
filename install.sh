@@ -409,6 +409,17 @@ ensure_zshrc_loader() {
 }
 ensure_zshrc_loader
 
+# --- Workspace repositories --------------------------------------------------
+# A fresh box should receive the same TinyHumans workflow and library checkout
+# set as the established boxes. workspace-init is conservative: it only clones
+# missing paths and otherwise limits changes to the expected Git remotes.
+echo
+if [ "$DRY_RUN" -eq 1 ]; then
+  "$REPO_ROOT/bin/workspace-init" --dry-run
+else
+  "$REPO_ROOT/bin/workspace-init"
+fi
+
 # --- Cloned repository remotes ------------------------------------------------
 # Every TinyHumans clone and submodule should push to my fork and pull from the
 # canonical repo, on every box. Non-fatal: a box with no clones, no network, or

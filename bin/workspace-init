@@ -8,7 +8,9 @@ usage() {
   cat <<'EOF'
 workspace-init [--dry-run] [--workspace <path>]
 
-Create missing TinyHumans workflow checkouts without changing existing paths.
+Create missing TinyHumans workflow and library checkouts without changing
+existing paths. Libraries clone from the senamakel fork when one exists and
+track the canonical tinyhumansai repository as upstream.
   --dry-run          describe actions without writing or contacting GitHub
   --workspace <path> use a workspace other than $HOME/work
   -h, --help         show this help
@@ -96,33 +98,106 @@ ensure_directory() {
 ensure_directory "$WORKSPACE"
 ensure_directory "$HOME/bin"
 
-REPOSITORIES='workflow-openhuman|git@github.com:tinyhumansai/workflow-openhuman.git
-workflow-medulla|git@github.com:tinyhumansai/workflow-medulla.git
-workflow-tinyplace|git@github.com:tinyhumansai/workflow-tinyplace.git
-workflow-opencompany|git@github.com:tinyhumansai/workflow-opencompany.git
-workflow-dashboard|git@github.com:tinyhumansai/workflow-dashboard.git'
+REPOSITORIES='workflow|workflow-openhuman|git@github.com:tinyhumansai/workflow-openhuman.git|
+workflow|workflow-medulla|git@github.com:tinyhumansai/workflow-medulla.git|
+workflow|workflow-tinyplace|git@github.com:tinyhumansai/workflow-tinyplace.git|
+workflow|workflow-opencompany|git@github.com:tinyhumansai/workflow-opencompany.git|
+workflow|workflow-dashboard|git@github.com:tinyhumansai/workflow-dashboard.git|
+library|tiny.place|git@github.com:senamakel/tiny.place.git|git@github.com:tinyhumansai/tiny.place.git
+library|tinyagents|git@github.com:senamakel/tinyagents.git|git@github.com:tinyhumansai/tinyagents.git
+library|tinyanalyzer|git@github.com:tinyhumansai/tinyanalyzer.git|
+library|tinybox|git@github.com:tinyhumansai/tinybox.git|
+library|tinybrowser|git@github.com:tinyhumansai/tinybrowser.git|
+library|tinybus|git@github.com:tinyhumansai/tinybus.git|
+library|tinychannels|git@github.com:senamakel/tinychannels.git|git@github.com:tinyhumansai/tinychannels.git
+library|tinyconnectors|git@github.com:senamakel/tinyconnectors.git|git@github.com:tinyhumansai/tinyconnectors.git
+library|tinycortex|git@github.com:senamakel/tinycortex.git|git@github.com:tinyhumansai/tinycortex.git
+library|tinydesktop|git@github.com:tinyhumansai/tinydesktop.git|
+library|tinydocs|git@github.com:senamakel/tinydocs.git|git@github.com:tinyhumansai/tinydocs.git
+library|tinyflows|git@github.com:senamakel/tinyflows.git|git@github.com:tinyhumansai/tinyflows.git
+library|tinyhosts|git@github.com:senamakel/tinyhosts.git|git@github.com:tinyhumansai/tinyhosts.git
+library|tinyinference|git@github.com:tinyhumansai/tinyinference.git|
+library|tinyjuice|git@github.com:senamakel/tinyjuice.git|git@github.com:tinyhumansai/tinyjuice.git
+library|tinyloops|git@github.com:senamakel/tinyloops.git|git@github.com:tinyhumansai/tinyloops.git
+library|tinymcp|git@github.com:senamakel/tinymcp.git|git@github.com:tinyhumansai/tinymcp.git
+library|tinymemory|git@github.com:senamakel/tinymemory.git|git@github.com:tinyhumansai/tinymemory.git
+library|tinyruntime|git@github.com:senamakel/tinyruntime.git|git@github.com:tinyhumansai/tinyruntime.git
+library|tinyruntime-nodejs|git@github.com:tinyhumansai/tinyruntime-nodejs.git|
+library|tinyruntime-python|git@github.com:tinyhumansai/tinyruntime-python.git|
+library|tinyskills|git@github.com:senamakel/tinyskills.git|git@github.com:tinyhumansai/tinyskills.git
+library|tinysweeper|git@github.com:tinyhumansai/tinysweeper.git|
+library|tinytools|git@github.com:tinyhumansai/tinytools.git|
+library|tinyvoice|git@github.com:senamakel/tinyvoice.git|git@github.com:tinyhumansai/tinyvoice.git
+library|tinywallet|git@github.com:senamakel/tinywallet.git|git@github.com:tinyhumansai/tinywallet.git
+library|tinyworkspaces|git@github.com:tinyhumansai/tinyworkspaces.git|'
 
-while IFS='|' read -r name remote; do
+set_remote() {
+  local directory="$1" name="$2" url="$3"
+  if git -C "$directory" remote get-url "$name" >/dev/null 2>&1; then
+    git -C "$directory" remote set-url "$name" "$url"
+  else
+    git -C "$directory" remote add "$name" "$url"
+  fi
+}
+
+configure_library_remotes() {
+  local directory="$1" origin="$2" upstream="$3" pull_remote="origin"
+  set_remote "$directory" origin "$origin"
+  if [ -n "$upstream" ]; then
+    set_remote "$directory" upstream "$upstream"
+    pull_remote="upstream"
+  fi
+  git -C "$directory" config remote.pushDefault origin
+  if git -C "$directory" show-ref --verify --quiet refs/heads/main; then
+    git -C "$directory" config branch.main.remote "$pull_remote"
+    git -C "$directory" config branch.main.merge refs/heads/main
+  fi
+  printf '[configured] %s\n' "$directory"
+}
+
+while IFS='|' read -r kind name remote upstream; do
   destination="$WORKSPACE/$name"
   if [ -e "$destination" ] || [ -L "$destination" ]; then
     printf '[skip] existing destination: %s\n' "$destination"
     if [ -d "$destination/.git" ] || [ -f "$destination/.git" ]; then
       if [ "$DRY_RUN" -eq 1 ]; then
-        "$WORKFLOW_REMOTES_COMMAND" --dry-run "$destination"
+        if [ "$kind" = "workflow" ]; then
+          "$WORKFLOW_REMOTES_COMMAND" --dry-run "$destination"
+        elif [ -n "$upstream" ]; then
+          printf '[would configure] origin senamakel/%s, upstream tinyhumansai/%s\n' \
+            "$name" "$name"
+        else
+          printf '[would configure] origin tinyhumansai/%s\n' "$name"
+        fi
       else
-        "$WORKFLOW_REMOTES_COMMAND" "$destination"
+        if [ "$kind" = "workflow" ]; then
+          "$WORKFLOW_REMOTES_COMMAND" "$destination"
+        else
+          configure_library_remotes "$destination" "$remote" "$upstream"
+        fi
       fi
     fi
     continue
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
     printf '[would clone] %s -> %s\n' "$remote" "$destination"
-    printf '[would configure] recursive remotes in %s\n' "$destination"
+    if [ "$kind" = "workflow" ]; then
+      printf '[would configure] recursive remotes in %s\n' "$destination"
+    elif [ -n "$upstream" ]; then
+      printf '[would configure] origin senamakel/%s, upstream tinyhumansai/%s\n' \
+        "$name" "$name"
+    else
+      printf '[would configure] origin tinyhumansai/%s\n' "$name"
+    fi
   else
     require_command git
     printf '[clone] %s\n' "$name"
     git clone --recurse-submodules "$remote" "$destination"
-    "$WORKFLOW_REMOTES_COMMAND" "$destination"
+    if [ "$kind" = "workflow" ]; then
+      "$WORKFLOW_REMOTES_COMMAND" "$destination"
+    else
+      configure_library_remotes "$destination" "$remote" "$upstream"
+    fi
   fi
 done <<EOF
 $REPOSITORIES
