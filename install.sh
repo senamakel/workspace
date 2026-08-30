@@ -413,11 +413,15 @@ ensure_zshrc_loader
 # Every TinyHumans clone and submodule should push to my fork and pull from the
 # canonical repo, on every box. Non-fatal: a box with no clones, no network, or
 # no fork for a given repo just reports and moves on.
+#
+# --root is explicit because repo-remotes now defaults to the current directory:
+# this is the one caller that genuinely wants the fleet-wide sweep, and without
+# it the installer would only ever rewire the checkout it is run from.
 echo
 if [ "$DRY_RUN" -eq 1 ]; then
-  "$REPO_ROOT/bin/repo-remotes" --dry-run || echo "[skip] repo remotes could not be checked"
+  "$REPO_ROOT/bin/repo-remotes" --root "$HOME/work" --dry-run || echo "[skip] repo remotes could not be checked"
 else
-  "$REPO_ROOT/bin/repo-remotes" || echo "[skip] repo remotes could not be updated"
+  "$REPO_ROOT/bin/repo-remotes" --root "$HOME/work" || echo "[skip] repo remotes could not be updated"
 fi
 
 echo
