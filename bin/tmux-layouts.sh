@@ -14,10 +14,12 @@ tmux_create_window() {
 
   if tmux_call "$tmux_command" "$server" has-session -t "=$session" 2>/dev/null; then
     local pane
-    pane="$(
+    if ! pane="$(
       tmux_call "$tmux_command" "$server" new-window \
-        -t "=$session" -n "$name" -c "$directory" -P -F '#{pane_id}'
-    )"
+        -t "$session:" -n "$name" -c "$directory" -P -F '#{pane_id}'
+    )"; then
+      return 1
+    fi
     tmux_call "$tmux_command" "$server" \
       select-window -t "$session:$name"
     printf '%s\n' "$pane"
