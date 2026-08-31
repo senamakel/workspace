@@ -21,9 +21,30 @@ NAME="ladder"
 IMAGE="ghcr.io/senamakel/llm-ladder-router:latest"
 CONFIG="$HOME/.config/ladder/config.toml"
 PORT="6969"
-# Loopback only. Every box runs its own; nothing here is meant to be reachable
-# from the tailnet.
+# Where the probe talks to it, and the address a shell on this box uses.
 BIND="127.0.0.1"
+# Every address the router listens on. Loopback for this box's own processes,
+# and the docker0 gateway because that is what `host.docker.internal` resolves
+# to inside a container — every box runs its own router, and a container has to
+# be able to reach the one on its own host.
+#
+# Not 0.0.0.0. Every box is on the tailnet, and this router holds the keys to
+# every provider account; the two addresses below are the ones that are
+# actually needed, and neither of them is routable from another machine.
+#
+# The symptom this fixes is silent, which is why it is worth spelling out.
+# CortexDB's capture is WAL-durable BEFORE it embeds, so with the router
+# unreachable it answered 200 to every write, reported `degraded: false` on
+# /v1/admin/ready, and filed events it never embedded. The only visible trace
+# was `vectors` sitting still while `wal_events` climbed — 1333 events against
+# 523 vectors on this box before anyone looked.
+BINDS=("127.0.0.1")
+# docker0 exists only where docker does, and the laptop's Docker Desktop maps
+# `host.docker.internal` to the host itself without needing this.
+if command -v docker >/dev/null 2>&1 && [ "$(uname -s)" = "Linux" ]; then
+  DOCKER0="$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)"
+  [ -n "${DOCKER0:-}" ] && BINDS+=("$DOCKER0")
+fi
 # The router is a proxy: it holds order books and session pins, not model state.
 # The cap exists so that a box under memory pressure kills the workload rather
 # than the thing every agent on it dispatches through — dragonfly lost this
@@ -114,7 +135,11 @@ ARGS=(
   # a stop nobody meant to be permanent should not outlive the next boot.
   --restart always
   --memory "$MEMORY"
-  -p "$BIND:$PORT:$PORT"
+)
+for bind in "${BINDS[@]}"; do
+  ARGS+=(-p "$bind:$PORT:$PORT")
+done
+ARGS+=(
   -v "$CONFIG:/etc/ladder/config.toml:ro"
 )
 for key in "${KEYS[@]}"; do
