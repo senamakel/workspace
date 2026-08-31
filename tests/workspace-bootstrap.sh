@@ -209,7 +209,7 @@ test_existing_destinations_are_preserved_and_git_checkouts_are_configured() {
     "existing file makes no Git call"
   assert_line_count 0 "workflow-tinyplace.git" "$log" \
     "existing symlink makes no Git call"
-  assert_line_count 28 "clone --recurse-submodules" "$log" \
+  assert_line_count 29 "clone --recurse-submodules" "$log" \
     "only missing repositories are cloned"
   assert_contains "$(cat "$log")" "workflow-opencompany.git" \
     "missing opencompany repository is cloned"
