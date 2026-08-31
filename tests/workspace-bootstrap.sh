@@ -107,6 +107,7 @@ tinyruntime-nodejs
 tinyruntime-python
 tinyskills
 tinysweeper
+tinyteams
 tinytools
 tinyvoice
 tinywallet
@@ -252,6 +253,7 @@ EOF
     tinyruntime-python \
     tinyskills \
     tinysweeper \
+    tinyteams \
     tinytools \
     tinyvoice \
     tinywallet \

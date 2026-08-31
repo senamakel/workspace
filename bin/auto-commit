@@ -428,7 +428,7 @@ tinyhumansai/rust-template:\
 tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinyanalyzer:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:tinyhumansai/tinyconnectors:\
 tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyinference:tinyhumansai/tinyjuice:tinyhumansai/tinyloops:\
 tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
-tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinywallet:\
+tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinyteams:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
 senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/mascots:senamakel/math-agent:senamakel/medulla:\
 senamakel/llm-ladder-router:senamakel/medulla-src:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
@@ -438,7 +438,7 @@ senamakel/tiny.place:senamakel/tinyagents:senamakel/tinyanalyzer:senamakel/tinyb
 senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
 senamakel/tinyinference:senamakel/tinyjuice:senamakel/tinyloops:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
-senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyvoice:senamakel/tinywallet:\
+senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyteams:senamakel/tinyvoice:senamakel/tinywallet:\
 senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
