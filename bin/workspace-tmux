@@ -120,6 +120,9 @@ then
     exit 1
   }
   MEDULLA_COMMAND="$(command -v medulla || true)"
+  if [ -z "$MEDULLA_COMMAND" ] && [ -x "$HOME/.medulla/bin/medulla" ]; then
+    MEDULLA_COMMAND="$HOME/.medulla/bin/medulla"
+  fi
   [ -n "$MEDULLA_COMMAND" ] || {
     printf 'workspace-tmux: required command not found: medulla\n' >&2
     exit 1
