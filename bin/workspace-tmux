@@ -95,7 +95,7 @@ fi
 if ! tmux_call "$TMUX_COMMAND" "$SERVER" \
   has-session -t "=$SESSION" 2>/dev/null
 then
-  for name in openhuman medulla opencompany; do
+  for name in openhuman opencompany; do
     directory="$WORKSPACE/workflow-$name"
     [ -d "$directory" ] || {
       printf 'workspace-tmux: missing workflow directory: %s\n' \
@@ -119,10 +119,19 @@ then
     printf 'workspace-tmux: required command not found: docker\n' >&2
     exit 1
   }
+  MEDULLA_COMMAND="$(command -v medulla || true)"
+  [ -n "$MEDULLA_COMMAND" ] || {
+    printf 'workspace-tmux: required command not found: medulla\n' >&2
+    exit 1
+  }
 
-  tmux_create_window \
-    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
-    medulla "$WORKSPACE/workflow-medulla" >/dev/null
+  pane="$(
+    tmux_create_window \
+      "$TMUX_COMMAND" "$SERVER" "$SESSION" medulla "$WORKSPACE"
+  )"
+  tmux_call "$TMUX_COMMAND" "$SERVER" select-pane -t "$pane" -T medulla
+  tmux_call "$TMUX_COMMAND" "$SERVER" \
+    send-keys -t "$pane" "$MEDULLA_COMMAND" C-m
   tmux_make_mixed_grid_window \
     "$TMUX_COMMAND" "$SERVER" "$SESSION" \
     workspace \

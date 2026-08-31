@@ -95,7 +95,8 @@ The bootstrap also installs `~/bin/mosh-tmux` as a link to
 `~/.config-backups/` first.
 
 On the Mac mini, `~/bin/mosh-tmux` creates or reuses the dedicated `mosh` tmux
-server's `workspace` session. It starts with a `medulla` window, then a 2×3
+server's `workspace` session. It starts with a `medulla` window in `~/work`
+running `medulla`, then a 2×3
 `workspace` grid (OpenHuman in column 1, OpenCompany in column 2, and `~/work`
 in column 3), followed by `btop`, `shell`, and `docker` (`docker stats`) windows. It
 reapplies the blue remote theme and `C-z` prefix before attaching. Existing
