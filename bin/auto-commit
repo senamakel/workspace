@@ -426,7 +426,7 @@ tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai
 tinyhumansai/medulla-src:tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
 tinyhumansai/rust-template:\
 tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinyanalyzer:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:tinyhumansai/tinyconnectors:\
-tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyinference:tinyhumansai/tinyjuice:tinyhumansai/tinyloops:\
+tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyhivemind:tinyhumansai/tinyinference:tinyhumansai/tinyjuice:tinyhumansai/tinyloops:\
 tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinyteams:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
@@ -436,7 +436,7 @@ senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
 senamakel/prmptcash-core:senamakel/prmpt.click:senamakel/prmpt.cash:\
 senamakel/tiny.place:senamakel/tinyagents:senamakel/tinyanalyzer:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:senamakel/tinyconnectors:\
 senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
-senamakel/tinyinference:senamakel/tinyjuice:senamakel/tinyloops:senamakel/tinymcp:\
+senamakel/tinyhivemind:senamakel/tinyinference:senamakel/tinyjuice:senamakel/tinyloops:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
 senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyteams:senamakel/tinyvoice:senamakel/tinywallet:\
 senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace}"

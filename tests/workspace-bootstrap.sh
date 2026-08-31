@@ -97,6 +97,7 @@ tinydesktop
 tinydocs
 tinyflows
 tinyhosts
+tinyhivemind
 tinyinference
 tinyjuice
 tinyloops
@@ -148,7 +149,7 @@ test_clones_exact_repository_set() {
   actual_names="$(awk '/^clone / { sub(/^.*\//, "", $NF); print $NF }' "$log")"
   assert_eq "$(expected_repository_names)" "$actual_names" \
     "the complete workflow and tiny-library set is cloned in manifest order"
-  assert_line_count 33 "clone --recurse-submodules" "$log" \
+  assert_line_count 34 "clone --recurse-submodules" "$log" \
     "exactly 33 recursive SSH clones are issued"
   assert_line_count 5 "workflow-remotes " "$log" \
     "every cloned workflow is configured"
@@ -209,7 +210,7 @@ test_existing_destinations_are_preserved_and_git_checkouts_are_configured() {
     "existing file makes no Git call"
   assert_line_count 0 "workflow-tinyplace.git" "$log" \
     "existing symlink makes no Git call"
-  assert_line_count 29 "clone --recurse-submodules" "$log" \
+  assert_line_count 30 "clone --recurse-submodules" "$log" \
     "only missing repositories are cloned"
   assert_contains "$(cat "$log")" "workflow-opencompany.git" \
     "missing opencompany repository is cloned"
@@ -243,6 +244,7 @@ EOF
     tinydocs \
     tinyflows \
     tinyhosts \
+    tinyhivemind \
     tinyinference \
     tinyjuice \
     tinyloops \
