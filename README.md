@@ -96,8 +96,8 @@ The bootstrap also installs `~/bin/mosh-tmux` as a link to
 
 On the Mac mini, `~/bin/mosh-tmux` creates or reuses the dedicated `mosh` tmux
 server's `workspace` session. It starts with a `medulla` window, then a 2×3
-`workspace` grid (two OpenHuman panes, two OpenCompany panes, and two `~/work`
-panes), followed by `btop`, `shell`, and `docker` (`docker stats`) windows. It
+`workspace` grid (OpenHuman in column 1, OpenCompany in column 2, and `~/work`
+in column 3), followed by `btop`, `shell`, and `docker` (`docker stats`) windows. It
 reapplies the blue remote theme and `C-z` prefix before attaching. Existing
 sessions are reused; run `~/bin/mosh-tmux --rebuild` to replace one with the
 current layout. Override its server and session names with `MOSH_TMUX_SERVER`

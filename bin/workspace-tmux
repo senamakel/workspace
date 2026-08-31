@@ -127,10 +127,10 @@ then
     "$TMUX_COMMAND" "$SERVER" "$SESSION" \
     workspace \
     "$WORKSPACE/workflow-openhuman" \
-    "$WORKSPACE/workflow-openhuman" \
-    "$WORKSPACE/workflow-opencompany" \
     "$WORKSPACE/workflow-opencompany" \
     "$WORKSPACE" \
+    "$WORKSPACE/workflow-openhuman" \
+    "$WORKSPACE/workflow-opencompany" \
     "$WORKSPACE"
 
   pane="$(
