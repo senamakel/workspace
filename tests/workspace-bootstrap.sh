@@ -148,8 +148,8 @@ test_clones_exact_repository_set() {
   actual_names="$(awk '/^clone / { sub(/^.*\//, "", $NF); print $NF }' "$log")"
   assert_eq "$(expected_repository_names)" "$actual_names" \
     "the complete workflow and tiny-library set is cloned in manifest order"
-  assert_line_count 32 "clone --recurse-submodules" "$log" \
-    "exactly 32 recursive SSH clones are issued"
+  assert_line_count 33 "clone --recurse-submodules" "$log" \
+    "exactly 33 recursive SSH clones are issued"
   assert_line_count 5 "workflow-remotes " "$log" \
     "every cloned workflow is configured"
   for repository_name in openhuman medulla tinyplace opencompany dashboard; do
