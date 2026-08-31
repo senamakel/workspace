@@ -13,8 +13,14 @@ tmux_create_window() {
   local tmux_command="$1" server="$2" session="$3" name="$4" directory="$5"
 
   if tmux_call "$tmux_command" "$server" has-session -t "=$session" 2>/dev/null; then
-    tmux_call "$tmux_command" "$server" new-window \
-      -t "=$session" -n "$name" -c "$directory" -P -F '#{pane_id}'
+    local pane
+    pane="$(
+      tmux_call "$tmux_command" "$server" new-window \
+        -t "=$session" -n "$name" -c "$directory" -P -F '#{pane_id}'
+    )"
+    tmux_call "$tmux_command" "$server" \
+      select-window -t "$session:$name"
+    printf '%s\n' "$pane"
   else
     tmux_call "$tmux_command" "$server" new-session \
       -d -x 240 -y 80 -s "$session" -n "$name" -c "$directory"
