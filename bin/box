@@ -95,7 +95,7 @@ if [ -z "$TARGET" ]; then
   exit 0
 fi
 
-# Prefer an existing session; fall back to mosh-tmux, which builds the six-pane
+# Prefer an existing session; fall back to mosh-tmux, which builds the workspace
 # layout when nothing is running yet.
 if [ "$TAKEOVER" -eq 1 ]; then
   REMOTE="tmux -L $SERVER attach-session -d -t '=$SESSION' 2>/dev/null || exec \$HOME/bin/mosh-tmux"

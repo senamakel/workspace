@@ -92,6 +92,51 @@ tmux_make_grid_window() {
   done
 }
 
+tmux_make_mixed_grid_window() {
+  local command="$1" server="$2" session="$3" name="$4"
+  shift 4
+  local directories=("$@")
+  local left middle right bottom_left bottom_middle bottom_right
+  local panes pane index
+
+  [ "${#directories[@]}" -eq 6 ] || return 1
+
+  left="$(
+    tmux_create_window \
+      "$command" "$server" "$session" "$name" "${directories[0]}"
+  )"
+  middle="$(
+    tmux_call "$command" "$server" split-window \
+      -h -l '66%' -t "$left" -c "${directories[1]}" -P -F '#{pane_id}'
+  )"
+  right="$(
+    tmux_call "$command" "$server" split-window \
+      -h -l '50%' -t "$middle" -c "${directories[2]}" -P -F '#{pane_id}'
+  )"
+  bottom_left="$(
+    tmux_call "$command" "$server" split-window \
+      -v -l '50%' -t "$left" -c "${directories[3]}" -P -F '#{pane_id}'
+  )"
+  bottom_middle="$(
+    tmux_call "$command" "$server" split-window \
+      -v -l '50%' -t "$middle" -c "${directories[4]}" -P -F '#{pane_id}'
+  )"
+  bottom_right="$(
+    tmux_call "$command" "$server" split-window \
+      -v -l '50%' -t "$right" -c "${directories[5]}" -P -F '#{pane_id}'
+  )"
+
+  panes=(
+    "$left" "$middle" "$right"
+    "$bottom_left" "$bottom_middle" "$bottom_right"
+  )
+  for index in "${!panes[@]}"; do
+    pane="${panes[$index]}"
+    tmux_call "$command" "$server" \
+      select-pane -t "$pane" -T "${directories[$index]##*/}"
+  done
+}
+
 tmux_make_mixed_quad_window() {
   local command="$1" server="$2" session="$3" name="$4"
   shift 4

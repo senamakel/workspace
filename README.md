@@ -95,10 +95,13 @@ The bootstrap also installs `~/bin/mosh-tmux` as a link to
 `~/.config-backups/` first.
 
 On the Mac mini, `~/bin/mosh-tmux` creates or reuses the dedicated `mosh` tmux
-server's `workspace` session. It provides a six-pane 2×3 window for every
-workflow repository, followed by `btop` and `shell`. It reapplies the blue
-remote theme and `C-z` prefix before attaching. Override its server and session
-names with `MOSH_TMUX_SERVER` and `MOSH_TMUX_SESSION`.
+server's `workspace` session. It starts with a `medulla` window, then a 2×3
+`workspace` grid (two OpenHuman panes, two OpenCompany panes, and two `~/work`
+panes), followed by `btop`, `shell`, and `docker` (`docker stats`) windows. It
+reapplies the blue remote theme and `C-z` prefix before attaching. Existing
+sessions are reused; run `~/bin/mosh-tmux --rebuild` to replace one with the
+current layout. Override its server and session names with `MOSH_TMUX_SERVER`
+and `MOSH_TMUX_SESSION`.
 
 The local `~/super-review.sh` link is managed by `install.sh`. It opens the five
 four-pane workflow windows, the mixed `libraries` window, `btop`, Robot1
@@ -332,7 +335,7 @@ that moved with it are brought along.
 ### `box [<name>] [--takeover] [--mosh]`
 
 Attaches to the persistent tmux workspace on a remote box over ssh, running the
-remote `mosh-tmux` helper so the six-pane session is built on first attach and
+remote `mosh-tmux` helper so the workspace session is built on first attach and
 reused afterwards. Names match loosely — `box mini`, `box mac-mini`, and
 `box mm` all reach the same machine. With no name it lists every box and its
 session state. `--takeover` detaches other clients first, so the session sizes

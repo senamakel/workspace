@@ -21,29 +21,30 @@ usage() {
   cat <<'EOF'
 workspace-tmux
 
-Create or attach the persistent six-pane TinyHumans workspace on a dedicated
-tmux server. Override names with MOSH_TMUX_SERVER and MOSH_TMUX_SESSION.
+Create or attach the persistent TinyHumans workspace on a dedicated tmux
+server. `--rebuild` replaces an existing session. Override names with
+MOSH_TMUX_SERVER and MOSH_TMUX_SESSION.
 EOF
 }
 
-if [ "$#" -gt 1 ]; then
-  printf 'workspace-tmux: too many arguments\n' >&2
-  usage >&2
-  exit 1
-fi
-case "${1:-}" in
-  -h|--help)
-    usage
-    exit 0
-    ;;
-  "")
-    ;;
-  *)
-    printf 'workspace-tmux: unknown argument: %s\n' "$1" >&2
-    usage >&2
-    exit 1
-    ;;
-esac
+REBUILD=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --rebuild)
+      REBUILD=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'workspace-tmux: unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 if [ -n "${TMUX:-}" ]; then
   printf 'workspace-tmux: refusing to attach from inside tmux\n' >&2
@@ -83,10 +84,18 @@ case "$(hostname -s)" in
     ;;
 esac
 
+if tmux_call "$TMUX_COMMAND" "$SERVER" \
+  has-session -t "=$SESSION" 2>/dev/null
+then
+  if [ "$REBUILD" -eq 1 ]; then
+    tmux_call "$TMUX_COMMAND" "$SERVER" kill-session -t "=$SESSION"
+  fi
+fi
+
 if ! tmux_call "$TMUX_COMMAND" "$SERVER" \
   has-session -t "=$SESSION" 2>/dev/null
 then
-  for name in openhuman medulla tinyplace dashboard opencompany; do
+  for name in openhuman medulla opencompany; do
     directory="$WORKSPACE/workflow-$name"
     [ -d "$directory" ] || {
       printf 'workspace-tmux: missing workflow directory: %s\n' \
@@ -94,28 +103,35 @@ then
       exit 1
     }
   done
+  [ -d "$WORKSPACE" ] || {
+    printf 'workspace-tmux: missing workspace directory: %s\n' \
+      "$WORKSPACE" >&2
+    exit 1
+  }
 
   BTOP_COMMAND="$(command -v btop || true)"
   [ -n "$BTOP_COMMAND" ] || {
     printf 'workspace-tmux: required command not found: btop\n' >&2
     exit 1
   }
+  DOCKER_COMMAND="$(command -v docker || true)"
+  [ -n "$DOCKER_COMMAND" ] || {
+    printf 'workspace-tmux: required command not found: docker\n' >&2
+    exit 1
+  }
 
-  tmux_make_grid_window \
+  tmux_create_window \
     "$TMUX_COMMAND" "$SERVER" "$SESSION" \
-    openhuman "$WORKSPACE/workflow-openhuman"
-  tmux_make_grid_window \
+    medulla "$WORKSPACE/workflow-medulla" >/dev/null
+  tmux_make_mixed_grid_window \
     "$TMUX_COMMAND" "$SERVER" "$SESSION" \
-    medulla "$WORKSPACE/workflow-medulla"
-  tmux_make_grid_window \
-    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
-    tinyplace "$WORKSPACE/workflow-tinyplace"
-  tmux_make_grid_window \
-    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
-    dashboard "$WORKSPACE/workflow-dashboard"
-  tmux_make_grid_window \
-    "$TMUX_COMMAND" "$SERVER" "$SESSION" \
-    opencompany "$WORKSPACE/workflow-opencompany"
+    workspace \
+    "$WORKSPACE/workflow-openhuman" \
+    "$WORKSPACE/workflow-openhuman" \
+    "$WORKSPACE/workflow-opencompany" \
+    "$WORKSPACE/workflow-opencompany" \
+    "$WORKSPACE" \
+    "$WORKSPACE"
 
   pane="$(
     tmux_create_window \
@@ -130,10 +146,17 @@ then
       "$TMUX_COMMAND" "$SERVER" "$SESSION" shell "$HOME"
   )"
   tmux_call "$TMUX_COMMAND" "$SERVER" select-pane -t "$pane" -T shell
+  pane="$(
+    tmux_create_window \
+      "$TMUX_COMMAND" "$SERVER" "$SESSION" docker "$HOME"
+  )"
+  tmux_call "$TMUX_COMMAND" "$SERVER" select-pane -t "$pane" -T docker
   tmux_call "$TMUX_COMMAND" "$SERVER" \
-    select-window -t "$SESSION:openhuman"
+    send-keys -t "$pane" "$DOCKER_COMMAND stats" C-m
   tmux_call "$TMUX_COMMAND" "$SERVER" \
-    select-pane -t "$SESSION:openhuman.0"
+    select-window -t "$SESSION:medulla"
+  tmux_call "$TMUX_COMMAND" "$SERVER" \
+    select-pane -t "$SESSION:medulla.0"
 fi
 
 tmux_call "$TMUX_COMMAND" "$SERVER" set-option -g \
