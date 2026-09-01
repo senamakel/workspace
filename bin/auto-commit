@@ -516,7 +516,16 @@ if [ -n "$CONFLICTED" ]; then
   exit 0
 fi
 
-for marker in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD BISECT_LOG rebase-merge rebase-apply; do
+# REBASE_HEAD is deliberately absent from this list. Git writes it during a
+# rebase and, unlike MERGE_HEAD and CHERRY_PICK_HEAD, never deletes it when the
+# rebase completes — it is left behind as a convenience ref naming the last
+# commit applied. Treating it as a live operation therefore disables the hook
+# permanently in any repository that has ever been rebased: on 2026-09-01
+# workflow-openhuman/openhuman had refused 108 consecutive checkpoints on a
+# stale REBASE_HEAD with no rebase-merge directory and a clean `git status`.
+# `rebase-merge` and `rebase-apply` are the authoritative markers for a rebase
+# actually in flight, and both are already below.
+for marker in MERGE_HEAD CHERRY_PICK_HEAD BISECT_LOG rebase-merge rebase-apply; do
   if [ -e "$GIT_DIR/$marker" ]; then
     speak "not committing: a $marker operation is in progress"
     emit skipped "a $marker operation is in progress"
