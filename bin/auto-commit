@@ -525,7 +525,7 @@ fi
 # stale REBASE_HEAD with no rebase-merge directory and a clean `git status`.
 # `rebase-merge` and `rebase-apply` are the authoritative markers for a rebase
 # actually in flight, and both are already below.
-for marker in MERGE_HEAD CHERRY_PICK_HEAD BISECT_LOG rebase-merge rebase-apply; do
+for marker in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD BISECT_LOG rebase-merge rebase-apply; do
   if [ -e "$GIT_DIR/$marker" ]; then
     speak "not committing: a $marker operation is in progress"
     emit skipped "a $marker operation is in progress"
