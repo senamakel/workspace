@@ -834,6 +834,33 @@ test_skips_during_a_merge() {
   assert_eq 1 "$(count_commits "$repo")" "a merge in progress is left alone"
 }
 
+test_skips_during_a_rebase() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo rebasing)"
+  state="$(state_dir rebasing)"
+  stub="$(make_stub rebasing "change things")"
+  printf 'hello\n' > "$repo/new.txt"
+  mkdir -p "$repo/.git/rebase-merge"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 1 "$(count_commits "$repo")" "a rebase in progress is left alone"
+}
+
+test_stale_rebase_head_still_commits() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  # Git leaves REBASE_HEAD behind after a rebase completes and never removes it,
+  # so treating it as a live operation disables the hook forever in any
+  # repository that has ever been rebased.
+  repo="$(make_repo staleRebaseHead)"
+  state="$(state_dir staleRebaseHead)"
+  stub="$(make_stub staleRebaseHead "chore: change things")"
+  printf 'hello\n' > "$repo/new.txt"
+  git -C "$repo" rev-parse HEAD > "$repo/.git/REBASE_HEAD"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "a leftover REBASE_HEAD does not block"
+}
+
 test_clean_tree_commits_nothing() {
   local repo state stub output
   command -v jq >/dev/null 2>&1 || return 0
@@ -1184,6 +1211,8 @@ run_test "bails on an unmerged index" test_bails_on_an_unmerged_index
 run_test "bails on conflict markers in a file" test_bails_on_conflict_markers_in_a_file
 run_test "prose about conflicts is not mistaken for one" test_prose_about_conflicts_is_not_mistaken_for_one
 run_test "skips during a merge" test_skips_during_a_merge
+run_test "skips during a rebase" test_skips_during_a_rebase
+run_test "a stale REBASE_HEAD does not block" test_stale_rebase_head_still_commits
 run_test "a clean tree commits nothing" test_clean_tree_commits_nothing
 run_test "dry run changes nothing" test_dry_run_changes_nothing
 run_test "cannot be disabled by any environment variable" test_cannot_be_disabled_by_environment
