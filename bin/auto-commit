@@ -884,9 +884,23 @@ EOF
   # leaving it on doubles the wait (3.3s vs 1.7s measured) while consuming the
   # token budget before any content is emitted — the reason an answer-sized
   # budget came back empty every time.
+  #
+  # It takes both keys to actually turn it off. `reasoning.enabled` is
+  # OpenRouter's spelling and is what a box pointed back there with
+  # AUTO_COMMIT_URL still needs, but the ladder router does not translate it for
+  # `flash`: probed against 127.0.0.1:6969 on 2026-09-01, `reasoning:
+  # {enabled: false}` returned 110 characters of `reasoning_content` and
+  # `reasoning_effort: "none"` still returned 53, while `thinking: {type:
+  # "disabled"}` returned zero. That silent no-op is what emptied the budget —
+  # deepseek-v4-flash spent all 300 tokens thinking and answered with
+  # `content: ""`, so ~90 checkpoints in a single day fell back to
+  # `chore: files changed <paths>`. With thinking disabled the same 20 KB diff
+  # answers in 1.8-3.2s with a real subject. Send both; an endpoint that does
+  # not know a field ignores it.
   payload="$(jq -n --arg model "$MODEL" --arg content "$prompt" \
     '{model: $model, temperature: 0, max_tokens: 300,
       reasoning: {enabled: false},
+      thinking: {type: "disabled"},
       messages: [{role: "user", content: $content}]}')"
   local raw content
   raw="$(curl -sS --fail-with-body --max-time "$TIMEOUT" --connect-timeout "$TIMEOUT" \
