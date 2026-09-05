@@ -99,12 +99,13 @@ tmux_make_mixed_grid_window \
   "$HOME" \
   "$HOME"
 
-while IFS=' ' read -r pane_id pane_path; do
-  [ "$pane_path" = "$HOME" ] || continue
+home_title="${HOME##*/}"
+while IFS=' ' read -r pane_id pane_title; do
+  [ "$pane_title" = "$home_title" ] || continue
   tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane_id" -T shell
 done < <(
   tmux_call "$TMUX_COMMAND" "" \
-    list-panes -t "$SESSION:workspace" -F '#{pane_id} #{pane_current_path}'
+    list-panes -t "$SESSION:workspace" -F '#{pane_id} #{pane_title}'
 )
 
 pane="$(
