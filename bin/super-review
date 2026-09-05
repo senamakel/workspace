@@ -78,7 +78,9 @@ for directory in \
   "$WORKSPACE/tinycortex" \
   "$WORKSPACE/tinyagents" \
   "$WORKSPACE/tinychannels" \
-  "$WORKSPACE/tinyjuice"
+  "$WORKSPACE/tinyjuice" \
+  "$WORKSPACE/tinymemory" \
+  "$WORKSPACE/tinyinference"
 do
   [ -d "$directory" ] || {
     printf 'super-review: missing workspace directory: %s\n' "$directory" >&2
@@ -103,12 +105,14 @@ tmux_make_grid_window \
 tmux_make_grid_window \
   "$TMUX_COMMAND" "" "$SESSION" \
   opencompany "$WORKSPACE/workflow-opencompany"
-tmux_make_mixed_quad_window \
+tmux_make_mixed_grid_window \
   "$TMUX_COMMAND" "" "$SESSION" libraries \
   "$WORKSPACE/tinycortex" \
   "$WORKSPACE/tinyagents" \
   "$WORKSPACE/tinychannels" \
-  "$WORKSPACE/tinyjuice"
+  "$WORKSPACE/tinyjuice" \
+  "$WORKSPACE/tinymemory" \
+  "$WORKSPACE/tinyinference"
 
 pane="$(
   tmux_create_window "$TMUX_COMMAND" "" "$SESSION" btop "$HOME"
