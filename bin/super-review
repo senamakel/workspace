@@ -99,15 +99,12 @@ tmux_make_mixed_grid_window \
   "$HOME" \
   "$HOME"
 
-WORKSPACE_TITLES=(openhuman medulla dashboard opencompany shell shell)
-index=0
-while IFS= read -r pane_id; do
-  tmux_call "$TMUX_COMMAND" "" \
-    select-pane -t "$pane_id" -T "${WORKSPACE_TITLES[$index]}"
-  index=$((index + 1))
+while IFS=' ' read -r pane_id pane_path; do
+  [ "$pane_path" = "$HOME" ] || continue
+  tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane_id" -T shell
 done < <(
   tmux_call "$TMUX_COMMAND" "" \
-    list-panes -t "$SESSION:workspace" -F '#{pane_id}'
+    list-panes -t "$SESSION:workspace" -F '#{pane_id} #{pane_current_path}'
 )
 
 pane="$(
