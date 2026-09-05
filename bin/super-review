@@ -18,12 +18,12 @@ resolve_script_path() {
 }
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 super-review [--help]
 
 Recreate and attach the local super-review tmux dashboard.
 WARNING: this deliberately kills and replaces any existing super-review session.
-EOF
+USAGE
 }
 
 if [ "$#" -gt 1 ]; then
@@ -55,11 +55,18 @@ WORKSPACE="${SUPER_REVIEW_WORKSPACE:-$HOME/work/tinyhumansai}"
 TMUX_COMMAND="$(command -v tmux || true)"
 BTOP_COMMAND="$(command -v btop || true)"
 MOSH_COMMAND="$(command -v mosh || true)"
+DOCKER_COMMAND="$(command -v docker || true)"
+MEDULLA_COMMAND="$(command -v medulla || true)"
+if [ -z "$MEDULLA_COMMAND" ] && [ -x "$HOME/.medulla/bin/medulla" ]; then
+  MEDULLA_COMMAND="$HOME/.medulla/bin/medulla"
+fi
 
 for dependency in \
   "tmux|$TMUX_COMMAND" \
   "btop|$BTOP_COMMAND" \
-  "mosh|$MOSH_COMMAND"
+  "mosh|$MOSH_COMMAND" \
+  "docker|$DOCKER_COMMAND" \
+  "medulla|$MEDULLA_COMMAND"
 do
   name="${dependency%%|*}"
   path="${dependency#*|}"
@@ -72,15 +79,8 @@ done
 for directory in \
   "$WORKSPACE/workflow-openhuman" \
   "$WORKSPACE/workflow-medulla" \
-  "$WORKSPACE/workflow-tinyplace" \
   "$WORKSPACE/workflow-dashboard" \
-  "$WORKSPACE/workflow-opencompany" \
-  "$WORKSPACE/tinycortex" \
-  "$WORKSPACE/tinyagents" \
-  "$WORKSPACE/tinychannels" \
-  "$WORKSPACE/tinyjuice" \
-  "$WORKSPACE/tinymemory" \
-  "$WORKSPACE/tinyinference"
+  "$WORKSPACE/workflow-opencompany"
 do
   [ -d "$directory" ] || {
     printf 'super-review: missing workspace directory: %s\n' "$directory" >&2
@@ -90,35 +90,31 @@ done
 
 tmux_call "$TMUX_COMMAND" "" kill-session -t "=$SESSION" 2>/dev/null || true
 
-tmux_make_grid_window \
-  "$TMUX_COMMAND" "" "$SESSION" \
-  openhuman "$WORKSPACE/workflow-openhuman"
-tmux_make_grid_window \
-  "$TMUX_COMMAND" "" "$SESSION" \
-  medulla "$WORKSPACE/workflow-medulla"
-tmux_make_grid_window \
-  "$TMUX_COMMAND" "" "$SESSION" \
-  tinyplace "$WORKSPACE/workflow-tinyplace"
-tmux_make_grid_window \
-  "$TMUX_COMMAND" "" "$SESSION" \
-  dashboard "$WORKSPACE/workflow-dashboard"
-tmux_make_grid_window \
-  "$TMUX_COMMAND" "" "$SESSION" \
-  opencompany "$WORKSPACE/workflow-opencompany"
 tmux_make_mixed_grid_window \
-  "$TMUX_COMMAND" "" "$SESSION" libraries \
-  "$WORKSPACE/tinycortex" \
-  "$WORKSPACE/tinyagents" \
-  "$WORKSPACE/tinychannels" \
-  "$WORKSPACE/tinyjuice" \
-  "$WORKSPACE/tinymemory" \
-  "$WORKSPACE/tinyinference"
+  "$TMUX_COMMAND" "" "$SESSION" workspace \
+  "$WORKSPACE/workflow-openhuman" \
+  "$WORKSPACE/workflow-medulla" \
+  "$WORKSPACE/workflow-dashboard" \
+  "$WORKSPACE/workflow-opencompany" \
+  "$HOME" \
+  "$HOME"
+
+WORKSPACE_TITLES=(openhuman medulla dashboard opencompany shell shell)
+index=0
+while IFS= read -r pane_id; do
+  tmux_call "$TMUX_COMMAND" "" \
+    select-pane -t "$pane_id" -T "${WORKSPACE_TITLES[$index]}"
+  index=$((index + 1))
+done < <(
+  tmux_call "$TMUX_COMMAND" "" \
+    list-panes -t "$SESSION:workspace" -F '#{pane_id}'
+)
 
 pane="$(
-  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" btop "$HOME"
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" medulla "$WORKSPACE"
 )"
-tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T btop
-tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" "$BTOP_COMMAND" C-m
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T medulla
+tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" "$MEDULLA_COMMAND" C-m
 
 pane="$(
   tmux_create_window "$TMUX_COMMAND" "" "$SESSION" cloud "$HOME"
@@ -143,6 +139,19 @@ tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T dragonfly
 tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" \
   "mosh enamakel@dragonfly -- zsh -lc '~/bin/mosh-tmux'" \
   C-m
+
+pane="$(
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" docker "$HOME"
+)"
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T docker
+tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" \
+  "$DOCKER_COMMAND stats" C-m
+
+pane="$(
+  tmux_create_window "$TMUX_COMMAND" "" "$SESSION" btop "$HOME"
+)"
+tmux_call "$TMUX_COMMAND" "" select-pane -t "$pane" -T btop
+tmux_call "$TMUX_COMMAND" "" send-keys -t "$pane" "$BTOP_COMMAND" C-m
 
 pane="$(
   tmux_create_window "$TMUX_COMMAND" "" "$SESSION" shell "$HOME"
