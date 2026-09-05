@@ -88,19 +88,19 @@ done
 
 tmux_call "$TMUX_COMMAND" "" kill-session -t "=$SESSION" 2>/dev/null || true
 
-tmux_make_quad_window \
+tmux_make_grid_window \
   "$TMUX_COMMAND" "" "$SESSION" \
   openhuman "$WORKSPACE/workflow-openhuman"
-tmux_make_quad_window \
+tmux_make_grid_window \
   "$TMUX_COMMAND" "" "$SESSION" \
   medulla "$WORKSPACE/workflow-medulla"
-tmux_make_quad_window \
+tmux_make_grid_window \
   "$TMUX_COMMAND" "" "$SESSION" \
   tinyplace "$WORKSPACE/workflow-tinyplace"
-tmux_make_quad_window \
+tmux_make_grid_window \
   "$TMUX_COMMAND" "" "$SESSION" \
   dashboard "$WORKSPACE/workflow-dashboard"
-tmux_make_quad_window \
+tmux_make_grid_window \
   "$TMUX_COMMAND" "" "$SESSION" \
   opencompany "$WORKSPACE/workflow-opencompany"
 tmux_make_mixed_quad_window \
