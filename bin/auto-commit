@@ -75,6 +75,8 @@
 #                                    (/tmp/autocommit-error.log)
 #   AUTO_COMMIT_LOG_ALL=1            also log the runs that found nothing to do
 #   AUTO_COMMIT_LOG_MAX_BYTES        size at which the log is halved (1048576)
+#   AUTO_COMMIT_LOCK_STALE_MINS      age at which a held checkpoint lock is
+#                                    treated as abandoned (10)
 set -euo pipefail
 
 fail() { printf '[FAIL] %s\n' "$*" >&2; }
@@ -259,8 +261,11 @@ speak() { printf '[auto-commit] %s\n' "$*" >&2; }
 emit() {
   local status="$1" detail="$2" files="${3:-}" extra="${4:-}"
   # `clean` and `committed` are the working case and would otherwise write a
-  # line per tool call; they are logged only when asked for. Everything else is
-  # a run that wanted to commit and did not, which is the point of the file.
+  # line per tool call; they are logged only when asked for. `busy` joins them:
+  # losing the per-repository lock means another run is committing this work, so
+  # it is the lock doing its job rather than a checkpoint being lost. Everything
+  # else is a run that wanted to commit and did not, which is the point of the
+  # file.
   case "$status" in
     clean|committed|dry-run|busy)
       if [ "${AUTO_COMMIT_LOG_ALL:-0}" = "1" ]; then log_event "$status" "$detail" "$extra"; fi ;;
