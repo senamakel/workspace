@@ -1177,6 +1177,76 @@ test_extra_skip_globs_are_honoured() {
   assert_not_contains "$committed" "scratch.tmp" "the skipped glob is withheld"
 }
 
+# The lock file for a repository, named the way the command names it.
+lock_path() {
+  local repo="$1" state="$2" top
+  top="$(git -C "$repo" rev-parse --show-toplevel)"
+  printf '%s/auto-commit/locks/%s.lock\n' \
+    "$state" "$(printf '%s' "$top" | shasum | cut -c1-32)"
+}
+
+test_the_lock_is_released_after_a_run() {
+  local repo state stub lock
+  command -v jq >/dev/null 2>&1 || return 0
+  # A leaked lock disables checkpointing in that repository until it goes stale.
+  # It leaked on every successful run once: the trap that cleans up the model's
+  # stderr file was set later and silently replaced the one releasing the lock.
+  repo="$(make_repo lock-released)"
+  state="$(state_dir lock-released)"
+  stub="$(make_stub lockreleased "chore: add a file")"
+  lock="$(lock_path "$repo" "$state")"
+  printf 'one\n' > "$repo/one.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "the first run commits"
+  [ -e "$lock" ] && fail "the lock is released after the run" || pass "the lock is released after the run"
+
+  # And the next run is not blocked by what the first left behind.
+  printf 'two\n' > "$repo/two.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 3 "$(count_commits "$repo")" "the next run commits too"
+}
+
+test_a_held_lock_skips_the_run() {
+  local repo state stub lock log
+  command -v jq >/dev/null 2>&1 || return 0
+  # Two overlapping runs raced over one index: the loser either collided on
+  # .git/index.lock or reached atomic-commit with paths the winner had already
+  # committed, and logged "path has no changes to commit". The loser now stands
+  # down instead, because the holder is committing its work anyway.
+  repo="$(make_repo lock-held)"
+  state="$(state_dir lock-held)"
+  stub="$(make_stub lockheld "chore: add a file")"
+  lock="$(lock_path "$repo" "$state")"
+  log="$TEST_ROOT/lock-held.log"
+  : > "$log"
+  mkdir -p "$lock"
+  printf '%s\n' "$$" > "$lock/pid"        # this shell is alive, so not stale
+  printf 'one\n' > "$repo/one.txt"
+  AUTO_COMMIT_LOG="$log" AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 1 "$(count_commits "$repo")" "the second run commits nothing"
+  assert_eq "" "$(cat "$log" 2>/dev/null || true)" \
+    "standing down for the lock holder is not logged as a failure"
+  rm -rf "$lock"
+}
+
+test_a_stale_lock_is_reclaimed() {
+  local repo state stub lock
+  command -v jq >/dev/null 2>&1 || return 0
+  # A run killed mid-commit leaves its lock behind. Nothing would ever be
+  # checkpointed in that repository again if the lock were taken on trust, so a
+  # holder that no longer exists is reclaimed.
+  repo="$(make_repo lock-stale)"
+  state="$(state_dir lock-stale)"
+  stub="$(make_stub lockstale "chore: add a file")"
+  lock="$(lock_path "$repo" "$state")"
+  mkdir -p "$lock"
+  # A pid that has certainly exited: one claimed by a subshell that is now gone.
+  printf '%s\n' "$( (exec sh -c 'echo $$') )" > "$lock/pid"
+  printf 'one\n' > "$repo/one.txt"
+  AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
+  assert_eq 2 "$(count_commits "$repo")" "the run reclaims the lock and commits"
+}
+
 run_test "commits only in allowlisted repositories" test_commits_only_in_allowlisted_repositories
 run_test "--force waives the allowlist for a manual run only" test_force_waives_the_allowlist_for_a_manual_run_only
 run_test "the allowlist matches any remote and is overridable" test_allowlist_matches_any_remote_and_is_overridable
@@ -1223,4 +1293,7 @@ run_test "does not log ordinary runs" test_does_not_log_ordinary_runs
 run_test "commits source named after credentials" test_commits_source_named_after_credentials
 run_test "placeholder keys are not credentials" test_placeholder_keys_are_not_credentials
 run_test "extra skip globs are honoured" test_extra_skip_globs_are_honoured
+run_test "the lock is released after a run" test_the_lock_is_released_after_a_run
+run_test "a held lock skips the run" test_a_held_lock_skips_the_run
+run_test "a stale lock is reclaimed" test_a_stale_lock_is_reclaimed
 printf '1..%s\n' "$PASS_COUNT"
