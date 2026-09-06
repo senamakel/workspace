@@ -262,7 +262,7 @@ emit() {
   # line per tool call; they are logged only when asked for. Everything else is
   # a run that wanted to commit and did not, which is the point of the file.
   case "$status" in
-    clean|committed|dry-run)
+    clean|committed|dry-run|busy)
       if [ "${AUTO_COMMIT_LOG_ALL:-0}" = "1" ]; then log_event "$status" "$detail" "$extra"; fi ;;
     *) log_event "$status" "$detail" "$extra" ;;
   esac
@@ -502,6 +502,62 @@ if [ "$HOOK" = "1" ]; then
   fi
   printf '0\n' > "$COUNT_FILE"
 fi
+
+# ── One checkpoint at a time, per repository ───────────────────────
+# PostToolUse fires once per tool call, while writing the message takes seconds
+# against a remote model, so runs overlap. Two of them racing over one index is
+# how both of the failures in the log are produced: `fatal: Unable to create
+# .git/index.lock: File exists` when they collide outright, and `[FAIL] path has
+# no changes to commit` when the loser reaches `atomic-commit` with a path the
+# winner has already committed. On 2026-09-06 fomotrader logged the second kind
+# on nine consecutive checkpoints with a clean working tree behind them.
+#
+# The lock is held across the whole critical section — the `git status` snapshot
+# through the commit — because a snapshot taken outside it is already stale by
+# the time it is committed, which is the second failure exactly. A run that
+# cannot take the lock exits quietly instead of waiting: the holder began from a
+# snapshot of everything dirty, so it is already committing this run's work, and
+# the next tool call fires again regardless. The lock is a directory rather than
+# `flock`, which macOS does not ship.
+LOCK_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/auto-commit/locks"
+mkdir -p "$LOCK_DIR" 2>/dev/null || true
+LOCK="$LOCK_DIR/$(printf '%s' "$TOP" | shasum | cut -c1-32).lock"
+LOCK_HELD=0
+LOCK_STALE_MINS="${AUTO_COMMIT_LOCK_STALE_MINS:-10}"
+
+release_lock() {
+  [ "$LOCK_HELD" = "1" ] || return 0
+  rm -f "$LOCK/pid" 2>/dev/null || true
+  rmdir "$LOCK" 2>/dev/null || true
+  LOCK_HELD=0
+}
+
+# A run killed mid-commit leaves the directory behind, and a lock nobody holds
+# would disable checkpointing in that repository for good. Reclaim it only when
+# its owner is demonstrably gone — a pid that no longer exists, or an age past
+# which no honest run is still going — so that a slow model call is never
+# mistaken for a crash.
+if ! mkdir "$LOCK" 2>/dev/null; then
+  LOCK_HOLDER="$(cat "$LOCK/pid" 2>/dev/null || true)"
+  LOCK_STALE=0
+  if [ -n "$LOCK_HOLDER" ] && ! kill -0 "$LOCK_HOLDER" 2>/dev/null; then
+    LOCK_STALE=1
+  elif [ -n "$(find "$LOCK" -maxdepth 0 -mmin "+$LOCK_STALE_MINS" 2>/dev/null || true)" ]; then
+    LOCK_STALE=1
+  fi
+  if [ "$LOCK_STALE" = "1" ]; then
+    rm -f "$LOCK/pid" 2>/dev/null || true
+    rmdir "$LOCK" 2>/dev/null || true
+    log_event warned "reclaimed a stale checkpoint lock from pid ${LOCK_HOLDER:-unknown}"
+  fi
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    emit busy "another checkpoint is already running in this repository"
+    exit 0
+  fi
+fi
+LOCK_HELD=1
+printf '%s\n' "$$" > "$LOCK/pid" 2>/dev/null || true
+trap release_lock EXIT
 
 # ── Guards ─────────────────────────────────────────────────────────
 # An unmerged index means a conflict is sitting there half-resolved. The markers
