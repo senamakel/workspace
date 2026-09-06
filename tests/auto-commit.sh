@@ -1198,7 +1198,7 @@ test_the_lock_is_released_after_a_run() {
   printf 'one\n' > "$repo/one.txt"
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq 2 "$(count_commits "$repo")" "the first run commits"
-  [ -e "$lock" ] && fail "the lock is released after the run" || pass "the lock is released after the run"
+  [ ! -e "$lock" ] || fail_test "the lock is released after the run: $lock still exists"
 
   # And the next run is not blocked by what the first left behind.
   printf 'two\n' > "$repo/two.txt"
@@ -1241,7 +1241,7 @@ test_a_stale_lock_is_reclaimed() {
   lock="$(lock_path "$repo" "$state")"
   mkdir -p "$lock"
   # A pid that has certainly exited: one claimed by a subshell that is now gone.
-  printf '%s\n' "$( (exec sh -c 'echo $$') )" > "$lock/pid"
+  printf '%s\n' "$(sh -c 'echo $$')" > "$lock/pid"
   printf 'one\n' > "$repo/one.txt"
   AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
   assert_eq 2 "$(count_commits "$repo")" "the run reclaims the lock and commits"
