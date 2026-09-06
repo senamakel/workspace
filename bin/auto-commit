@@ -530,11 +530,21 @@ LOCK="$LOCK_DIR/$(printf '%s' "$TOP" | shasum | cut -c1-32).lock"
 LOCK_HELD=0
 LOCK_STALE_MINS="${AUTO_COMMIT_LOCK_STALE_MINS:-10}"
 
+# One EXIT handler for the whole command, because a second `trap ... EXIT` set
+# later silently replaces the first: the lock was leaking on every successful
+# run until the temporary file for the model's stderr, further down, took the
+# slot. Anything else needing cleanup at exit belongs here rather than in a
+# trap of its own.
+MODEL_ERR=""
 release_lock() {
   [ "$LOCK_HELD" = "1" ] || return 0
   rm -f "$LOCK/pid" 2>/dev/null || true
   rmdir "$LOCK" 2>/dev/null || true
   LOCK_HELD=0
+}
+cleanup() {
+  [ -z "$MODEL_ERR" ] || rm -f "$MODEL_ERR" 2>/dev/null || true
+  release_lock
 }
 
 # A run killed mid-commit leaves the directory behind, and a lock nobody holds
@@ -562,7 +572,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 LOCK_HELD=1
 printf '%s\n' "$$" > "$LOCK/pid" 2>/dev/null || true
-trap release_lock EXIT
+trap cleanup EXIT
 
 # ── Guards ─────────────────────────────────────────────────────────
 # An unmerged index means a conflict is sitting there half-resolved. The markers
@@ -995,7 +1005,6 @@ EOF
 # fell back to naming files looked identical to one that never had a key. Keep
 # the error, log it if the answer turns out to be unusable.
 MODEL_ERR="$(mktemp 2>/dev/null || printf '')"
-[ -z "$MODEL_ERR" ] || trap 'rm -f "$MODEL_ERR"' EXIT
 if [ -n "$MODEL_ERR" ]; then
   RESPONSE="$(ask_model 2>"$MODEL_ERR" || true)"
 else
