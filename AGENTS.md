@@ -49,6 +49,46 @@ It finishes by asking the router for a real answer, because a container in
 since docker copies the environment in at create time and a running container
 never sees a later one, and `--pull` to move to a new image.
 
+### The config is this repository's, not the box's
+
+`ladder/config.toml` is the fleet's router config, and `ladder-up` installs it
+to `~/.config/ladder/config.toml` whenever the two differ, backing up what it
+replaces. That is what makes the ladders the same on every box: before this,
+each box's config was hand-edited and drifted, and the only way to find out how
+was to read three files.
+
+It holds **no secret** — every credential is named as an environment variable,
+which is what lets one file be the config everywhere. The keys themselves stay
+in `~/.zshenv` on each box and never enter this repository, which is public.
+
+A config is installed only once the image about to run it has accepted it,
+checked with `docker run --rm <image> --config <candidate> --check`. The two
+move together and the config usually moves first, so this ordering is the whole
+point: a config the running binary cannot parse is not a degraded router, it is
+no router. The container exits at startup, `--restart always` restarts it into
+the same failure, and the box crash-loops until a person looks. That is not
+hypothetical — a config carrying `aliases` did exactly this to dragonfly
+against an image that predated them, and the five-minute watchdog turned one
+bad config into a restart loop rather than catching it.
+
+When validation fails the box keeps the config it has and says so:
+
+```
+ladder-up: repository config is not valid for <image>; keeping <config>
+ladder-up: this box is probably behind; try: ladder-up --pull
+```
+
+which is nearly always a box running an image older than the config. So after a
+router release, spread it with the image first:
+
+```sh
+./sync.sh                       # get the new config onto every box
+box <name> -- ladder-up --pull  # then move each box to the new image
+```
+
+`--pull` refreshes the image and *then* validates, so a single `--pull` run on
+a stale box picks up both halves in the right order.
+
 Each box runs it every five minutes, which is what makes the router survive the
 ways it actually dies. Docker's own `--restart always` is not enough: it covers
 a crashed process and a rebooted daemon, but a container stopped or killed by
