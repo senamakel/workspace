@@ -261,14 +261,26 @@ cost_basis = "completion"
 
   # `glm-5.3` is the current generation and `glm-5.2` the one this file used to
   # name. Both are here rather than one replacing the other: 5.3 is the better
-  # model and carries the higher multiplier, but at a 4.40 direct rate its
-  # 0.40 ceiling admits 16 sellers against 5.2's 23, and a rung that thin is a
-  # rung that empties. The older generation is the floor under the newer one.
+  # model and carries the higher multiplier, but its ceiling admits fewer
+  # sellers, and a rung that thin is a rung that empties. The older generation
+  # is the floor under the newer one.
+  #
+  # 0.70, not the 0.40 this rung shipped with. A ceiling is restated as a
+  # discount off the direct rate before dispatch, and against 4.40 direct, 0.40
+  # asks for 90% off — which Surplus refused on every request with
+  # `minimum_discount_not_met` while its own order book listed 16 sellers under
+  # 0.40. The order book and the discount filter disagree, and the filter is
+  # the one that decides. Measured live: min90 refused, min84 and min85 served,
+  # so 0.70 (min84) is the cheapest ceiling this rung can actually be bought at.
+  #
+  # The lesson generalises: a ceiling implying more than ~85% off is a rung that
+  # ranks well, wins selection, and then fails upstream — a wasted round trip on
+  # every single request. Probe a new ceiling before trusting it.
   [[ladders.rungs]]
   provider = "surplus"
   model = "glm-5.3"
   score_multiplier = 1.9
-  max_cost_per_1m = 0.40
+  max_cost_per_1m = 0.70
 
   [[ladders.rungs]]
   provider = "surplus"
@@ -349,18 +361,15 @@ cost_basis = "completion"
 # screens up.
 reasoning_effort = "high"
 
-  # The frontier rung, added 2026-09-09. At a 12.00 direct rate this is the
-  # most expensive model any ladder here names, and the 1.00 ceiling buys it
-  # only from the cheapest fifth of its sellers — which is exactly the trade
-  # this ladder exists to make. The high multiplier means it wins only when the
-  # rungs below have no cheap seller left, so in an ordinary hour it costs
-  # nothing and on a bad one it is the difference between depth and a step down.
-  [[ladders.rungs]]
-  provider = "surplus"
-  model = "gpt-5.6-terra"
-  score_multiplier = 9.0
-  reasoning_effort = "high"
-  max_cost_per_1m = 1.00
+  # There is deliberately no `gpt-5.6-terra` rung here, though its order book
+  # looks like there should be: 105 healthy sellers and a cheapest offer at
+  # 0.244 against a 12.00 direct rate. A 1.00 ceiling restates as 91% off, and
+  # Surplus refuses that outright — measured live, min85 refused and min80
+  # served. Buying it needs a ceiling of 2.40, which is above this ladder's
+  # budget and above the provider backstop besides. A rung that can never
+  # dispatch is worse than no rung: it wins selection on its multiplier and
+  # then fails, costing a round trip per request. It goes back in if the
+  # discounts on it deepen.
 
   [[ladders.rungs]]
   provider = "surplus"
