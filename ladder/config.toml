@@ -500,6 +500,37 @@ name = "vectors"
 aliases = ["embeddings-v1", "vectors-v1"]
 surface = "embeddings"
 
+  # Two rungs, and they return the SAME WIDTH on purpose.
+  #
+  # An embeddings ladder is not a chat ladder. A chat caller that fails over to
+  # another rung gets a different answer; an embeddings caller that fails over
+  # to a rung of a different width gets vectors that cannot be compared with
+  # the ones already in the index — and a store like CortexDB pins its width on
+  # first ingest and rejects every other width forever after. Failover here is
+  # therefore only safe between models of equal dimensionality, and both of
+  # these are 1024. A rung of another width does not belong in this ladder; it
+  # belongs in a second ladder with its own name.
+  #
+  # Surplus's `venice-embed-1` was the only rung and is removed, not demoted:
+  # the marketplace still LISTS it in /v1/models and rejects it at request time
+  # with "Model venice-embed-1 does not exist" — verified against the
+  # marketplace directly, not through this router. A rung that is advertised and
+  # unbuyable is worse than an absent one, because the ladder looks healthy
+  # while every embedding call fails. Downstream that read as
+  # "embedding missing for chunk; vector index will not contain this memory",
+  # which cost CortexDB its vector index entirely on both boxes that use it.
+
+  # BGE-M3 through Venice's own API: a strong multilingual retrieval model,
+  # reached from the house rather than a reseller, so there is no order book to
+  # go stale underneath it. Needs VENICE_INFERENCE_KEY exported on the box, and
+  # is skipped with a warning where that is unset.
   [[ladders.rungs]]
-  provider = "surplus"
-  model = "venice-embed-1"
+  provider = "venice"
+  model = "text-embedding-bge-m3"
+
+  # Mistral's own, same width, as the second opinion — so a Venice outage or a
+  # box without that key degrades embedding quality rather than stopping
+  # ingestion outright.
+  [[ladders.rungs]]
+  provider = "mistral"
+  model = "mistral-embed"
