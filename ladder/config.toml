@@ -251,7 +251,7 @@ cost_basis = "completion"
 
 [[ladders]]
 name = "reasoning"
-aliases = ["reasoning-v1", "deepseek"]
+aliases = ["deepseek"]
 cost_basis = "completion"
 
   [[ladders.rungs]]
@@ -354,7 +354,7 @@ cost_basis = "completion"
 
 [[ladders]]
 name = "max-reasoning"
-aliases = ["agentic-v1", "max-reasoning-v1"]
+aliases = ["max-reasoning-v1"]
 cost_basis = "completion"
 # The fallback, so a rung added in a hurry still asks for depth. Every rung
 # below names its own anyway: which words a model accepts is a fact about that
@@ -420,6 +420,78 @@ reasoning_effort = "high"
   [ladders.fallback]
   provider = "surplus"
   model = "deepseek-v4-pro"
+
+
+# The OpenCompany tier ladder: deepseek-v4-flash, primary and only.
+#
+# Added 2026-09-10 to run the conjecture-solver against Kourovka 20.76 on one
+# cheap model. It is a deliberate override of the tier routing, not a new
+# capability band, and it is removable by deleting this block and putting
+# `reasoning-v1` and `agentic-v1` back on the two ladders they came from.
+#
+# # Why an extra ladder rather than a reordered rung
+#
+# "deepseek-v4-flash primary" could have been spelled by raising that model's
+# `score_multiplier` on `reasoning` and `max-reasoning` until it outranked
+# everything above it. That was rejected twice over. Ranking here is
+# price-divided-by-multiplier, so making a rung win *robustly* against a rival
+# whose price can move needs a multiplier set from the rival's floor rather
+# than its current price — roughly 13x on this board — and a number chosen that
+# way stops meaning what `score_multiplier` is documented to mean two hundred
+# lines above. And both of those ladders are machine-wide: CortexDB's answer
+# and verifier roles ask for `reasoning` by name, and demoting it to a flash
+# model would quietly change what every other consumer on this box is buying.
+#
+# The tier names are the narrower handle. `reasoning-v1` and `agentic-v1` are
+# OpenCompany's own vocabulary — `build.rs` maps an agent's `tier = "reasoning"`
+# to the first and `tier = "orchestrator"` to the second — so moving those two
+# aliases here redirects exactly the callers this run is about and nothing else.
+# `flash`, `reasoning`, `max-reasoning`, `scribe` and `vectors` still mean today
+# what they meant yesterday to everything that asks for them by name.
+#
+# `deepseek` and `max-reasoning-v1` stay on their original ladders on purpose:
+# they are how a caller asks for the deep ladders explicitly, and an explicit
+# request should still get what it asked for while this override is in place.
+#
+# # Why every rung is the same model
+#
+# Because that is the request. This ladder has no quality trade to make and no
+# multiplier worth tuning — the rungs differ only in where the model is bought,
+# which is what keeps a provider outage a step down rather than an ending. The
+# ordering follows the file's own rule: Surplus first because it is priced
+# lowest under a ceiling set just under OpenRouter's cheapest endpoint, then
+# OpenRouter with a preferred seller, then OpenRouter with none, then an
+# uncapped fallback whose worst case is deepseek-v4-flash's 0.18/1M direct rate.
+[[ladders]]
+name = "deepseek-flash"
+aliases = ["reasoning-v1", "agentic-v1"]
+cost_basis = "completion"
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "deepseek-v4-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.15
+
+  [[ladders.rungs]]
+  provider = "openrouter"
+  model = "deepseek/deepseek-v4-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.30
+  prefer = ["deepinfra"]
+
+  # The same model with no preferred seller. With `prefer` naming the only live
+  # seller, that endpoint going briefly unavailable emptied the `flash` ladder
+  # outright; this rung is why it cannot happen here.
+  [[ladders.rungs]]
+  provider = "openrouter"
+  model = "deepseek/deepseek-v4-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.40
+
+  [ladders.fallback]
+  provider = "surplus"
+  model = "deepseek-v4-flash"
 
 
 # The scribe ladder: one rung, one seller, one model.
