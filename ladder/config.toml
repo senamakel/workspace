@@ -198,22 +198,23 @@ cost_basis = "completion"
   # through when Surplus has genuinely lost on price.
   max_cost_per_1m = 0.15
 
-  # The two cheap rungs added in the 2026-09-09 refresh. Neither is better than
-  # `deepseek-v4-flash`; both are its size class from a different vendor, and
-  # the point is that a bad hour for one seller's model is not a bad hour for
-  # this ladder. `glm-5.3-flash` in particular has the tightest spread on the
-  # marketplace — a 0.063 median against a 0.25 direct rate.
-  [[ladders.rungs]]
-  provider = "surplus"
-  model = "glm-5.3-flash"
-  score_multiplier = 1.0
-  max_cost_per_1m = 0.15
-
-  [[ladders.rungs]]
-  provider = "surplus"
-  model = "minimax-m2.5"
-  score_multiplier = 1.0
-  max_cost_per_1m = 0.25
+  # `glm-5.3-flash` and `minimax-m2.5` were added to this ladder in the
+  # 2026-09-09 refresh and are deliberately gone again. Both refuse a request
+  # that disables reasoning:
+  #
+  #   400 request_rejected
+  #   "Reasoning is mandatory for this endpoint and cannot be disabled."
+  #
+  # `flash` is the ladder things ask for a cheap, shallow answer, and disabling
+  # thinking is how they keep it cheap — the commit-message generator sends
+  # `reasoning: {enabled: false}` so a one-line subject does not spend 300
+  # tokens thinking. A model that cannot be asked to stop does not belong on
+  # this ladder whatever its price, and while a 400 stops the ladder rather than
+  # stepping past it, one such rung breaks every one of those callers that
+  # happens to land on it.
+  #
+  # `gpt-5.6-luna` and `deepseek-v4-flash` both serve a disabled-reasoning
+  # request, measured the same way. They stay.
 
   [[ladders.rungs]]
   provider = "openrouter"
