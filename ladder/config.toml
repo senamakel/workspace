@@ -502,3 +502,9 @@ surface = "embeddings"
   [[ladders.rungs]]
   provider = "surplus"
   model = "venice-embed-1"
+
+[[ladders]]
+name = "broken"
+  [[ladders.rungs]]
+  provider = "nowhere"
+  model = "m"
