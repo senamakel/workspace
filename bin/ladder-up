@@ -9,6 +9,19 @@
 # asking the router for a real answer over its own API — a container that is
 # "running" but wedged is not up.
 #
+# It also keeps this box's router config in step with the one in this
+# repository. `ladder/config.toml` is the fleet's config: it names every
+# credential as an environment variable and holds no secret, which is what lets
+# one file be the config on every box. The keys stay in ~/.zshenv, per box.
+#
+# A config is only installed once the image about to run it has *accepted* it,
+# because the two move together and the config is usually the one that moves
+# first. Installing a config the running binary cannot parse is not a degraded
+# router, it is no router: the container exits at startup, `--restart always`
+# restarts it into the same failure, and the box crash-loops until someone
+# looks. That is not hypothetical — it is what a config carrying `aliases`
+# did to this box against an image that predated them.
+#
 # --check reports what it would do and changes nothing.
 # --pull refreshes the image first; the cron watchdog deliberately does not, so
 # a routine health check never swaps the binary underneath a running agent.
@@ -20,6 +33,9 @@ set -euo pipefail
 NAME="ladder"
 IMAGE="ghcr.io/senamakel/llm-ladder-router:latest"
 CONFIG="$HOME/.config/ladder/config.toml"
+# The fleet's copy, in this repository, beside this script.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+REPO_CONFIG="$REPO_ROOT/ladder/config.toml"
 PORT="6969"
 # Where the probe talks to it, and the address a shell on this box uses.
 BIND="127.0.0.1"
