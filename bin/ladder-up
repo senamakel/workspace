@@ -114,7 +114,10 @@ fi
 command -v docker >/dev/null 2>&1 || { fail "docker not found on PATH"; exit 1; }
 docker info >/dev/null 2>&1 || { fail "docker daemon is not responding"; exit 1; }
 
-[ -f "$CONFIG" ] || { fail "no router config at $CONFIG"; exit 1; }
+[ -f "$CONFIG" ] || [ -f "$REPO_CONFIG" ] || {
+  fail "no router config at $CONFIG and none in this repository"
+  exit 1
+}
 
 # Read the keys out of ~/.zshenv. They live there rather than in this repository
 # because the repository is public; cron does not source it, so pull them in
@@ -190,6 +193,58 @@ if [ "$PULL" -eq 1 ]; then
     log "[pull] $IMAGE"
     docker pull ${PLATFORM[@]+"${PLATFORM[@]}"} "$IMAGE" >/dev/null
     RECREATE=1
+  fi
+fi
+
+# --- config sync -------------------------------------------------------------
+#
+# The repository's config replaces this box's when the two differ, but only
+# after the image about to run it has accepted it. `--check` on the router
+# loads and validates a config and exits without binding, so this costs one
+# short-lived container and no traffic.
+#
+# Order matters: validate, back up, install, then let the normal recreate path
+# below pick up the change. Installing first and validating after is how a box
+# ends up crash-looping against a file that has already replaced the one that
+# worked.
+CONFIG_ACTION="none"
+config_validates() {
+  docker run --rm ${PLATFORM[@]+"${PLATFORM[@]}"} \
+    -v "$1:/tmp/candidate.toml:ro" \
+    -e LADDER_API_KEY=validation-only \
+    "$IMAGE" --config /tmp/candidate.toml --check >/dev/null 2>&1
+}
+
+if [ -f "$REPO_CONFIG" ]; then
+  if [ ! -f "$CONFIG" ]; then
+    CONFIG_ACTION="install"
+  elif ! cmp -s "$REPO_CONFIG" "$CONFIG"; then
+    CONFIG_ACTION="update"
+  fi
+fi
+
+if [ "$CONFIG_ACTION" != "none" ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    log "[check] would $CONFIG_ACTION $CONFIG from $REPO_CONFIG"
+  elif config_validates "$REPO_CONFIG"; then
+    mkdir -p "$(dirname "$CONFIG")"
+    if [ -f "$CONFIG" ]; then
+      backup="$CONFIG.$(date -u +%Y%m%dT%H%M%SZ).bak"
+      cp "$CONFIG" "$backup"
+      log "[backup] $backup"
+    fi
+    cp "$REPO_CONFIG" "$CONFIG"
+    log "[config] $CONFIG_ACTION from $REPO_CONFIG"
+    # The container copies nothing from the config at create time — it is a
+    # read-only mount — but the router parses it once at startup, so a changed
+    # file only takes effect on a restart.
+    RECREATE=1
+  else
+    # The usual cause is a config written for a newer router than this box is
+    # running, which `--pull` fixes. Left uninstalled rather than installed and
+    # broken: this box keeps serving from the config it already has.
+    fail "repository config is not valid for $IMAGE; keeping $CONFIG"
+    fail "this box is probably behind; try: ladder-up --pull"
   fi
 fi
 
