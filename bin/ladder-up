@@ -141,12 +141,21 @@ done
 [ ${#missing[@]} -gt 0 ] && log "[warn] unset, provider will be skipped: ${missing[*]}"
 [ -n "${LADDER_API_KEY:-}" ] || { fail "LADDER_API_KEY is unset; callers could not authenticate"; exit 1; }
 
-# The laptop is arm64 and the image is published for amd64 only, so it runs
-# under emulation there. Fine for a router: the work is network I/O.
+# The image is published for amd64 only, so an arm64 daemon has to be told to
+# run it under emulation. Fine for a router: the work is network I/O.
+#
+# The daemon is asked rather than `uname`, because on Apple Silicon the two
+# disagree and `uname` is the one that is wrong here. mac-mini's login shell
+# runs under Rosetta and reports `Darwin/x86_64`, so a `uname`-based guess left
+# the platform unset while Docker itself was natively arm64 and pulled for
+# arm64 — `no matching manifest for linux/arm64/v8`, on a box the guess existed
+# to cover. What decides the pull is the daemon's architecture, so that is what
+# is read.
 PLATFORM=()
-case "$(uname -s)/$(uname -m)" in
-  Darwin/arm64) PLATFORM=(--platform linux/amd64) ;;
-esac
+DAEMON_ARCH="$(docker version --format '{{.Server.Arch}}' 2>/dev/null || true)"
+if [ -n "$DAEMON_ARCH" ] && [ "$DAEMON_ARCH" != "amd64" ]; then
+  PLATFORM=(--platform linux/amd64)
+fi
 
 ARGS=(
   --name "$NAME"
