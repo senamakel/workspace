@@ -70,7 +70,7 @@ MEMORY="512m"
 # The credentials the container needs, in the order the router reports them.
 # Absent ones are passed as empty and the router skips that provider with a
 # warning rather than failing to start.
-KEYS=(LADDER_API_KEY SURPLUS_API_KEY OPENROUTER_API_KEY MISTRAL_API_KEY)
+KEYS=(LADDER_API_KEY SURPLUS_API_KEY OPENROUTER_API_KEY MISTRAL_API_KEY VENICE_INFERENCE_KEY)
 
 CHECK=0
 PULL=0

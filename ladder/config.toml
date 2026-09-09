@@ -522,15 +522,24 @@ surface = "embeddings"
 
   # BGE-M3 through Venice's own API: a strong multilingual retrieval model,
   # reached from the house rather than a reseller, so there is no order book to
-  # go stale underneath it. Needs VENICE_INFERENCE_KEY exported on the box, and
-  # is skipped with a warning where that is unset.
+  # go stale underneath it, and it accepts the `dimensions` field that
+  # OpenAI-compatible embedding clients send. Needs VENICE_INFERENCE_KEY
+  # exported on the box; the router skips the provider with a warning where that
+  # is unset, and this ladder then has no rung at all.
   [[ladders.rungs]]
   provider = "venice"
   model = "text-embedding-bge-m3"
 
-  # Mistral's own, same width, as the second opinion — so a Venice outage or a
-  # box without that key degrades embedding quality rather than stopping
-  # ingestion outright.
-  [[ladders.rungs]]
-  provider = "mistral"
-  model = "mistral-embed"
+  # A ladder of one, like `scribe`, and NOT for want of a candidate.
+  #
+  # `mistral-embed` is the obvious second rung: same 1024 width, a key already
+  # on every box. It is absent because it cannot serve this ladder's actual
+  # caller. An OpenAI-compatible embeddings client sends `dimensions` in the
+  # body — CortexDB does — and Mistral answers 422:
+  #
+  #   {"type":"extra_forbidden","loc":["body","EmbeddingRequest","dimensions"]}
+  #
+  # So a failover to it would turn a Venice outage into a hard failure with a
+  # confusing error, rather than the degraded service a fallback is for. A rung
+  # that 422s the request the ladder exists to serve is not redundancy. Add it
+  # back if the router ever strips `dimensions` per provider.
