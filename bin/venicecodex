@@ -16,27 +16,37 @@
 # Requires VENICE_INFERENCE_KEY (set in ~/.zshenv, where the LLM router reads
 # it too). Overridable:
 #
-#   VENICECODEX_MODEL           model id (default: qwen-3-6-plus)
-#   VENICECODEX_EFFORT          reasoning effort (default: medium)
-#   VENICECODEX_BASE_URL        provider endpoint (default: Venice direct)
-#   VENICECODEX_CATALOG         path of the generated model catalog
-#   VENICECODEX_CONTEXT_WINDOW  context declared to Codex in tokens (default
-#                               300000). Qwen 3.6 Plus advertises 1M, and the
-#                               same accuracy caveat `deepcodex` applies to
-#                               DeepSeek's 1M applies here, so Codex compacts
-#                               against 300k. Blank it to declare the full 1M.
+#   VENICECODEX_MODELS   the models the session can pick from, as
+#                        `slug:context_tokens` entries separated by spaces
+#                        (default: "qwen-3-6-plus:300000 gemma-4-uncensored:256000").
+#                        Every entry lands in the catalog, so `/model` inside
+#                        Codex lists all of them and switches between them
+#                        mid-session; the first is the one a session starts on.
+#   VENICECODEX_MODEL    start on this entry instead of the first. A slug not
+#                        in VENICECODEX_MODELS is added with the context window
+#                        of VENICECODEX_CONTEXT_WINDOW.
+#   VENICECODEX_CONTEXT_WINDOW  context for a VENICECODEX_MODEL that is not in
+#                        the list, and for any entry written without a `:ctx`
+#                        (default 300000; blank for 1000000).
+#   VENICECODEX_EFFORT   reasoning effort (default: medium)
+#   VENICECODEX_BASE_URL provider endpoint (default: Venice direct)
+#   VENICECODEX_CATALOG  path of the generated model catalog
+#
+# The context is what Codex is told the window is, so every budget it computes
+# is drawn against it: Qwen 3.6 Plus advertises 1M, and the same accuracy caveat
+# `deepcodex` applies to DeepSeek's 1M applies here, so it is declared at 300k.
 #
 # ── Which model ───────────────────────────────────────────────────
-# `qwen-3-6-plus` is the default: Venice hosts it unfiltered, it has a 1M
+# `qwen-3-6-plus` starts by default: Venice hosts it unfiltered, it has a 1M
 # window, and in the probe that decided this (2026-09-11) it read a file and
 # created another through real function calls on the first try. Venice's own
 # `venice-uncensored-1-2` was tried first and is deliberately not the default:
 # it narrates the command it would run — literally a ```json {"cmd": ...}```
 # block as prose — instead of emitting a function call, and Codex is nothing but
 # function calls, so a session on it does no work. `gemma-4-uncensored` (256k)
-# does call tools and is the uncensored-branded alternative:
-#
-#   VENICECODEX_MODEL=gemma-4-uncensored VENICECODEX_CONTEXT_WINDOW=256000 venicecodex
+# does call tools and is the uncensored-branded alternative; it is in the list
+# by default, so `/model` inside a session switches to it, and
+# `VENICECODEX_MODEL=gemma-4-uncensored venicecodex` starts on it.
 #
 # ── What is switched off, and why ─────────────────────────────────
 # Venice's Responses endpoint validates strictly and answers anything it does
@@ -98,7 +108,6 @@ PROVIDER_ID="venice"
 PROVIDER_NAME="Venice"
 BASE_URL="${VENICECODEX_BASE_URL:-https://api.venice.ai/api/v1}"
 KEY_VAR="VENICE_INFERENCE_KEY"
-MODEL="${VENICECODEX_MODEL:-qwen-3-6-plus}"
 EFFORT="${VENICECODEX_EFFORT:-medium}"
 
 # The `-` (not `:-`) is deliberate: blanking the variable means "no cap", while
@@ -108,6 +117,34 @@ CONTEXT="${VENICECODEX_CONTEXT_WINDOW-300000}"
 case "$CONTEXT" in
   ''|*[!0-9]*) fail "VENICECODEX_CONTEXT_WINDOW must be a number of tokens: $CONTEXT"; exit 1 ;;
 esac
+
+# The model list, as parallel arrays of slug and declared context. The start
+# model is VENICECODEX_MODEL if set, else the first entry; a start model not in
+# the list is prepended so it is in the catalog too.
+read -r -a ENTRIES <<< "${VENICECODEX_MODELS:-qwen-3-6-plus:300000 gemma-4-uncensored:256000}"
+[ ${#ENTRIES[@]} -gt 0 ] || { fail "VENICECODEX_MODELS is empty."; exit 1; }
+SLUGS=()
+CTXS=()
+for entry in "${ENTRIES[@]}"; do
+  slug="${entry%%:*}"
+  ctx="${entry#"$slug"}"
+  ctx="${ctx#:}"
+  [ -n "$ctx" ] || ctx="$CONTEXT"
+  case "$ctx" in
+    *[!0-9]*) fail "context must be a number of tokens in VENICECODEX_MODELS entry: $entry"; exit 1 ;;
+  esac
+  SLUGS+=("$slug")
+  CTXS+=("$ctx")
+done
+MODEL="${VENICECODEX_MODEL:-${SLUGS[0]}}"
+listed=0
+for slug in "${SLUGS[@]}"; do
+  [ "$slug" = "$MODEL" ] && listed=1
+done
+if [ "$listed" -eq 0 ]; then
+  SLUGS=("$MODEL" "${SLUGS[@]}")
+  CTXS=("$CONTEXT" "${CTXS[@]}")
+fi
 
 # ── The model catalog ──────────────────────────────────────────────
 CACHE_SRC="${CODEX_HOME:-$HOME/.codex}/models_cache.json"
@@ -122,21 +159,30 @@ fi
 mkdir -p "$(dirname "$CATALOG")"
 
 # Rebuilt every run rather than cached: it is one jq pass over a small file, and
-# it means a Codex upgrade never leaves a stale system prompt behind.
-if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
+# it means a Codex upgrade never leaves a stale system prompt behind. One entry
+# per listed model, all cloned from the same template; the start model gets
+# priority 1 so it is the one Codex opens on and lists first.
+MODELS_JSON="$(
+  for i in "${!SLUGS[@]}"; do
+    printf '{"slug":"%s","ctx":%s}\n' "${SLUGS[$i]}" "${CTXS[$i]}"
+  done | jq -s .
+)"
+if ! jq --arg start "$MODEL" --argjson models "$MODELS_JSON" --arg effort "$EFFORT" '
       # Highest-priority real model as the template. The auto-review entry is a
       # special-purpose profile, not a general coding one, so it is excluded.
       [ (.models // .)[] | select((.slug // "") | test("auto-review") | not) ]
       | sort_by(.priority) | .[0]
       | if . == null then error("no usable template model in the Codex catalog") else . end
-      | .slug = $slug
-      | .display_name = "Venice \($slug)"
-      | .description = "\($slug) on Venice, driven through Codex by venicecodex."
-      | .context_window = $ctx
-      | .max_context_window = $ctx
+      | . as $template
+      | [ $models | to_entries[] | .key as $i | .value as $m | $template
+      | .slug = $m.slug
+      | .display_name = "Venice \($m.slug)"
+      | .description = "\($m.slug) on Venice, driven through Codex by venicecodex."
+      | .context_window = $m.ctx
+      | .max_context_window = $m.ctx
       | .effective_context_window_percent = 95
       | .default_reasoning_level = $effort
-      | .priority = 1
+      | .priority = (if $m.slug == $start then 1 else $i + 2 end)
       | .upgrade = null
       | .availability_nux = null
       # Everything Venice rejects — see the header.
@@ -148,7 +194,8 @@ if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
       | .use_responses_lite = false
       | .default_reasoning_summary = "auto"
       | del(.multi_agent_version)
-      | {models: [.]}
+      ]
+      | {models: .}
     ' "$CACHE_SRC" > "$CATALOG.tmp" 2>/dev/null; then
   rm -f "$CATALOG.tmp"
   fail "could not build a model catalog from $CACHE_SRC."
