@@ -112,6 +112,8 @@ if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
       | .apply_patch_tool_type = null
       | .tool_mode = null
       | .supports_search_tool = false
+      | .experimental_supported_tools = []
+      | .use_responses_lite = false
       | {models: [.]}
     ' "$CACHE_SRC" > "$CATALOG.tmp" 2>/dev/null; then
   rm -f "$CATALOG.tmp"
