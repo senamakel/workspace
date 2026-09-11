@@ -114,6 +114,7 @@ if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
       | .supports_search_tool = false
       | .experimental_supported_tools = []
       | .use_responses_lite = false
+      | .default_reasoning_summary = "auto"
       | {models: [.]}
     ' "$CACHE_SRC" > "$CATALOG.tmp" 2>/dev/null; then
   rm -f "$CATALOG.tmp"
@@ -134,5 +135,6 @@ exec codex \
   -c model_providers."$PROVIDER_ID".wire_api="responses" \
   -c model_catalog_json="$CATALOG" \
   -c model_reasoning_effort="$EFFORT" \
+  -c model_reasoning_summary="auto" \
   -c preferred_auth_method="apikey" \
   "$@"
