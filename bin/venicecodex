@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# venicecodex — Codex CLI, but driven by Venice's uncensored model.
+#
+# Usage: venicecodex [codex args...]
+#
+#   venicecodex                          interactive session on Venice Uncensored
+#   venicecodex exec "explain this repo"  non-interactive, same as `codex exec`
+#   venicecodex --dangerously-bypass-approvals-and-sandbox   flags pass through
+#
+# The Venice sibling of `deepcodex`: it points Codex at Venice's own API for
+# this process only and exec's `codex`, so your normal `codex` (signed in to
+# OpenAI) is untouched. Nothing is written to ~/.codex/config.toml — every
+# setting is a `-c` override, which is also why `codex login` still owns your
+# real account.
+#
+# Requires VENICE_INFERENCE_KEY (set in ~/.zshenv, where the LLM router reads
+# it too). Overridable:
+#
+#   VENICECODEX_MODEL           model id (default: venice-uncensored-1-2)
+#   VENICECODEX_EFFORT          reasoning effort (default: medium)
+#   VENICECODEX_BASE_URL        provider endpoint (default: Venice direct)
+#   VENICECODEX_CATALOG         path of the generated model catalog
+#   VENICECODEX_CONTEXT_WINDOW  context declared to Codex in tokens (default:
+#                               128000, the model's published window)
+#
+# ── Which model ───────────────────────────────────────────────────
+# `venice-uncensored-1-2` is Venice's flagship uncensored model and the default
+# here, but in probes it narrates the command it would run rather than emitting
+# a function call, and Codex is nothing but function calls. If a session keeps
+# describing edits instead of making them, `gemma-4-uncensored` (256k window,
+# calls tools reliably in the same probes) is the fallback:
+#
+#   VENICECODEX_MODEL=gemma-4-uncensored VENICECODEX_CONTEXT_WINDOW=256000 venicecodex
+#
+# ── Venice's own system prompt ────────────────────────────────────
+# Venice prepends ~1,000 tokens of its own system prompt to every request. On
+# chat completions the `:include_venice_system_prompt=false` model suffix (or
+# `venice_parameters`) strips it; on the Responses API — the only wire Codex
+# speaks since 0.146 — neither does anything (measured 2026-09-11: 1573 input
+# tokens for "hi" with or without the suffix). So every turn carries it. It is
+# a cost, not a breakage; Codex's own instructions still arrive after it.
+#
+# ── Why a generated model catalog ──────────────────────────────────
+# Codex refuses to run a model it has no metadata for, and `model_catalog_json`
+# is where that comes from. As in `deepcodex`, the entry is derived from the
+# catalog the installed Codex already cached for itself, so the embedded
+# instructions always match the Codex on this machine.
+#
+# The same three fields are turned off, for the same reason: Venice's API takes
+# `function` tools and nothing else, and each of these is sent as a different
+# tool type that fails the whole request.
+#
+#   apply_patch_tool_type  freeform apply_patch is sent as a `custom` tool
+#   tool_mode              `code_mode_only` is likewise a `custom` tool
+#   supports_search_tool   sent as a `tool_search` tool
+set -euo pipefail
+
+fail() { printf 'venicecodex: %s\n' "$*" >&2; }
+
+command -v codex >/dev/null 2>&1 || { fail "'codex' CLI not found on PATH."; exit 1; }
+command -v jq    >/dev/null 2>&1 || { fail "'jq' is required to build the model catalog."; exit 1; }
+
+if [ -z "${VENICE_INFERENCE_KEY:-}" ]; then
+  fail "VENICE_INFERENCE_KEY is not set."
+  fail "  Add it to your ~/.zshenv: export VENICE_INFERENCE_KEY=VENICE_INFERENCE_KEY_..."
+  exit 1
+fi
+
+PROVIDER_ID="venice"
+PROVIDER_NAME="Venice"
+BASE_URL="${VENICECODEX_BASE_URL:-https://api.venice.ai/api/v1}"
+KEY_VAR="VENICE_INFERENCE_KEY"
+MODEL="${VENICECODEX_MODEL:-venice-uncensored-1-2}"
+EFFORT="${VENICECODEX_EFFORT:-medium}"
+
+CONTEXT="${VENICECODEX_CONTEXT_WINDOW:-128000}"
+case "$CONTEXT" in
+  ''|*[!0-9]*) fail "VENICECODEX_CONTEXT_WINDOW must be a number of tokens: $CONTEXT"; exit 1 ;;
+esac
+
+# ── The model catalog ──────────────────────────────────────────────
+CACHE_SRC="${CODEX_HOME:-$HOME/.codex}/models_cache.json"
+CATALOG="${VENICECODEX_CATALOG:-${XDG_CACHE_HOME:-$HOME/.cache}/venicecodex/models.json}"
+
+if [ ! -f "$CACHE_SRC" ]; then
+  fail "no Codex model metadata at $CACHE_SRC."
+  fail "  Run 'codex' once (it caches the catalog on start), then try again."
+  exit 1
+fi
+
+mkdir -p "$(dirname "$CATALOG")"
+
+# Rebuilt every run rather than cached: it is one jq pass over a small file, and
+# it means a Codex upgrade never leaves a stale system prompt behind.
+if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
+      # Highest-priority real model as the template. The auto-review entry is a
+      # special-purpose profile, not a general coding one, so it is excluded.
+      [ (.models // .)[] | select((.slug // "") | test("auto-review") | not) ]
+      | sort_by(.priority) | .[0]
+      | if . == null then error("no usable template model in the Codex catalog") else . end
+      | .slug = $slug
+      | .display_name = "Venice \($slug)"
+      | .description = "\($slug) on Venice, driven through Codex by venicecodex."
+      | .context_window = $ctx
+      | .max_context_window = $ctx
+      | .effective_context_window_percent = 95
+      | .default_reasoning_level = $effort
+      | .priority = 1
+      | .upgrade = null
+      | .availability_nux = null
+      # The three that Venice rejects outright — see the header.
+      | .apply_patch_tool_type = null
+      | .tool_mode = null
+      | .supports_search_tool = false
+      | {models: [.]}
+    ' "$CACHE_SRC" > "$CATALOG.tmp" 2>/dev/null; then
+  rm -f "$CATALOG.tmp"
+  fail "could not build a model catalog from $CACHE_SRC."
+  exit 1
+fi
+mv "$CATALOG.tmp" "$CATALOG"
+
+# ── Hand off ───────────────────────────────────────────────────────
+# `wire_api = "responses"`: Codex dropped the chat-completions wire in 0.146,
+# and Venice serves the Responses API at the same base as chat completions.
+exec codex \
+  -c model="$MODEL" \
+  -c model_provider="$PROVIDER_ID" \
+  -c model_providers."$PROVIDER_ID".name="$PROVIDER_NAME" \
+  -c model_providers."$PROVIDER_ID".base_url="$BASE_URL" \
+  -c model_providers."$PROVIDER_ID".env_key="$KEY_VAR" \
+  -c model_providers."$PROVIDER_ID".wire_api="responses" \
+  -c model_catalog_json="$CATALOG" \
+  -c model_reasoning_effort="$EFFORT" \
+  -c preferred_auth_method="apikey" \
+  "$@"
