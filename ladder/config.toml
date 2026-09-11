@@ -200,11 +200,17 @@ cost_basis = "completion"
   max_cost_per_1m = 0.30
   prefer = ["deepinfra"]
 
+  # Same host as rung 0 on purpose: a fallback that lands on a different
+  # sub-provider starts from a cold prompt cache, and with ~70k tokens of
+  # stable prefix per request that re-warm costs more than the rung saves.
+  # Measured 2026-09-11: 13% of requests fell to this rung and the session
+  # cache-hit rate sat at 56%.
   [[ladders.rungs]]
   provider = "openrouter"
   model = "deepseek/deepseek-v4-flash"
   score_multiplier = 1.0
   max_cost_per_1m = 0.40
+  prefer = ["deepinfra"]
 
   # The Surplus rungs are parked, not deleted. Selection is by score, not by
   # listing order (README "Scoring"), and Surplus's deepseek-v4-flash clears at
