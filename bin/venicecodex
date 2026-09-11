@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# venicecodex — Codex CLI, but driven by Venice's uncensored model.
+# venicecodex — Codex CLI, but driven by a model on Venice.
 #
 # Usage: venicecodex [codex args...]
 #
-#   venicecodex                          interactive session on Venice Uncensored
+#   venicecodex                          interactive session on Qwen 3.6 Plus
 #   venicecodex exec "explain this repo"  non-interactive, same as `codex exec`
 #   venicecodex --dangerously-bypass-approvals-and-sandbox   flags pass through
 #
@@ -16,21 +16,49 @@
 # Requires VENICE_INFERENCE_KEY (set in ~/.zshenv, where the LLM router reads
 # it too). Overridable:
 #
-#   VENICECODEX_MODEL           model id (default: venice-uncensored-1-2)
+#   VENICECODEX_MODEL           model id (default: qwen-3-6-plus)
 #   VENICECODEX_EFFORT          reasoning effort (default: medium)
 #   VENICECODEX_BASE_URL        provider endpoint (default: Venice direct)
 #   VENICECODEX_CATALOG         path of the generated model catalog
-#   VENICECODEX_CONTEXT_WINDOW  context declared to Codex in tokens (default:
-#                               128000, the model's published window)
+#   VENICECODEX_CONTEXT_WINDOW  context declared to Codex in tokens (default
+#                               300000). Qwen 3.6 Plus advertises 1M, and the
+#                               same accuracy caveat `deepcodex` applies to
+#                               DeepSeek's 1M applies here, so Codex compacts
+#                               against 300k. Blank it to declare the full 1M.
 #
 # ── Which model ───────────────────────────────────────────────────
-# `venice-uncensored-1-2` is Venice's flagship uncensored model and the default
-# here, but in probes it narrates the command it would run rather than emitting
-# a function call, and Codex is nothing but function calls. If a session keeps
-# describing edits instead of making them, `gemma-4-uncensored` (256k window,
-# calls tools reliably in the same probes) is the fallback:
+# `qwen-3-6-plus` is the default: Venice hosts it unfiltered, it has a 1M
+# window, and in the probe that decided this (2026-09-11) it read a file and
+# created another through real function calls on the first try. Venice's own
+# `venice-uncensored-1-2` was tried first and is deliberately not the default:
+# it narrates the command it would run — literally a ```json {"cmd": ...}```
+# block as prose — instead of emitting a function call, and Codex is nothing but
+# function calls, so a session on it does no work. `gemma-4-uncensored` (256k)
+# does call tools and is the uncensored-branded alternative:
 #
 #   VENICECODEX_MODEL=gemma-4-uncensored VENICECODEX_CONTEXT_WINDOW=256000 venicecodex
+#
+# ── What is switched off, and why ─────────────────────────────────
+# Venice's Responses endpoint validates strictly and answers anything it does
+# not model with a 400 — or, for the tool list, a bare 500 `Inference processing
+# failed` that Codex shows as `Reconnecting... 1/5` and gives up on. Each
+# override below removes one thing it choked on; each was found by putting a
+# logging proxy in front of the endpoint and reading the request Codex sent.
+#
+#   reasoning.summary = null   Codex's `none` summary is serialised as null;
+#                              Venice wants auto|concise|detailed. Hence
+#                              model_reasoning_summary=auto, in the catalog too.
+#   type = "web_search" tool   web_search=disabled drops it.
+#   type = "namespace" tools   Codex groups collaboration and MCP tools into
+#                              namespace entries. Venice knows `function` only,
+#                              so multi-agent, apps and plugins are off and the
+#                              MCP server list is emptied for this process.
+#   type = "additional_tools"  an input item from the experimental tool set and
+#                              responses-lite; both are cleared in the catalog.
+#
+# So a venicecodex session has no MCP servers, no subagents and no web search.
+# That is the price of the endpoint, not a choice; lift any of them by passing
+# your own `-c` after the wrapper's — later overrides win.
 #
 # ── Venice's own system prompt ────────────────────────────────────
 # Venice prepends ~1,000 tokens of its own system prompt to every request. On
@@ -70,10 +98,13 @@ PROVIDER_ID="venice"
 PROVIDER_NAME="Venice"
 BASE_URL="${VENICECODEX_BASE_URL:-https://api.venice.ai/api/v1}"
 KEY_VAR="VENICE_INFERENCE_KEY"
-MODEL="${VENICECODEX_MODEL:-venice-uncensored-1-2}"
+MODEL="${VENICECODEX_MODEL:-qwen-3-6-plus}"
 EFFORT="${VENICECODEX_EFFORT:-medium}"
 
-CONTEXT="${VENICECODEX_CONTEXT_WINDOW:-128000}"
+# The `-` (not `:-`) is deliberate: blanking the variable means "no cap", while
+# leaving it unset means the default.
+CONTEXT="${VENICECODEX_CONTEXT_WINDOW-300000}"
+[ -n "$CONTEXT" ] || CONTEXT=1000000
 case "$CONTEXT" in
   ''|*[!0-9]*) fail "VENICECODEX_CONTEXT_WINDOW must be a number of tokens: $CONTEXT"; exit 1 ;;
 esac
@@ -108,13 +139,15 @@ if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
       | .priority = 1
       | .upgrade = null
       | .availability_nux = null
-      # The three that Venice rejects outright — see the header.
+      # Everything Venice rejects — see the header.
       | .apply_patch_tool_type = null
       | .tool_mode = null
       | .supports_search_tool = false
+      | .web_search_tool_type = null
       | .experimental_supported_tools = []
       | .use_responses_lite = false
       | .default_reasoning_summary = "auto"
+      | .multi_agent_version = null
       | {models: [.]}
     ' "$CACHE_SRC" > "$CATALOG.tmp" 2>/dev/null; then
   rm -f "$CATALOG.tmp"
@@ -137,4 +170,10 @@ exec codex \
   -c model_reasoning_effort="$EFFORT" \
   -c model_reasoning_summary="auto" \
   -c preferred_auth_method="apikey" \
+  -c web_search="disabled" \
+  -c features.multi_agent=false \
+  -c features.apps=false \
+  -c features.plugins=false \
+  -c features.remote_plugin=false \
+  -c "mcp_servers={}" \
   "$@"
