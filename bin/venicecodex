@@ -143,7 +143,7 @@ if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
       | .apply_patch_tool_type = null
       | .tool_mode = null
       | .supports_search_tool = false
-      | .web_search_tool_type = null
+      | del(.web_search_tool_type)
       | .experimental_supported_tools = []
       | .use_responses_lite = false
       | .default_reasoning_summary = "auto"
