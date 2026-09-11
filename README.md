@@ -1039,6 +1039,35 @@ plain function and is left enabled. Requires `OPENROUTER_API_KEY` (or
 `DEEPSEEK_API_KEY`), and a `codex` that has been run at least once so the catalog
 exists. All arguments pass straight through to `codex`.
 
+### `venicecodex [codex args...]`
+
+The Venice sibling of `deepcodex`: it runs the Codex CLI against a model on
+Venice's own API (`qwen-3-6-plus` by default, 1M window, reasoning and tool
+calls) and `exec`s `codex`. Same shape as `deepcodex` — everything is a `-c`
+override in the wrapper process, `~/.codex/config.toml` is never written, and
+your normal `codex` stays signed in to OpenAI. Requires `VENICE_INFERENCE_KEY`
+in `~/.zshenv`, where `ladder-up` also reads it for the router's `venice`
+provider. Override with `VENICECODEX_MODEL`, `VENICECODEX_EFFORT` (default
+`medium`), `VENICECODEX_BASE_URL`, or `VENICECODEX_CONTEXT_WINDOW` (default
+300k, blank for the full 1M).
+
+Venice's flagship `venice-uncensored-1-2` is deliberately not the default: it
+writes the command it would run as a fenced JSON block instead of emitting a
+function call, so Codex on it does no work. `gemma-4-uncensored` does call
+tools and is the uncensored-branded alternative (`VENICECODEX_MODEL=gemma-4-uncensored
+VENICECODEX_CONTEXT_WINDOW=256000`).
+
+Venice's Responses endpoint accepts `function` tools and nothing else, and
+answers an unknown tool type with a bare 500 that Codex surfaces as
+`Reconnecting... 1/5`. The wrapper therefore switches off everything Codex
+would send as another type — web search, the `namespace` groupings for
+collaboration, apps and MCP servers, and the experimental tool set — so a
+`venicecodex` session has no MCP servers, no subagents and no web search. The
+header of the script lists each override and what it was found to break. Venice
+also prepends ~1,000 tokens of its own system prompt on the Responses wire and
+offers no way to strip it there; it is a per-turn cost, not a breakage.
+
+
 ### `ocr [args...]`
 
 Runs Alibaba's OpenCodeReview CLI through OpenRouter using the same machine-local
