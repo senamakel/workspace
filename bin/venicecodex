@@ -147,7 +147,7 @@ if ! jq --arg slug "$MODEL" --argjson ctx "$CONTEXT" --arg effort "$EFFORT" '
       | .experimental_supported_tools = []
       | .use_responses_lite = false
       | .default_reasoning_summary = "auto"
-      | .multi_agent_version = null
+      | del(.multi_agent_version)
       | {models: [.]}
     ' "$CACHE_SRC" > "$CATALOG.tmp" 2>/dev/null; then
   rm -f "$CATALOG.tmp"
