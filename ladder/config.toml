@@ -184,6 +184,28 @@ name = "flash"
 aliases = ["chat-v1", "vision-v1", "flash-v1"]
 cost_basis = "completion"
 
+  # 2026-09-11: OpenRouter rungs moved to the FRONT of this ladder and the
+  # fallback moved off Surplus. The Surplus deepseek-v4-flash rung killed a run
+  # of PR babysitters twice in one afternoon - first with the thinking-mode
+  # "reasoning_content must be passed back" 400 (now advanced past, PR #16),
+  # then with a hard 204800-token context ceiling that Claude Code's compaction
+  # does not anticipate. Every one of those callers is a long agentic session
+  # where one refused turn discards an hour of work, so for now the dependable
+  # seller goes first and Surplus is the discount to fall through TO, not FROM.
+  # Revert this ordering once Surplus's deepseek-v4-flash endpoint is stable.
+  [[ladders.rungs]]
+  provider = "openrouter"
+  model = "deepseek/deepseek-v4-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.30
+  prefer = ["deepinfra"]
+
+  [[ladders.rungs]]
+  provider = "openrouter"
+  model = "deepseek/deepseek-v4-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.40
+
   [[ladders.rungs]]
   provider = "surplus"
   model = "gpt-5.6-luna"
@@ -194,60 +216,11 @@ cost_basis = "completion"
   provider = "surplus"
   model = "deepseek-v4-flash"
   score_multiplier = 1.0
-  # Set just under OpenRouter's cheapest endpoint, so this rung only falls
-  # through when Surplus has genuinely lost on price.
   max_cost_per_1m = 0.15
 
-  # `glm-5.3-flash` and `minimax-m2.5` were added to this ladder in the
-  # 2026-09-09 refresh and are deliberately gone again. Both refuse a request
-  # that disables reasoning:
-  #
-  #   400 request_rejected
-  #   "Reasoning is mandatory for this endpoint and cannot be disabled."
-  #
-  # `flash` is the ladder things ask for a cheap, shallow answer, and disabling
-  # thinking is how they keep it cheap — the commit-message generator sends
-  # `reasoning: {enabled: false}` so a one-line subject does not spend 300
-  # tokens thinking. A model that cannot be asked to stop does not belong on
-  # this ladder whatever its price, and while a 400 stops the ladder rather than
-  # stepping past it, one such rung breaks every one of those callers that
-  # happens to land on it.
-  #
-  # `gpt-5.6-luna` and `deepseek-v4-flash` both serve a disabled-reasoning
-  # request, measured the same way. They stay.
-
-  [[ladders.rungs]]
-  provider = "openrouter"
-  model = "deepseek/deepseek-v4-flash"
-  score_multiplier = 1.0
-  max_cost_per_1m = 0.30
-  prefer = ["deepinfra"]
-
-  # The same model with no preferred seller, one step below the rung above.
-  # With `prefer` naming the only live seller, that endpoint going briefly
-  # unavailable emptied the ladder outright — `ladder exhausted ladder=flash
-  # skipped=1` between calls that served normally.
-  [[ladders.rungs]]
-  provider = "openrouter"
-  model = "deepseek/deepseek-v4-flash"
-  score_multiplier = 1.0
-  max_cost_per_1m = 0.40
-
-  # The last resort, reached only once every rung above has failed or been
-  # priced out. Uncapped on purpose — it carries no ceiling and dispatches with
-  # no marketplace price filter — because the thing it is weighed against is
-  # not a cheaper rung, it is a 502.
-  #
-  # The model is chosen so that being uncapped is a bounded promise rather than
-  # a blank cheque: the worst this can cost is deepseek-v4-flash's direct rate of $0.18/1M, which
-  # is the price of never seeing `ladder exhausted` on this ladder again.
   [ladders.fallback]
-  provider = "surplus"
-  model = "deepseek-v4-flash"
-
-
-# The reasoning ladder: the strongest model the budget allows, stepping down
-# through the mid tier and Flash rather than failing.
+  provider = "openrouter"
+  model = "deepseek/deepseek-v4-flash"
 
 [[ladders]]
 name = "reasoning"
