@@ -233,21 +233,103 @@ name = "reasoning"
 aliases = ["deepseek"]
 cost_basis = "completion"
 
-  # 2026-09-11: parked on OpenRouter, like `flash`. Every surplus rung here
-  # (deepseek-v4-pro, glm-5.x, minimax, luna, deepseek-v4-flash) was cutting
-  # streamed responses mid-sentence for the pr-babysitter passes, and the
-  # cheapest-per-1m scorer kept picking the surplus flash rung over anything
-  # else. The surplus rungs are in git history; restore them once surplus
-  # streaming is trustworthy again.
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "deepseek-v4-pro"
+  score_multiplier = 2.0
+  max_cost_per_1m = 0.30
+
+  # `glm-5.3` is the current generation and `glm-5.2` the one this file used to
+  # name. Both are here rather than one replacing the other: 5.3 is the better
+  # model and carries the higher multiplier, but its ceiling admits fewer
+  # sellers, and a rung that thin is a rung that empties. The older generation
+  # is the floor under the newer one.
+  #
+  # 0.70, not the 0.40 this rung shipped with. A ceiling is restated as a
+  # discount off the direct rate before dispatch, and against 4.40 direct, 0.40
+  # asks for 90% off — which Surplus refused on every request with
+  # `minimum_discount_not_met` while its own order book listed 16 sellers under
+  # 0.40. The order book and the discount filter disagree, and the filter is
+  # the one that decides. Measured live: min90 refused, min84 and min85 served,
+  # so 0.70 (min84) is the cheapest ceiling this rung can actually be bought at.
+  #
+  # The lesson generalises: a ceiling implying more than ~85% off is a rung that
+  # ranks well, wins selection, and then fails upstream — a wasted round trip on
+  # every single request. Probe a new ceiling before trusting it.
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "glm-5.3"
+  score_multiplier = 1.9
+  max_cost_per_1m = 0.70
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "glm-5.2"
+  score_multiplier = 1.8
+  max_cost_per_1m = 0.30
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "minimax-m2.7"
+  score_multiplier = 1.6
+  max_cost_per_1m = 0.30
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "gpt-5.6-luna"
+  score_multiplier = 1.2
+  max_cost_per_1m = 0.30
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "deepseek-v4-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.15
+
+  # The reasoning-class rung on the second provider. Without it, this ladder
+  # falls through Surplus straight to a flash-class model, and a reasoning
+  # request answered by a fast model is the failure it is built to avoid.
   [[ladders.rungs]]
   provider = "openrouter"
   model = "deepseek/deepseek-v4-pro"
   score_multiplier = 2.0
   max_cost_per_1m = 2.00
 
-  [ladders.fallback]
+  [[ladders.rungs]]
   provider = "openrouter"
-  model = "deepseek/deepseek-v4-pro"
+  model = "deepseek/deepseek-v4-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.30
+  prefer = ["deepinfra"]
+
+  # The last resort, reached only once every rung above has failed or been
+  # priced out. Uncapped on purpose — it carries no ceiling and dispatches with
+  # no marketplace price filter — because the thing it is weighed against is
+  # not a cheaper rung, it is a 502.
+  #
+  # The model is chosen so that being uncapped is a bounded promise rather than
+  # a blank cheque: the worst this can cost is deepseek-v4-pro's direct rate of $1.91/1M, which
+  # is the price of never seeing `ladder exhausted` on this ladder again.
+  [ladders.fallback]
+  provider = "surplus"
+  model = "deepseek-v4-pro"
+
+
+# The deepest ladder: for the handful of roles whose whole output is a
+# judgement nothing mechanical can check, where thinking longer is the only
+# thing that improves the answer.
+#
+# Two things separate it from `reasoning`. It asks for depth explicitly —
+# `reasoning_effort` is injected into every request that did not already carry
+# one — and it pays more for it: the ceilings sit above the reasoning ladder's
+# because a role that runs a few times an hour cannot spend what a role driving
+# every turn spends. It never steps below a reasoning model; a ladder whose last
+# rung is a fast model would silently answer a max-reasoning request with the
+# cheapest thing available, which is the failure this ladder exists to avoid.
+#
+# The effort word is per rung on purpose: the accepted values are a property of
+# the model family, and a rejected value is a 400 the failover loop hands back
+# to the caller rather than stepping past.
 
 [[ladders]]
 name = "max-reasoning"
