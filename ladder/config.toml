@@ -212,23 +212,32 @@ cost_basis = "completion"
   max_cost_per_1m = 0.40
   prefer = ["deepinfra"]
 
-  # The Surplus rungs are parked, not deleted. Selection is by score, not by
-  # listing order (README "Scoring"), and Surplus's deepseek-v4-flash clears at
-  # ~0.012/1M against OpenRouter's ~0.09 - so while these are live they win every
-  # request and the ordering above changes nothing. Uncomment to restore the
-  # discount once the endpoint is trustworthy again.
+  # Surplus as the step DOWN from OpenRouter, not the discount it used to be.
+  # Selection is by score, not by listing order (README "Scoring"), and
+  # Surplus's deepseek-v4-flash clears at ~0.014/1M against OpenRouter's
+  # ~0.14 - so at 1.0 this rung would win every request and the ordering
+  # above would change nothing. The multiplier is what demotes it: 0.014/0.02
+  # scores 0.7, above anything OpenRouter can score under its 0.40 ceiling, so
+  # this rung serves only once both OpenRouter rungs are skipped. That is the
+  # case it exists for. 2026-09-11 the OpenRouter key hit its $10/day cap and
+  # the workspace its $25/day budget at once, the ladder had nothing but
+  # OpenRouter on it, and every auto-commit subject for an evening came back
+  # `ladder exhausted`. A ladder whose rungs share one provider has no
+  # failover, whatever its length - the 2026-08-18 lesson, relearned.
   #
+  # Raise this toward 1.0 to make Surplus the discount again once its endpoint
+  # is trustworthy; the gpt-5.6-luna rung stays parked until then.
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "deepseek-v4-flash"
+  score_multiplier = 0.02
+  max_cost_per_1m = 0.15
+
   # [[ladders.rungs]]
   # provider = "surplus"
   # model = "gpt-5.6-luna"
   # score_multiplier = 1.2
   # max_cost_per_1m = 0.30
-  #
-  # [[ladders.rungs]]
-  # provider = "surplus"
-  # model = "deepseek-v4-flash"
-  # score_multiplier = 1.0
-  # max_cost_per_1m = 0.15
 
   [ladders.fallback]
   provider = "openrouter"
