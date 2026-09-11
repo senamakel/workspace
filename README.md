@@ -1041,21 +1041,26 @@ exists. All arguments pass straight through to `codex`.
 
 ### `venicecodex [codex args...]`
 
-The Venice sibling of `deepcodex`: it runs the Codex CLI against a model on
-Venice's own API (`qwen-3-6-plus` by default, 1M window, reasoning and tool
-calls) and `exec`s `codex`. Same shape as `deepcodex` — everything is a `-c`
-override in the wrapper process, `~/.codex/config.toml` is never written, and
-your normal `codex` stays signed in to OpenAI. Requires `VENICE_INFERENCE_KEY`
-in `~/.zshenv`, where `ladder-up` also reads it for the router's `venice`
-provider. Override with `VENICECODEX_MODEL`, `VENICECODEX_EFFORT` (default
-`medium`), `VENICECODEX_BASE_URL`, or `VENICECODEX_CONTEXT_WINDOW` (default
-300k, blank for the full 1M).
+The Venice sibling of `deepcodex`: it runs the Codex CLI against models on
+Venice's own API and `exec`s `codex`. Same shape as `deepcodex` — everything is
+a `-c` override in the wrapper process, `~/.codex/config.toml` is never written,
+and your normal `codex` stays signed in to OpenAI. Requires
+`VENICE_INFERENCE_KEY` in `~/.zshenv`, where `ladder-up` also reads it for the
+router's `venice` provider.
 
-Venice's flagship `venice-uncensored-1-2` is deliberately not the default: it
+The generated catalog carries every model in `VENICECODEX_MODELS` (default
+`qwen-3-6-plus:300000 gemma-4-uncensored:256000`, as `slug:context` entries), so
+`/model` inside a session lists all of them and switches mid-session. A session
+starts on the first entry, or on `VENICECODEX_MODEL` (an unlisted slug is added
+with `VENICECODEX_CONTEXT_WINDOW`, default 300k, blank for 1M). Also
+`VENICECODEX_EFFORT` (default `medium`) and `VENICECODEX_BASE_URL`.
+
+Venice's flagship `venice-uncensored-1-2` is deliberately not in the list: it
 writes the command it would run as a fenced JSON block instead of emitting a
-function call, so Codex on it does no work. `gemma-4-uncensored` does call
-tools and is the uncensored-branded alternative (`VENICECODEX_MODEL=gemma-4-uncensored
-VENICECODEX_CONTEXT_WINDOW=256000`).
+function call, so Codex on it does no work. Qwen 3.6 Plus (1M window,
+unfiltered on Venice) is the default because it called tools correctly on the
+first try; `gemma-4-uncensored` also calls tools and is the uncensored-branded
+alternative.
 
 Venice's Responses endpoint accepts `function` tools and nothing else, and
 answers an unknown tool type with a bare 500 that Codex surfaces as
@@ -1066,7 +1071,6 @@ collaboration, apps and MCP servers, and the experimental tool set — so a
 header of the script lists each override and what it was found to break. Venice
 also prepends ~1,000 tokens of its own system prompt on the Responses wire and
 offers no way to strip it there; it is a per-turn cost, not a breakage.
-
 
 ### `ocr [args...]`
 
