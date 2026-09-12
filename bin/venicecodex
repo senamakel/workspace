@@ -18,7 +18,9 @@
 #
 #   VENICECODEX_MODELS   the models the session can pick from, as
 #                        `slug:context_tokens` entries separated by spaces
-#                        (default: "qwen-3-6-plus:300000 gemma-4-uncensored:256000").
+#                        (default: "qwen-3-6-plus:300000 gemma-4-uncensored:256000 olafangensan-glm-4.7-flash-heretic:200000 aion-labs-aion-3-0:128000 venice-uncensored-1-2:128000
+#                        olafangensan-glm-4.7-flash-heretic:200000
+#                        aion-labs-aion-3-0:128000 venice-uncensored-1-2:128000").
 #                        Every entry lands in the catalog, so `/model` inside
 #                        Codex lists all of them and switches between them
 #                        mid-session; the first is the one a session starts on.
@@ -39,14 +41,33 @@
 # ── Which model ───────────────────────────────────────────────────
 # `qwen-3-6-plus` starts by default: Venice hosts it unfiltered, it has a 1M
 # window, and in the probe that decided this (2026-09-11) it read a file and
-# created another through real function calls on the first try. Venice's own
-# `venice-uncensored-1-2` was tried first and is deliberately not the default:
-# it narrates the command it would run — literally a ```json {"cmd": ...}```
-# block as prose — instead of emitting a function call, and Codex is nothing but
-# function calls, so a session on it does no work. `gemma-4-uncensored` (256k)
-# does call tools and is the uncensored-branded alternative; it is in the list
-# by default, so `/model` inside a session switches to it, and
-# `VENICECODEX_MODEL=gemma-4-uncensored venicecodex` starts on it.
+# created another through real function calls on the first try. The rest of the
+# default list, each probed on 2026-09-12 with one `function` tool on the
+# Responses endpoint:
+#
+#   gemma-4-uncensored (256k)                  calls tools; the uncensored-
+#                                              branded alternative.
+#   olafangensan-glm-4.7-flash-heretic (200k)  a clean function_call on the
+#                                              first try, nothing else.
+#   aion-labs-aion-3-0 (128k)                  emits the function_call, but
+#                                              also echoes it as an
+#                                              `<uncensored_tool_call>` text
+#                                              block in the same turn. Codex
+#                                              acts on the call and shows the
+#                                              echo as prose; harmless, noisy.
+#   venice-uncensored-1-2 (128k)               does NOT call tools: it writes
+#                                              the arguments as a fenced JSON
+#                                              block instead of emitting a
+#                                              function call, in both probes.
+#                                              Codex is nothing but function
+#                                              calls, so a session on it does
+#                                              no work. Listed so `/model` can
+#                                              reach it for chat; never the
+#                                              default.
+#
+# The slugs are the API's, not the chat URL's: venice.ai/chat?model=gemma4-uncensored
+# is `gemma-4-uncensored` on the wire. `GET /models?type=text` is the list.
+# `VENICECODEX_MODEL=<slug> venicecodex` starts on any of them.
 #
 # ── What is switched off, and why ─────────────────────────────────
 # Venice's Responses endpoint validates strictly and answers anything it does
@@ -121,7 +142,7 @@ esac
 # The model list, as parallel arrays of slug and declared context. The start
 # model is VENICECODEX_MODEL if set, else the first entry; a start model not in
 # the list is prepended so it is in the catalog too.
-read -r -a ENTRIES <<< "${VENICECODEX_MODELS:-qwen-3-6-plus:300000 gemma-4-uncensored:256000}"
+read -r -a ENTRIES <<< "${VENICECODEX_MODELS:-qwen-3-6-plus:300000 gemma-4-uncensored:256000 olafangensan-glm-4.7-flash-heretic:200000 aion-labs-aion-3-0:128000 venice-uncensored-1-2:128000}"
 [ ${#ENTRIES[@]} -gt 0 ] || { fail "VENICECODEX_MODELS is empty."; exit 1; }
 SLUGS=()
 CTXS=()

@@ -1049,18 +1049,23 @@ and your normal `codex` stays signed in to OpenAI. Requires
 router's `venice` provider.
 
 The generated catalog carries every model in `VENICECODEX_MODELS` (default
-`qwen-3-6-plus:300000 gemma-4-uncensored:256000`, as `slug:context` entries), so
-`/model` inside a session lists all of them and switches mid-session. A session
-starts on the first entry, or on `VENICECODEX_MODEL` (an unlisted slug is added
-with `VENICECODEX_CONTEXT_WINDOW`, default 300k, blank for 1M). Also
-`VENICECODEX_EFFORT` (default `medium`) and `VENICECODEX_BASE_URL`.
+`qwen-3-6-plus:300000 gemma-4-uncensored:256000
+olafangensan-glm-4.7-flash-heretic:200000 aion-labs-aion-3-0:128000
+venice-uncensored-1-2:128000`, as `slug:context` entries), so `/model` inside a
+session lists all of them and switches mid-session. A session starts on the
+first entry, or on `VENICECODEX_MODEL` (an unlisted slug is added with
+`VENICECODEX_CONTEXT_WINDOW`, default 300k, blank for 1M). Also
+`VENICECODEX_EFFORT` (default `medium`) and `VENICECODEX_BASE_URL`. Slugs are
+the API's (`GET /models?type=text`), not the chat URL's: `gemma4-uncensored` in
+the browser is `gemma-4-uncensored` on the wire.
 
-Venice's flagship `venice-uncensored-1-2` is deliberately not in the list: it
+Qwen 3.6 Plus (1M window, unfiltered on Venice) is the default because it
+called tools correctly on the first try. `gemma-4-uncensored` and GLM 4.7 Flash
+Heretic also call tools cleanly; Aion 3.0 calls them but echoes each call as an
+`<uncensored_tool_call>` text block too, which Codex shows as prose. Venice's
+flagship `venice-uncensored-1-2` is in the list so `/model` can reach it, but it
 writes the command it would run as a fenced JSON block instead of emitting a
-function call, so Codex on it does no work. Qwen 3.6 Plus (1M window,
-unfiltered on Venice) is the default because it called tools correctly on the
-first try; `gemma-4-uncensored` also calls tools and is the uncensored-branded
-alternative.
+function call, so Codex on it does no work; it is never the default.
 
 Venice's Responses endpoint accepts `function` tools and nothing else, and
 answers an unknown tool type with a bare 500 that Codex surfaces as
