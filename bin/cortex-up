@@ -222,8 +222,12 @@ spec_hash() {
 SPEC="$(spec_hash "${ARGS[@]}")"
 TIKA_SPEC="$(spec_hash "${TIKA_ARGS[@]}")"
 
+# `docker inspect` prints a bare newline to stdout for a container it cannot
+# find, so the status is squeezed before it is compared to anything.
 state() {
-  docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null || echo "absent"
+  local status
+  status="$(docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null | tr -d '[:space:]')"
+  echo "${status:-absent}"
 }
 current_spec() {
   docker inspect -f '{{index .Config.Labels "cortex.spec"}}' "$1" 2>/dev/null || true
