@@ -176,12 +176,16 @@ headers = { "HTTP-Referer" = "https://opencompany.tinyhumans.ai/", "X-OpenRouter
 # copy of a ladder under a second name is never the answer. The copies were:
 # they drifted from the originals, and a name nobody remembered to copy came
 # back to the caller as `unknown ladder`.
+#
+# `vision-v1` used to be an alias of `flash`, whose models cannot see. It now
+# names the `vision` ladder below, which is what a caller sending an image
+# under that name was asking for.
 
 # The cheap, high-throughput ladder. The multipliers are close together because
 # on this ladder they nearly are: any of these will do, so price decides.
 [[ladders]]
 name = "flash"
-aliases = ["chat-v1", "vision-v1", "flash-v1"]
+aliases = ["chat-v1", "flash-v1"]
 cost_basis = "completion"
 
   # 2026-09-11: OpenRouter rungs moved to the FRONT of this ladder and the
@@ -527,3 +531,240 @@ surface = "embeddings"
   # confusing error, rather than the degraded service a fallback is for. A rung
   # that 422s the request the ladder exists to serve is not redundancy. Add it
   # back if the router ever strips `dimensions` per provider.
+
+
+# The vision ladder: a chat ladder whose every rung can read an image, and
+# whose top rungs can read a video. Nothing about the router is different here
+# — it is the chat surface, ranked and capped like `flash` — the ladder exists
+# so a caller with a picture or a clip to understand names one thing and never
+# lands on a model that answers "I cannot see images".
+#
+# Prices observed live on 2026-09-14, USD per million output tokens, sellers
+# the marketplace reports as available and healthy:
+#
+#   model                 direct    best   median   live   input modalities
+#   gemini-3.8-flash      3.7500  0.0209   0.7500     96   text image video file audio
+#   seed-2-1-turbo        2.5000  0.4750   1.2500     25   text image video
+#   minimax-m3-preview    1.2000  0.2970   0.7200     18   text image video
+#   glm-5.3-flash         0.5000  0.0050   0.1500     79   text image video
+#   qwen3.8-flash         0.4700  0.0047   0.1410      8   text image video
+#   xiaomi-mimo-v2-5      0.2800  0.0840   0.1400     31   text image audio video
+#
+# Gemini carries the high multiplier because it is the one rung that reads
+# every modality, and at a 1.00 ceiling against a 0.75 median it is bought at
+# the going rate rather than waited for — the same trade `max-reasoning`
+# makes. The rest are the step-down: `glm-5.3-flash` is the same rung `flash`
+# carries, and being here as well is what makes a vision request never worse
+# than a text one.
+[[ladders]]
+name = "vision"
+aliases = ["vision-v1", "multimodal-v1"]
+cost_basis = "completion"
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "gemini-3.8-flash"
+  score_multiplier = 4.0
+  max_cost_per_1m = 1.00
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "seed-2-1-turbo"
+  score_multiplier = 2.5
+  max_cost_per_1m = 1.00
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "minimax-m3-preview"
+  score_multiplier = 2.0
+  max_cost_per_1m = 0.60
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "glm-5.3-flash"
+  score_multiplier = 1.0
+  max_cost_per_1m = 0.15
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "qwen3.8-flash"
+  score_multiplier = 1.1
+  max_cost_per_1m = 0.15
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "xiaomi-mimo-v2-5"
+  score_multiplier = 1.2
+  max_cost_per_1m = 0.15
+
+  # Uncapped, for the same reason every other ladder's is: the alternative is
+  # a 502. Bounded by gemini-3.8-flash's 3.75 direct rate.
+  [ladders.fallback]
+  provider = "surplus"
+  model = "gemini-3.8-flash"
+
+
+# The image ladder: prompt in, one square picture out.
+#
+# A different surface again. The request is `POST /v1/images/generations` with
+# a `prompt`, the response is image data, and the model is billed per image —
+# so a rung's ceiling here is `max_cost_per_unit`, in USD per image, and the
+# provider's per-Mtok ceiling above is not inherited. Everything else is the
+# machinery above: the order book is read, the ceiling is restated as a
+# `/min{N}/` discount, a failed rung advances. Surplus is the only provider
+# carrying the surface; a rung elsewhere would decline before the round trip.
+#
+# `request_defaults` is how the ladder is square by policy: a caller who does
+# not say gets `1024x1024`, and one who does keeps what they said.
+#
+# Prices observed live on 2026-09-14, USD per image, sellers the marketplace
+# reports as available and healthy. `venice-flux-2-max` is quoted per
+# megapixel, which at 1024x1024 is 1.05 images.
+#
+#   model                    direct    best   median   live   admitted @ ceiling
+#   venice-gpt-image-2       0.2700  0.0540   0.1485     98   ~50 @ 0.15
+#   venice-flux-2-max/MP     0.1000  0.0054   0.0250    444   ~all @ 0.06
+#   venice-recraft-v4-pro    0.0800  0.0120   0.0480    101   ~50 @ 0.05
+#   venice-grok-imagine-pro  0.0500  0.0100   0.0300     87   ~45 @ 0.03
+#   venice-qwen-image-2-pro  0.0400  0.0100   0.0260     81   ~40 @ 0.03
+#   seedream-4.5             0.0400  0.0004   0.0060    358   ~all @ 0.02
+#
+# The multipliers are wide because the quality gap is: GPT Image 2 at ten
+# times Seedream's price is still the better buy for a prompt that needs text
+# rendered or a scene composed, and Seedream at a tenth of a cent is the right
+# answer for everything that does not.
+[[ladders]]
+name = "image"
+aliases = ["images-v1", "image-v1"]
+surface = "images"
+
+  [ladders.request_defaults]
+  size = "1024x1024"
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "venice-gpt-image-2"
+  score_multiplier = 12.0
+  max_cost_per_unit = 0.15
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "venice-flux-2-max"
+  score_multiplier = 6.0
+  max_cost_per_unit = 0.06
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "venice-recraft-v4-pro"
+  score_multiplier = 5.0
+  max_cost_per_unit = 0.05
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "venice-grok-imagine-pro"
+  score_multiplier = 3.0
+  max_cost_per_unit = 0.03
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "venice-qwen-image-2-pro"
+  score_multiplier = 2.5
+  max_cost_per_unit = 0.03
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "seedream-4.5"
+  score_multiplier = 1.0
+  max_cost_per_unit = 0.02
+
+  # Bounded by seedream-4.5's direct rate of four cents an image.
+  [ladders.fallback]
+  provider = "surplus"
+  model = "seedream-4.5"
+
+
+# The video ladder: prompt in, one square clip out — eventually.
+#
+# Video is a job. `POST /v1/video/generations` answers at once with a
+# `media.job` carrying an `id` and a `status`, and the caller polls
+# `GET /v1/video/generations/{id}` until it is done, or `DELETE`s it to cancel.
+# The router walks the ladder when the job is submitted and relays the poll
+# and the cancel to the provider that took it. Billed per job, so the ceilings
+# are `max_cost_per_unit` in USD per clip, and `aspect_ratio = "1:1"` is how
+# every text-to-video model here spells square (Surplus lists 16:9, 9:16 and
+# 1:1 for each one checked).
+#
+# Prices observed live on 2026-09-14, USD per job, sellers the marketplace
+# reports as available and healthy:
+#
+#   model                          direct    best   median   live
+#   seedance-2-0-text-to-video     0.2500  0.1000   0.1650     43
+#   veo3-1-full-text-to-video      0.5500  0.2200   0.2750     62
+#   kling-o3-pro-text-to-video     0.4500  0.1800   0.2250     64
+#   veo3-1-fast-text-to-video      0.2800  0.1120   0.1400     64
+#   kling-o3-standard-text-to-video 0.2500 0.1000   0.1250     65
+#   wan-2-7-text-to-video          0.1800  0.0720   0.0900     29
+#   venice-seedance-2-fast-t2v     0.0800  0.0280   0.0400     23
+#
+# Seedance 2.0 is the preferred model and carries the top multiplier, so it
+# wins whenever a seller is under its ceiling — which at 0.20 against a 0.165
+# median is most of the time. Veo and Kling are the step-down when it is not,
+# and the fast Seedance at Venice is the floor: same family, a quarter of the
+# price, for a draft. Video sellers are thin — a few dozen per model against
+# a few hundred for chat — so every ceiling here sits at or above its median
+# rather than below it; a video ladder waiting for a discount is a ladder
+# that empties.
+[[ladders]]
+name = "video"
+aliases = ["video-v1"]
+surface = "video"
+
+  [ladders.request_defaults]
+  aspect_ratio = "1:1"
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "seedance-2-0-text-to-video"
+  score_multiplier = 6.0
+  max_cost_per_unit = 0.20
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "veo3-1-full-text-to-video"
+  score_multiplier = 5.0
+  max_cost_per_unit = 0.30
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "kling-o3-pro-text-to-video"
+  score_multiplier = 4.5
+  max_cost_per_unit = 0.25
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "veo3-1-fast-text-to-video"
+  score_multiplier = 3.0
+  max_cost_per_unit = 0.15
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "kling-o3-standard-text-to-video"
+  score_multiplier = 2.5
+  max_cost_per_unit = 0.15
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "wan-2-7-text-to-video"
+  score_multiplier = 1.5
+  max_cost_per_unit = 0.10
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "venice-seedance-2-fast-t2v"
+  score_multiplier = 1.0
+  max_cost_per_unit = 0.05
+
+  # Bounded by seedance-2-0-text-to-video's direct rate of a quarter a clip.
+  [ladders.fallback]
+  provider = "surplus"
+  model = "seedance-2-0-text-to-video"
