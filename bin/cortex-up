@@ -190,12 +190,20 @@ ARGS=(
   --restart always
   --memory "$MEMORY"
   --network "$NETWORK"
-  # How the store reaches the ladder on its own host. Docker Desktop resolves
-  # the name on its own; on Linux this is what makes it resolve at all.
-  --add-host "host.docker.internal:host-gateway"
   -v "$VOLUME:/data"
   --env-file "$ENV_FILE"
 )
+# How the store reaches the ladder on its own host. On Linux the name means
+# nothing until it is added, and it is added as the docker0 IPv4 the router is
+# bound on. NOT `host-gateway`, and nothing at all on Docker Desktop: Desktop's
+# DNS already answers the name with one working IPv4, and `host-gateway` there
+# adds a second, IPv6 entry alongside it that does not route. curl shrugs and
+# uses the v4; the store's HTTP client does not, and every embedding call
+# fails with a bare "error sending request" while the rows sit "kept for
+# retry" forever.
+if [ -n "${DOCKER0:-}" ]; then
+  ARGS+=(--add-host "host.docker.internal:$DOCKER0")
+fi
 for bind in "${BINDS[@]}"; do
   ARGS+=(-p "$bind:$PORT:$PORT")
 done
