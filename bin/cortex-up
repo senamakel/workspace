@@ -346,7 +346,7 @@ while :; do
       fail "store reports degraded: true — check that the ladder on $BIND:6969 is up (ladder-up)"
       exit 1
     fi
-    log "[ok] CORTEX_URL=http://$BIND:$PORT  key: ${CORTEX_API_KEY_SOURCE:-$KEY_FILE or CORTEX_API_KEY in ~/.zshenv}"
+    log "[ok] CORTEX_URL=http://$BIND:$PORT  bearer: CORTEX_API_KEY in ~/.zshenv, else $KEY_FILE"
     exit 0
   fi
   if [ "$SECONDS" -ge "$deadline" ]; then
