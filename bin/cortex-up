@@ -252,6 +252,14 @@ current_spec() {
   docker inspect -f '{{index .Config.Labels "cortex.spec"}}' "$1" 2>/dev/null || true
 }
 
+# A first create pulls too. `docker run` only pulls an image it does not have,
+# and a box that once ran CortexDB by hand has a `:latest` from whenever that
+# was — two boxes were a release behind on their first run for exactly that
+# reason. The cron watchdog still never pulls under a running store.
+if [ "$PULL" -eq 0 ] && [ "$(state "$NAME")" = "absent" ]; then
+  PULL=1
+  FIRST_PULL=1
+fi
 if [ "$PULL" -eq 1 ]; then
   if [ "$CHECK" -eq 1 ]; then
     log "[check] would pull $IMAGE and $TIKA_IMAGE"
@@ -260,7 +268,7 @@ if [ "$PULL" -eq 1 ]; then
     docker pull "$IMAGE" >/dev/null
     log "[pull] $TIKA_IMAGE"
     docker pull "$TIKA_IMAGE" >/dev/null
-    RECREATE=1
+    [ "${FIRST_PULL:-0}" -eq 1 ] || RECREATE=1
   fi
 fi
 
