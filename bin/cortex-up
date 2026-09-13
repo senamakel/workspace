@@ -1,0 +1,358 @@
+#!/usr/bin/env bash
+# cortex-up — make sure this box's CortexDB is up, fully featured, and answering.
+#
+# Usage: cortex-up [--check] [--pull] [--recreate] [--quiet]
+#
+# The memory-store twin of `ladder-up`. Every box runs its own CortexDB on
+# 127.0.0.1:3141, configured from `cortex/cortex.env` in this repository so the
+# store is the same store everywhere — every derived layer on, every model call
+# routed through the box's own ladder — and an agent that lands on any box can
+# capture and recall against a live instance without setting one up first.
+#
+# Idempotent, and safe to run from cron every few minutes: a healthy container
+# is left strictly alone. It starts a stopped one, recreates one whose run
+# arguments or config no longer match what this script would build, and always
+# finishes by asking the store for a real answer over its own API with the
+# real key — a container that is "running" but not serving is not up.
+#
+# Two containers, one private network. `cortex` is the store; `cortex-tika` is
+# Apache Tika, the document parser CortexDB delegates PDF and DOCX to, which is
+# the only shape it accepts for that job. Tika publishes no port and has no
+# route off the host.
+#
+# The config is `docker run --env-file`, copied in at create time: the file's
+# contents are part of the container's spec hash, so an edit to it is a
+# recreate on the next run and there is no installed copy to drift. It holds
+# no secret. The keys come from ~/.zshenv on each box:
+#
+#   LADDER_API_KEY   required — the store's embeddings, extraction, answers
+#   CORTEX_API_KEY   the bearer callers use; generated into
+#                    ~/.config/cortex/api-key on first run if unset
+#   COHERE_API_KEY   optional — turns on the cross-encoder reranker
+#
+# --check reports what it would do and changes nothing.
+# --pull refreshes both images first; the cron watchdog deliberately does not.
+# --recreate forces a rebuild even when the spec matches, which is how a newly
+# exported key reaches the container: docker copies the environment in at
+# create time and a running container never sees a later one.
+#
+# The data volume `cortex-data` is never touched by this script. The corpus
+# carries an embedding-width pin set on first ingest and irreversible after it,
+# so "which volume" is the same question as "which corpus".
+set -euo pipefail
+
+NAME="cortex"
+TIKA_NAME="cortex-tika"
+NETWORK="cortex"
+VOLUME="cortex-data"
+IMAGE="cortexdb/cortexdb:latest"
+TIKA_IMAGE="apache/tika:latest-full"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+ENV_FILE="$REPO_ROOT/cortex/cortex.env"
+KEY_FILE="$HOME/.config/cortex/api-key"
+PORT="3141"
+# Where the probe talks to it, and the address a shell on this box uses.
+BIND="127.0.0.1"
+# Loopback for this box's own processes, and the docker0 gateway so a container
+# on this box can reach it through `host.docker.internal` — the same two
+# addresses and the same reasoning as ladder-up. Not 0.0.0.0: every box is on
+# the tailnet, and this store holds a corpus behind one bearer.
+BINDS=("127.0.0.1")
+if command -v docker >/dev/null 2>&1 && [ "$(uname -s)" = "Linux" ]; then
+  DOCKER0="$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)"
+  [ -n "${DOCKER0:-}" ] && BINDS+=("$DOCKER0")
+fi
+# The store holds HNSW indexes in RAM and evicts chunk vectors to cold storage
+# once enrichment commits, so this is a ceiling on a normally flat curve, not a
+# working set. Tika is a JVM and needs headroom above its heap. Both caps exist
+# for the reason ladder-up's does: a box under memory pressure should kill the
+# workload, not the things every agent on it depends on.
+MEMORY="4g"
+TIKA_MEMORY="2g"
+KEYS=(LADDER_API_KEY CORTEX_API_KEY COHERE_API_KEY)
+
+CHECK=0
+PULL=0
+RECREATE=0
+QUIET=0
+
+log() {
+  [ "$QUIET" -eq 1 ] && return 0
+  printf '%s\n' "$*"
+}
+
+# Always printed, even under --quiet, because cron mail is the only place a
+# failing watchdog gets to speak.
+fail() {
+  printf 'cortex-up: %s\n' "$*" >&2
+}
+
+usage() {
+  sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) CHECK=1 ;;
+    --pull) PULL=1 ;;
+    --recreate) RECREATE=1 ;;
+    --quiet|-q) QUIET=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1"; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# cron gives us almost no PATH and no shell profile, so find docker where the
+# three platforms actually put it before giving up.
+if ! command -v docker >/dev/null 2>&1; then
+  for candidate in /usr/local/bin/docker /opt/homebrew/bin/docker /usr/bin/docker; do
+    [ -x "$candidate" ] && PATH="$(dirname "$candidate"):$PATH" && break
+  done
+fi
+command -v docker >/dev/null 2>&1 || { fail "docker not found on PATH"; exit 1; }
+docker info >/dev/null 2>&1 || { fail "docker daemon is not responding"; exit 1; }
+[ -f "$ENV_FILE" ] || { fail "no config at $ENV_FILE"; exit 1; }
+
+# Read the keys out of ~/.zshenv, the way ladder-up does and for the same
+# reasons: cron does not source it, and zsh has to do the reading because a
+# key may be defined as a command substitution that a line-parser would hand
+# the container literally.
+ZSHENV="$HOME/.zshenv"
+if [ -f "$ZSHENV" ] && command -v zsh >/dev/null 2>&1; then
+  while IFS='=' read -r key value; do
+    [ -n "$key" ] || continue
+    [ -n "${!key:-}" ] && continue
+    [ -n "$value" ] && export "$key=$value"
+  done < <(zsh -fc 'source "$1" >/dev/null 2>&1; for k in '"${KEYS[*]}"'; do print -r -- "$k=${(P)k}"; done' zsh "$ZSHENV" 2>/dev/null || true)
+fi
+
+[ -n "${LADDER_API_KEY:-}" ] || {
+  fail "LADDER_API_KEY is unset; the store could reach the ladder but never authenticate"
+  fail "the symptom is silent: writes 200, nothing embeds, the vector index stays empty"
+  exit 1
+}
+
+# The bearer callers present. It has to be stable across runs — regenerating it
+# would not lose data, but it would lock every caller that had it out — so an
+# unset one is generated once and kept on disk, mode 600, the way a real
+# deployment keeps its credential. ~/.zshenv wins when it has one, so a box
+# that manages the key there stays in charge of it.
+if [ -z "${CORTEX_API_KEY:-}" ] && [ -f "$KEY_FILE" ]; then
+  CORTEX_API_KEY="$(tr -d '[:space:]' < "$KEY_FILE")"
+fi
+if [ -z "${CORTEX_API_KEY:-}" ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    log "[check] would generate a CORTEX_API_KEY into $KEY_FILE"
+    CORTEX_API_KEY="check-only"
+  else
+    if command -v openssl >/dev/null 2>&1; then
+      CORTEX_API_KEY="$(openssl rand -hex 32)"
+    else
+      CORTEX_API_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    fi
+    mkdir -p "$(dirname "$KEY_FILE")"
+    (umask 077 && printf '%s\n' "$CORTEX_API_KEY" > "$KEY_FILE")
+    log "[key] generated CORTEX_API_KEY into $KEY_FILE"
+  fi
+fi
+export CORTEX_API_KEY
+
+# Every role the store calls a model in authenticates with the ladder key. The
+# store has one name per role, which is what lets a deployment split them
+# across providers; here they are all one router, so they are all one key.
+export CORTEX_EMBEDDING_API_KEY="$LADDER_API_KEY"
+export CORTEX_LLM_API_KEY="$LADDER_API_KEY"
+export CORTEX_ENRICHMENT_API_KEY="$LADDER_API_KEY"
+export CORTEX_ANSWER_API_KEY="$LADDER_API_KEY"
+export CORTEX_VERIFIER_API_KEY="$LADDER_API_KEY"
+
+# The image is multi-arch, so no --platform; the daemon pulls its own.
+
+ROLE_KEYS=(CORTEX_API_KEY CORTEX_EMBEDDING_API_KEY CORTEX_LLM_API_KEY
+  CORTEX_ENRICHMENT_API_KEY CORTEX_ANSWER_API_KEY CORTEX_VERIFIER_API_KEY)
+
+ARGS=(
+  --name "$NAME"
+  # `always` rather than `unless-stopped`: this container is infrastructure,
+  # and a stop nobody meant to be permanent should not outlive the next boot.
+  --restart always
+  --memory "$MEMORY"
+  --network "$NETWORK"
+  # How the store reaches the ladder on its own host. Docker Desktop resolves
+  # the name on its own; on Linux this is what makes it resolve at all.
+  --add-host "host.docker.internal:host-gateway"
+  -v "$VOLUME:/data"
+  --env-file "$ENV_FILE"
+)
+for bind in "${BINDS[@]}"; do
+  ARGS+=(-p "$bind:$PORT:$PORT")
+done
+for key in "${ROLE_KEYS[@]}"; do
+  ARGS+=(-e "$key")
+done
+# The reranker is the one feature the env file cannot switch on alone: it
+# needs a Cohere key, which is a second egress path and a per-box decision.
+if [ -n "${COHERE_API_KEY:-}" ]; then
+  ARGS+=(-e "CORTEX_RERANKER_PROVIDER=cohere" -e COHERE_API_KEY)
+fi
+ARGS+=("$IMAGE")
+
+TIKA_ARGS=(
+  --name "$TIKA_NAME"
+  --restart always
+  --memory "$TIKA_MEMORY"
+  --network "$NETWORK"
+  "$TIKA_IMAGE"
+)
+
+# What each container was built from, so a changed port, cap, key set, image
+# or config line is a recreate and an unchanged one is a no-op. The key
+# *values* are not in the hash — rotating a key in place is what --recreate is
+# for. The env file's contents are, because docker copied them in at create
+# time and nothing else would notice an edit.
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA=(sha256sum)
+else
+  SHA=(shasum -a 256)
+fi
+spec_hash() {
+  { printf '%s\n' "$@"; cat "$ENV_FILE"; } | "${SHA[@]}" | cut -c1-16
+}
+SPEC="$(spec_hash "${ARGS[@]}")"
+TIKA_SPEC="$(spec_hash "${TIKA_ARGS[@]}")"
+
+state() {
+  docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null || echo "absent"
+}
+current_spec() {
+  docker inspect -f '{{index .Config.Labels "cortex.spec"}}' "$1" 2>/dev/null || true
+}
+
+if [ "$PULL" -eq 1 ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    log "[check] would pull $IMAGE and $TIKA_IMAGE"
+  else
+    log "[pull] $IMAGE"
+    docker pull "$IMAGE" >/dev/null
+    log "[pull] $TIKA_IMAGE"
+    docker pull "$TIKA_IMAGE" >/dev/null
+    RECREATE=1
+  fi
+fi
+
+if ! docker network inspect "$NETWORK" >/dev/null 2>&1; then
+  if [ "$CHECK" -eq 1 ]; then
+    log "[check] would create network $NETWORK"
+  else
+    log "[network] $NETWORK"
+    docker network create "$NETWORK" >/dev/null
+  fi
+fi
+
+# Decide, then act, for each container. Tika first: the store's document
+# provider is a URL it resolves at request time, so order does not matter for
+# correctness, but a parser that is up before the store makes the first PDF
+# ingest succeed rather than fail-and-say-so.
+decide() {
+  local name="$1" spec="$2" st
+  st="$(state "$name")"
+  if [ "$st" = "absent" ]; then
+    echo "create"
+  elif [ "$RECREATE" -eq 1 ]; then
+    echo "recreate"
+  elif [ "$(current_spec "$name")" != "$spec" ]; then
+    log "[stale] $name: run arguments or config changed since it was created" >&2
+    echo "recreate"
+  elif [ "$st" != "running" ]; then
+    echo "start"
+  else
+    echo "none"
+  fi
+}
+
+act() {
+  local name="$1" action="$2" spec="$3"
+  shift 3
+  if [ "$CHECK" -eq 1 ]; then
+    log "[check] $name is $(state "$name"), would $action"
+    return 0
+  fi
+  case "$action" in
+    create|recreate)
+      [ "$action" = "recreate" ] && docker rm -f "$name" >/dev/null 2>&1 || true
+      log "[$action] $name"
+      docker run -d --label "cortex.spec=$spec" "$@" >/dev/null
+      ;;
+    start)
+      log "[start] $name (was $(state "$name"))"
+      docker start "$name" >/dev/null
+      ;;
+    none)
+      log "[ok] $name is running"
+      ;;
+  esac
+}
+
+TIKA_ACTION="$(decide "$TIKA_NAME" "$TIKA_SPEC")"
+ACTION="$(decide "$NAME" "$SPEC")"
+act "$TIKA_NAME" "$TIKA_ACTION" "$TIKA_SPEC" "${TIKA_ARGS[@]}"
+act "$NAME" "$ACTION" "$SPEC" "${ARGS[@]}"
+
+[ "$CHECK" -eq 1 ] && { [ "$ACTION" != "none" ] || [ "$TIKA_ACTION" != "none" ]; } && exit 0
+
+# Health. `/v1/admin/ready` is public and answers 503 until storage is actually
+# open, which is the half a `running` state cannot tell you. It says nothing
+# about the key, so the second probe is an authenticated call: `/v1/recall`
+# with an empty body is rejected for auth before it is rejected for shape, so
+# the reply separates "alive and the key is right" (a 4xx that is not 401)
+# from "alive and the key is wrong" (401) without touching the corpus.
+ready() {
+  curl -s -m 5 -o /dev/null -w '%{http_code}' \
+    "http://$BIND:$PORT/v1/admin/ready" 2>/dev/null || true
+}
+authed() {
+  curl -s -m 5 -o /dev/null -w '%{http_code}' \
+    -X POST "http://$BIND:$PORT/v1/recall" \
+    -H "Authorization: Bearer $CORTEX_API_KEY" \
+    -H 'content-type: application/json' \
+    -d '{}' 2>/dev/null || true
+}
+
+deadline=$((SECONDS + 90))
+while :; do
+  code="$(ready)"
+  if [ "$code" = "200" ]; then
+    auth="$(authed)"
+    case "$auth" in
+      401)
+        fail "store is up but rejected CORTEX_API_KEY; the container was created with another key — try: cortex-up --recreate"
+        exit 1
+        ;;
+      4*)
+        log "[ok] cortex answering on $BIND:$PORT (key accepted)"
+        ;;
+      *)
+        fail "store is ready but the authenticated probe returned ${auth:-nothing}"
+        exit 1
+        ;;
+    esac
+    # `degraded` is the store's own verdict on its providers: true when the
+    # ladder is unreachable or a model role cannot answer. Worth a line, since
+    # the writes it accepts in that state are the ones that never embed.
+    degraded="$(curl -s -m 5 "http://$BIND:$PORT/v1/admin/ready" 2>/dev/null \
+      | sed -n 's/.*"degraded":\([a-z]*\).*/\1/p')"
+    if [ "$degraded" = "true" ]; then
+      fail "store reports degraded: true — check that the ladder on $BIND:6969 is up (ladder-up)"
+      exit 1
+    fi
+    log "[ok] CORTEX_URL=http://$BIND:$PORT  key: ${CORTEX_API_KEY_SOURCE:-$KEY_FILE or CORTEX_API_KEY in ~/.zshenv}"
+    exit 0
+  fi
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    fail "store did not report ready within 90s (last status: ${code:-none})"
+    docker logs --tail 20 "$NAME" >&2 2>&1 || true
+    exit 1
+  fi
+  sleep 2
+done
