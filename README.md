@@ -697,6 +697,33 @@ tune-box --clean-targets                    # delete this checkout's stale targe
 tune-box --root ~/work --clean-targets      # every checkout on the box
 ```
 
+### `cortex-up [--check] [--pull] [--recreate] [--quiet]`
+
+Keeps this box's shared CortexDB up on `127.0.0.1:3141`, the way `ladder-up`
+keeps the LLM router up: idempotent and cron-safe, it starts a stopped
+container, recreates one whose run arguments or config changed, and finishes
+with a real authenticated probe, because a container that is `running` but not
+serving is not up. It runs Apache Tika beside the store as `cortex-tika` on a
+private docker network, which is the only shape CortexDB accepts for PDF and
+DOCX.
+
+The config is `cortex/cortex.env` in this repository, so every box runs the
+same store with **every feature on** — enrichment, the synthesis scheduler,
+the entity graph, bitemporal facts, artifacts, the code plane, documents, and
+`/v1/answer` — with every model call routed through the box's own ladder. The
+file holds no secret; `LADDER_API_KEY` comes from `~/.zshenv`, and the bearer
+callers present is `CORTEX_API_KEY` there or, failing that, one generated once
+into `~/.config/cortex/api-key`. Data lives in the docker volume `cortex-data`,
+which the script never removes: the embedding width is pinned on first ingest,
+so the volume *is* the corpus.
+
+```sh
+cortex-up --check      # report, change nothing
+cortex-up              # ensure up and answering
+cortex-up --pull       # move to a new CortexDB / Tika image
+cortex-up --recreate   # after exporting a new key
+```
+
 ### `pr-list [--json] [--limit <count>] [--include-drafts] [-R|--repo <owner/name>]`
 
 Lists open pull requests for the current repository, preferring its
