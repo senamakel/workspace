@@ -16,6 +16,8 @@ There is no compilation step or centralized test suite. Validate the part you ch
   contribution queue.
 - `bin/ladder-up --check` reports whether this box's LLM router container is
   running and what it would change, without touching it.
+- `bin/cortex-up --check` does the same for this box's CortexDB and its Tika
+  sidecar.
 - `tests/open-source-state.sh` and `tests/open-source-agent.sh` exercise the
   open-source pipeline state and launcher.
 - `tests/worktree-clean.sh` exercises worktree reclamation against a throwaway
@@ -117,6 +119,94 @@ session. It runs the same command from a launchd agent instead,
 `~/Library/LaunchAgents/ai.tinyhumans.ladder-up.plist`, with `StartInterval`
 300 and `RunAtLoad`. Check it with
 `launchctl print gui/$(id -u)/ai.tinyhumans.ladder-up`.
+
+## The Memory Store
+
+Every box also runs its own CortexDB on `127.0.0.1:3141`, the ladder's twin:
+one shared corpus per box that any agent landing there can capture into and
+recall from without setting a store up first. `bin/cortex-up` keeps it up the
+way `ladder-up` keeps the router up — idempotent, cron-safe, `--check`,
+`--pull`, `--recreate`, and a real authenticated probe at the end — and runs
+Apache Tika beside it as `cortex-tika` on a private docker network, because
+that is the only shape CortexDB accepts for parsing PDF and DOCX.
+
+### Every feature is on, and the config is this repository's
+
+`cortex/cortex.env` is the fleet's store config, passed to `docker run
+--env-file`. A fresh CortexDB is deliberately vector-only — no entity graph, no
+facts, no enrichment, no episodes or beliefs, no artifacts, no code plane, no
+documents — and every layer beyond that is its own opt-in switch. The env file
+turns on every one the fleet can serve: enrichment on a 60s WAL scan, the
+synthesis scheduler, the entity graph with grounding and multi-hop joins,
+bitemporal facts in `enforce`, the artifact pipeline, the code plane, Tika
+documents, and `/v1/answer` with its verifier. The one it cannot is the
+cross-encoder reranker, which needs Cohere or a local model the image does not
+ship; `cortex-up` switches it on when `COHERE_API_KEY` is exported on a box.
+
+Every model call the store makes goes through the box's own ladder — `vectors`
+for embeddings, `flash` for extraction and enrichment, `reasoning` for the
+answer writer and verifier — so there is one egress path and one set of
+provider keys, and the names mean the same on every box because
+`ladder/config.toml` is the same file everywhere. That also means the store is
+only as up as the ladder: `cortex-up` fails when `/v1/admin/ready` reports
+`degraded: true`, and says which check.
+
+The env file holds **no secret**. `cortex-up` adds the keys from `~/.zshenv`:
+`LADDER_API_KEY` (required, and passed under every name the binary reads for
+the embedding, entity, enrichment, answer and verifier lanes — including the
+generic `OPENAI_API_KEY`/`LLM_API_KEY`, without which v0.9.9 does not fail but
+silently falls back to mock embeddings and pins the volume to them),
+`CORTEX_API_KEY` (the bearer callers present; generated once into
+`~/.config/cortex/api-key` if `~/.zshenv` has none), and `COHERE_API_KEY`
+(optional). Docker copies the environment in at create time, so a changed key
+needs `--recreate`; a changed env file does not, because its contents are part
+of the container's spec hash and the next run recreates on its own.
+
+### The corpus is the volume
+
+Data lives in the named docker volume `cortex-data`, which `cortex-up` never
+removes. The embedding width — 1024, what the ladder's `vectors` returns — and
+the provider are pinned on first ingest and rejected forever after, so "which
+volume" is the same question as "which corpus". A store that ever started
+without a usable ladder key is pinned to `mock::1024` for good; `cortex-up`
+refuses that state and prints the `docker volume rm` that starts over, which
+is only correct while the volume holds nothing worth keeping.
+
+To use it from a shell on the box:
+
+```sh
+export CORTEX_URL=http://127.0.0.1:3141
+export CORTEX_API_KEY="$(cat ~/.config/cortex/api-key)"   # or from ~/.zshenv
+curl -s "$CORTEX_URL/v1/admin/ready"                       # public
+curl -s -X POST "$CORTEX_URL/v1/recall" -H "Authorization: Bearer $CORTEX_API_KEY" \
+  -H 'content-type: application/json' -d '{"scope":"ws:demo","query":"..."}'
+```
+
+From a container on the box, `http://host.docker.internal:3141` on Docker
+Desktop, and the docker0 address on Linux, where the port is also published.
+
+### Keeping it up
+
+The same watchdog as the router, in the same cron line on the Linux boxes:
+
+```cron
+*/5 * * * * $HOME/work/workspace/bin/cortex-up --quiet >> $HOME/.cache/cortex-up.log 2>&1
+```
+
+and on mac-mini a launchd agent,
+`~/Library/LaunchAgents/ai.tinyhumans.cortex-up.plist`, `StartInterval` 300
+and `RunAtLoad`. `cortex-up --pull` moves a box to a new CortexDB or Tika
+image; run it after `./sync.sh` when `cortex/cortex.env` starts using a switch
+the running image does not know.
+
+One networking detail worth knowing, because its failure is silent. The store
+reaches the ladder as `host.docker.internal`. On Linux `cortex-up` adds that
+name as the docker0 IPv4 the router binds on. On Docker Desktop it adds
+nothing, because Desktop's DNS already resolves the name to one working IPv4
+and `--add-host host.docker.internal:host-gateway` there adds an IPv6 entry
+beside it that does not route — `curl` shrugs and uses the v4, the store's
+HTTP client does not, and every embedding call fails with a bare "error
+sending request" while the rows sit "kept for retry".
 
 ## Syncing Remote Workspaces
 
