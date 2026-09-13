@@ -319,6 +319,22 @@ act() {
 
 TIKA_ACTION="$(decide "$TIKA_NAME" "$TIKA_SPEC")"
 ACTION="$(decide "$NAME" "$SPEC")"
+
+# Something else on the port is not this script's to evict. A hand-run or a
+# scratch CortexDB from another session on 3141 — it has happened — would make
+# the create below fail with docker's "port is already allocated", which
+# names nothing. Name it, and leave it alone.
+if [ "$ACTION" != "none" ]; then
+  occupant="$(docker ps --filter "publish=$PORT" --format '{{.Names}}' | grep -vx "$NAME" || true)"
+  if [ -n "$occupant" ]; then
+    fail "port $PORT is published by another container ($occupant); not touching it"
+    fail "stop or move it, then run cortex-up again"
+    # A container this script created but could never start is removed so the
+    # next run is a clean create rather than a start that fails the same way.
+    [ "$(state "$NAME")" = "created" ] && docker rm -f "$NAME" >/dev/null 2>&1 || true
+    exit 1
+  fi
+fi
 act "$TIKA_NAME" "$TIKA_ACTION" "$TIKA_SPEC" "${TIKA_ARGS[@]}"
 act "$NAME" "$ACTION" "$SPEC" "${ARGS[@]}"
 
