@@ -161,6 +161,16 @@ export CORTEX_API_KEY
 # Every role the store calls a model in authenticates with the ladder key. The
 # store has one name per role, which is what lets a deployment split them
 # across providers; here they are all one router, so they are all one key.
+#
+# The generic names are not optional. v0.9.9 decides the *embedding* lane on
+# OPENAI_API_KEY / LLM_API_KEY and the *entity* lane on CORTEX_ENTITY_API_KEY,
+# whatever the role-specific names say, and with those unset it does not fail:
+# it logs one WARN, falls back to mock embeddings, and pins the data directory
+# to `mock::1024` — a pin that is permanent for that volume. The probe at the
+# bottom refuses that state, but the keys are what prevent it.
+export OPENAI_API_KEY="$LADDER_API_KEY"
+export LLM_API_KEY="$LADDER_API_KEY"
+export CORTEX_ENTITY_API_KEY="$LADDER_API_KEY"
 export CORTEX_EMBEDDING_API_KEY="$LADDER_API_KEY"
 export CORTEX_LLM_API_KEY="$LADDER_API_KEY"
 export CORTEX_ENRICHMENT_API_KEY="$LADDER_API_KEY"
@@ -169,8 +179,9 @@ export CORTEX_VERIFIER_API_KEY="$LADDER_API_KEY"
 
 # The image is multi-arch, so no --platform; the daemon pulls its own.
 
-ROLE_KEYS=(CORTEX_API_KEY CORTEX_EMBEDDING_API_KEY CORTEX_LLM_API_KEY
-  CORTEX_ENRICHMENT_API_KEY CORTEX_ANSWER_API_KEY CORTEX_VERIFIER_API_KEY)
+ROLE_KEYS=(CORTEX_API_KEY OPENAI_API_KEY LLM_API_KEY CORTEX_ENTITY_API_KEY
+  CORTEX_EMBEDDING_API_KEY CORTEX_LLM_API_KEY CORTEX_ENRICHMENT_API_KEY
+  CORTEX_ANSWER_API_KEY CORTEX_VERIFIER_API_KEY)
 
 ARGS=(
   --name "$NAME"
@@ -341,13 +352,27 @@ while :; do
         exit 1
         ;;
     esac
-    # `degraded` is the store's own verdict on its providers: true when the
-    # ladder is unreachable or a model role cannot answer. Worth a line, since
-    # the writes it accepts in that state are the ones that never embed.
-    degraded="$(curl -s -m 5 "http://$BIND:$PORT/v1/admin/ready" 2>/dev/null \
-      | sed -n 's/.*"degraded":\([a-z]*\).*/\1/p')"
+    # The store's own verdict on its providers. `embedding_provider` is the
+    # pin the data directory carries; `mock::` there means the store never
+    # found a key and every vector it has written is noise, permanently for
+    # that volume. `degraded` is the live view: true when the ladder is
+    # unreachable or a role cannot answer, and the writes it accepts in that
+    # state are the ones that never embed.
+    ready_json="$(curl -s -m 5 "http://$BIND:$PORT/v1/admin/ready" 2>/dev/null || true)"
+    pin="$(printf '%s' "$ready_json" | sed -n 's/.*"embedding_provider":"\([^"]*\)".*/\1/p')"
+    degraded="$(printf '%s' "$ready_json" | sed -n 's/.*"degraded":\([a-z]*\).*/\1/p')"
+    case "$pin" in
+      mock::*)
+        fail "store is pinned to MOCK embeddings ($pin): it started without a usable ladder key"
+        fail "the pin is permanent for volume $VOLUME; if it holds nothing worth keeping:"
+        fail "  docker rm -f $NAME && docker volume rm $VOLUME && cortex-up"
+        exit 1
+        ;;
+    esac
     if [ "$degraded" = "true" ]; then
-      fail "store reports degraded: true — check that the ladder on $BIND:6969 is up (ladder-up)"
+      detail="$(printf '%s' "$ready_json" | sed -n 's/.*"embeddings":{[^}]*"detail":"\([^"]*\)".*/\1/p')"
+      fail "store reports degraded: true${detail:+ — $detail}"
+      fail "check that the ladder on $BIND:6969 is up and serving \`vectors\` (ladder-up)"
       exit 1
     fi
     log "[ok] CORTEX_URL=http://$BIND:$PORT  bearer: CORTEX_API_KEY in ~/.zshenv, else $KEY_FILE"
