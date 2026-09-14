@@ -641,6 +641,15 @@ surface = "images"
   [ladders.request_defaults]
   size = "1024x1024"
 
+  # Rungs re-checked live on 2026-09-14: `venice-recraft-v4-pro`,
+  # `venice-grok-imagine-pro` and `venice-qwen-image-2-pro` are still in
+  # `/v1/models` but the generation route answers "is not a valid model ID"
+  # for each, so they are gone from here; the router now parks a rung that
+  # says that, but a rung that is always parked is only a wasted round trip
+  # a day. `venice-hunyuan-image-v3` served on the same run at $0.0025 an
+  # image, and `gemini-2.5-flash-image` served through an OpenRouter seller,
+  # quoted per token rather than per image, which is why it sits uncapped as
+  # the fallback rather than on the priced ladder.
   [[ladders.rungs]]
   provider = "surplus"
   model = "venice-gpt-image-2"
@@ -655,21 +664,15 @@ surface = "images"
 
   [[ladders.rungs]]
   provider = "surplus"
-  model = "venice-recraft-v4-pro"
-  score_multiplier = 5.0
-  max_cost_per_unit = 0.05
-
-  [[ladders.rungs]]
-  provider = "surplus"
-  model = "venice-grok-imagine-pro"
+  model = "flux.2-flex"
   score_multiplier = 3.0
   max_cost_per_unit = 0.03
 
   [[ladders.rungs]]
   provider = "surplus"
-  model = "venice-qwen-image-2-pro"
-  score_multiplier = 2.5
-  max_cost_per_unit = 0.03
+  model = "venice-hunyuan-image-v3"
+  score_multiplier = 2.0
+  max_cost_per_unit = 0.02
 
   [[ladders.rungs]]
   provider = "surplus"
@@ -677,10 +680,18 @@ surface = "images"
   score_multiplier = 1.0
   max_cost_per_unit = 0.02
 
-  # Bounded by seedream-4.5's direct rate of four cents an image.
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "flux.2-klein-4b"
+  score_multiplier = 0.8
+  max_cost_per_unit = 0.01
+
+  # Unpriced by the unit, so it ranks behind every rung above and is only
+  # reached when all of them are out; served on 2026-09-14 when none of the
+  # capped rungs would.
   [ladders.fallback]
   provider = "surplus"
-  model = "seedream-4.5"
+  model = "gemini-2.5-flash-image"
 
 
 # The video ladder: prompt in, one square clip out — eventually.
@@ -722,6 +733,14 @@ surface = "video"
   [ladders.request_defaults]
   aspect_ratio = "1:1"
 
+  # Re-checked live on 2026-09-14. The two `veo3-1-*` rungs are gone: Veo
+  # renders 16:9 and 9:16 only and answers a square request with a 400, which
+  # the router now steps past, but a rung that declines every request this
+  # ladder makes is a round trip for nothing. `kling-o3-standard` and
+  # `wan-2-7` rendered a clip in one to two minutes; `seedance-2-0` was taken
+  # by a seller and then failed on the render; `venice-seedance-2-fast` was
+  # accepted and failed with `provider_unavailable` on every job.
+
   [[ladders.rungs]]
   provider = "surplus"
   model = "seedance-2-0-text-to-video"
@@ -730,21 +749,9 @@ surface = "video"
 
   [[ladders.rungs]]
   provider = "surplus"
-  model = "veo3-1-full-text-to-video"
-  score_multiplier = 5.0
-  max_cost_per_unit = 0.30
-
-  [[ladders.rungs]]
-  provider = "surplus"
   model = "kling-o3-pro-text-to-video"
   score_multiplier = 4.5
   max_cost_per_unit = 0.25
-
-  [[ladders.rungs]]
-  provider = "surplus"
-  model = "veo3-1-fast-text-to-video"
-  score_multiplier = 3.0
-  max_cost_per_unit = 0.15
 
   [[ladders.rungs]]
   provider = "surplus"
@@ -764,7 +771,7 @@ surface = "video"
   score_multiplier = 1.0
   max_cost_per_unit = 0.05
 
-  # Bounded by seedance-2-0-text-to-video's direct rate of a quarter a clip.
+  # The rung that actually rendered on 2026-09-14, uncapped as the last resort.
   [ladders.fallback]
   provider = "surplus"
-  model = "seedance-2-0-text-to-video"
+  model = "kling-o3-standard-text-to-video"
