@@ -418,6 +418,33 @@ cost_basis = "completion"
 # nothing", which for a role whose output is checked by a kernel is the right
 # answer. A ceiling here would be refused at load time.
 [[ladders]]
+name = "deep"
+aliases = ["luna"]
+cost_basis = "completion"
+# The tier tinysweeper reads logic with, and the one ladder here that is a
+# single model on a single marketplace on purpose. Measured 2026-09-15 on a
+# 58-file pull request with two boundary bugs (tinysweeper#157): luna on
+# surplus found one of the two on every run, and was the only model to reach
+# the second at all, at a thirteenth of gpt-5.3-codex's price. The caller is
+# an offline-replayable review with its own budget ceiling and its own model
+# ladder behind this one, so a 502 here is a step down there, not an ending.
+#
+# No rung ceiling: luna's cheapest seller sits around 0.07 against the 1.00
+# provider backstop, which is the only cap that applies. The fallback is the
+# same model on the same marketplace with no price filter at all, so when
+# every seller under the backstop is gone the request still goes out rather
+# than to a different, cheaper model.
+
+  [[ladders.rungs]]
+  provider = "surplus"
+  model = "gpt-5.6-luna"
+  score_multiplier = 1.0
+
+  [ladders.fallback]
+  provider = "surplus"
+  model = "gpt-5.6-luna"
+
+[[ladders]]
 name = "scribe"
 
   [[ladders.rungs]]
