@@ -122,6 +122,19 @@ fire_codex_working_dir() {
        "$COMMAND" --hook 2>&1)
 }
 
+# Codex documents `cwd` as a common hook field, but the fallback must remain
+# safe for hook runners that omit it: their process directory is the session
+# checkout, so leave it untouched rather than guessing from a patch body.
+fire_codex_without_cwd() {
+  local repo="$1" state="$2" stub="${3:-}"
+  jq -n --arg s "session-fixed" \
+    '{session_id: $s, hook_event_name: "PostToolUse", tool_name: "apply_patch",
+      tool_input: {command: "*** Begin Patch"}, tool_response: {}}' \
+    | (cd "$repo" && AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$state" \
+       AUTO_COMMIT_LOG="${AUTO_COMMIT_LOG:-$TEST_ROOT/unread.log}" \
+       "$COMMAND" --hook 2>&1)
+}
+
 # Feeds an event whose tool ran in a different checkout from the harness cwd.
 fire_from() {
   local launch_repo="$1" work_repo="$2" state="$3" stub="${4:-}"
@@ -220,6 +233,22 @@ test_commits_the_codex_working_dir_not_the_session_cwd() {
     "the linked worktree is clean afterwards"
   assert_eq 1 "$(count_commits "$launch_repo")" \
     "the session checkout remains untouched"
+}
+
+test_codex_without_cwd_uses_the_hook_working_directory() {
+  local repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  repo="$(make_repo codex-no-cwd)"
+  state="$(state_dir codex-no-cwd)"
+  stub="$(make_stub codexnocwd "chore: checkpoint the Codex session checkout")"
+  printf 'session checkout change\n' > "$repo/new.txt"
+
+  AUTO_COMMIT_EVERY=1 fire_codex_without_cwd "$repo" "$state" "$stub" >/dev/null
+
+  assert_eq 2 "$(count_commits "$repo")" \
+    "the hook process checkout is committed without an event cwd"
+  assert_eq "" "$(git -C "$repo" status --porcelain)" \
+    "the checkout is clean afterwards"
 }
 
 test_commits_only_every_nth_tool_call() {
@@ -944,6 +973,7 @@ test_commits_only_in_allowlisted_repositories() {
   for url in \
     git@github.com:tinyhumansai/medulla-v1.git \
     git@github.com:tinyhumansai/medulla-backend.git \
+    git@github.com:tinyhumansai/backend.git \
     git@github.com:someone-else/openhuman.git \
     git@github.com:senamakel/math-superagent.git
   do
@@ -966,11 +996,9 @@ test_commits_only_in_allowlisted_repositories() {
   for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla tinyhumansai/rust-template \
               tinyhumansai/tinyagents tinyhumansai/tinybus tinyhumansai/tinychannels tinyhumansai/tinycortex tinyhumansai/tinydesktop \
               tinyhumansai/tinybox tinyhumansai/tinydocs tinyhumansai/tinyfinance tinyhumansai/tinyflows tinyhumansai/tinyhosts tinyhumansai/tinyjevclient tinyhumansai/tinymemory tinyhumansai/tinyruntime tinyhumansai/tinysweeper tinyhumansai/tinytools tinyhumansai/tinyvoice tinyhumansai/tinywallet tinyhumansai/teeny-discord \
-              tinyhumansai/backend tinyhumansai/dashboard tinyhumansai/workflow-opencompany \
               senamakel/openhuman senamakel/opencompany senamakel/fomotrader senamakel/medulla senamakel/riemann senamakel/rust-template \
               senamakel/llm-ladder-router senamakel/tinyagents senamakel/tinybus senamakel/tinychannels senamakel/tinycortex senamakel/tinydesktop \
-              senamakel/tinydocs senamakel/tinymemory senamakel/tinyruntime senamakel/tinysweeper senamakel/tinywallet \
-              senamakel/backend senamakel/dashboard senamakel/workflow-opencompany; do
+              senamakel/tinydocs senamakel/tinymemory senamakel/tinyruntime senamakel/tinysweeper senamakel/tinywallet; do
     git -C "$repo" remote add origin "git@github.com:$slug.git"
     AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
     assert_eq "$((n + 1))" "$(count_commits "$repo")" "$slug is allowlisted"
@@ -1289,6 +1317,7 @@ run_test "commits on every tool call by default" test_commits_on_every_tool_call
 run_test "commits the tool worktree instead of the launch checkout" test_commits_the_tool_worktree_not_the_launch_checkout
 run_test "commits the codex workdir instead of the session cwd" test_commits_the_codex_workdir_not_the_session_cwd
 run_test "commits the Codex working_dir instead of the session cwd" test_commits_the_codex_working_dir_not_the_session_cwd
+run_test "Codex without cwd uses the hook working directory" test_codex_without_cwd_uses_the_hook_working_directory
 run_test "commits only every Nth tool call when configured" test_commits_only_every_nth_tool_call
 run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim

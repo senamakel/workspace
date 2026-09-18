@@ -409,24 +409,12 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # the safe one: those repositories' contents are already readable by anyone, so
 # sending a diff to a model gives away nothing that was not already given away.
 #
-# Four private repositories were added deliberately on 2026-08-27, at the
-# owner's request, because they are worked on daily and going uncheckpointed was
-# the bigger loss: `medulla-src` (both twins), `prmptcash-core`, and — for
-# symmetry with the checkout it is a submodule of — the public `prmpt.click` and
-# `prmpt.cash`. Adding a private repository is a real trade: its diff now leaves
-# the machine for the message-writing model on every checkpoint, so add one only
-# with that understood, and never a client's or a third party's code.
-#
-# `senamakel/math-agent` was added on 2026-08-30, on the same terms: it is
-# private, so its diff now leaves the machine on every checkpoint.
-#
-# Still deliberately absent: `medulla-v1`, `medulla-v2`, the other private
-# backends and security-advisory forks, and the forks of third-party projects
-# (`tauri-cef`, `homebrew-core` and the rest), which carry somebody else's code
-# and belong to their upstream's review, not to a checkpoint. The active
-# `workflow-opencompany` superproject, its `backend` and `dashboard`
-# submodules, are included below at the owner's request: Codex routinely works
-# inside their linked worktrees.
+# Private repositories are never allowlisted. A checkpoint sends a diff to the
+# message-writing model, so only public source is eligible by default. That
+# excludes private backends, workflow superprojects, `medulla-src`,
+# `prmptcash-core`, `math-agent`, and security-advisory forks. Forks of
+# third-party projects (`tauri-cef`, `homebrew-core` and the rest) are excluded
+# too: their upstream, not this hook, owns their review history.
 #
 # Refresh it with:
 #   gh repo list tinyhumansai --limit 200 --no-archived --source \
@@ -444,24 +432,24 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # checkpoint, not the record. Commit that repository by hand.
 ALLOWED_REPOS="${AUTO_COMMIT_REPOS:-\
 tinyhumansai/.github:tinyhumansai/constitution:tinyhumansai/mascots:tinyhumansai/medulla:\
-tinyhumansai/medulla-src:tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
+tinyhumansai/opencompany:tinyhumansai/openhuman:tinyhumansai/portal:tinyhumansai/sdk:tinyhumansai/skill-registry:\
 tinyhumansai/rust-template:\
 tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinyanalyzer:tinyhumansai/tinybrowser:tinyhumansai/tinybus:tinyhumansai/tinychannels:tinyhumansai/tinyconnectors:\
 tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyhivemind:tinyhumansai/tinyinference:tinyhumansai/tinyjuice:tinyhumansai/tinyloops:\
 tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinyteams:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/tinyfinance:tinyhumansai/tinyjevclient:tinyhumansai/tinytools:tinyhumansai/teeny-discord:\
-tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:tinyhumansai/backend:tinyhumansai/dashboard:tinyhumansai/workflow-opencompany:\
-senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/fomotrader:senamakel/mascots:senamakel/math-agent:senamakel/medulla:\
-senamakel/llm-ladder-router:senamakel/medulla-src:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
+tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
+senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/fomotrader:senamakel/mascots:senamakel/medulla:\
+senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
-senamakel/prmptcash-core:senamakel/prmpt.click:senamakel/prmpt.cash:\
+senamakel/prmpt.click:senamakel/prmpt.cash:\
 senamakel/tiny-cortexdb-mathagent:senamakel/tiny.place:senamakel/tinyagents:senamakel/tinyanalyzer:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:senamakel/tinyconnectors:\
 senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
 senamakel/tinyhivemind:senamakel/tinyinference:senamakel/tinyjuice:senamakel/tinyloops:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
 senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyteams:senamakel/tinyvoice:senamakel/tinywallet:\
-senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace:senamakel/backend:senamakel/dashboard:senamakel/workflow-opencompany}"
+senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
 # git@host:owner/repo.git, https://host/owner/repo, ssh://git@host/owner/repo/
