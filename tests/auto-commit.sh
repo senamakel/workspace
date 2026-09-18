@@ -965,10 +965,12 @@ test_commits_only_in_allowlisted_repositories() {
   local slug n=1
   for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla tinyhumansai/rust-template \
               tinyhumansai/tinyagents tinyhumansai/tinybus tinyhumansai/tinychannels tinyhumansai/tinycortex tinyhumansai/tinydesktop \
-              tinyhumansai/tinybox tinyhumansai/tinydocs tinyhumansai/tinyflows tinyhumansai/tinyhosts tinyhumansai/tinymemory tinyhumansai/tinyruntime tinyhumansai/tinysweeper tinyhumansai/tinyvoice tinyhumansai/tinywallet \
+              tinyhumansai/tinybox tinyhumansai/tinydocs tinyhumansai/tinyfinance tinyhumansai/tinyflows tinyhumansai/tinyhosts tinyhumansai/tinyjevclient tinyhumansai/tinymemory tinyhumansai/tinyruntime tinyhumansai/tinysweeper tinyhumansai/tinytools tinyhumansai/tinyvoice tinyhumansai/tinywallet tinyhumansai/teeny-discord \
+              tinyhumansai/backend tinyhumansai/dashboard tinyhumansai/workflow-opencompany \
               senamakel/openhuman senamakel/opencompany senamakel/fomotrader senamakel/medulla senamakel/riemann senamakel/rust-template \
               senamakel/llm-ladder-router senamakel/tinyagents senamakel/tinybus senamakel/tinychannels senamakel/tinycortex senamakel/tinydesktop \
-              senamakel/tinydocs senamakel/tinyflows senamakel/tinymemory senamakel/tinyruntime senamakel/tinysweeper senamakel/tinywallet; do
+              senamakel/tinydocs senamakel/tinymemory senamakel/tinyruntime senamakel/tinysweeper senamakel/tinywallet \
+              senamakel/backend senamakel/dashboard senamakel/workflow-opencompany; do
     git -C "$repo" remote add origin "git@github.com:$slug.git"
     AUTO_COMMIT_EVERY=1 fire "$repo" "$state" "$stub" >/dev/null
     assert_eq "$((n + 1))" "$(count_commits "$repo")" "$slug is allowlisted"
