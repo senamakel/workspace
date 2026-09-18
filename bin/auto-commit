@@ -440,11 +440,11 @@ tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumans
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinyteams:tinyhumansai/tinywallet:\
 tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/tinyfinance:tinyhumansai/tinyjevclient:tinyhumansai/tinytools:tinyhumansai/teeny-discord:\
 tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
-senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/fomotrader:senamakel/mascots:senamakel/medulla:\
+senamakel/.github:senamakel/constitution:senamakel/mascots:senamakel/medulla:\
 senamakel/llm-ladder-router:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
 senamakel/prmpt.click:senamakel/prmpt.cash:\
-senamakel/tiny-cortexdb-mathagent:senamakel/tiny.place:senamakel/tinyagents:senamakel/tinyanalyzer:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:senamakel/tinyconnectors:\
+senamakel/tiny.place:senamakel/tinyagents:senamakel/tinyanalyzer:senamakel/tinybrowser:senamakel/tinybus:senamakel/tinychannels:senamakel/tinyconnectors:\
 senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:senamakel/tinyflows:senamakel/tinyhosts:\
 senamakel/tinyhivemind:senamakel/tinyinference:senamakel/tinyjuice:senamakel/tinyloops:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\

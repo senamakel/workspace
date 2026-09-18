@@ -974,6 +974,7 @@ test_commits_only_in_allowlisted_repositories() {
     git@github.com:tinyhumansai/medulla-v1.git \
     git@github.com:tinyhumansai/medulla-backend.git \
     git@github.com:tinyhumansai/backend.git \
+    git@github.com:senamakel/fomotrader.git \
     git@github.com:someone-else/openhuman.git \
     git@github.com:senamakel/math-superagent.git
   do
@@ -996,7 +997,7 @@ test_commits_only_in_allowlisted_repositories() {
   for slug in tinyhumansai/openhuman tinyhumansai/opencompany tinyhumansai/medulla tinyhumansai/rust-template \
               tinyhumansai/tinyagents tinyhumansai/tinybus tinyhumansai/tinychannels tinyhumansai/tinycortex tinyhumansai/tinydesktop \
               tinyhumansai/tinybox tinyhumansai/tinydocs tinyhumansai/tinyfinance tinyhumansai/tinyflows tinyhumansai/tinyhosts tinyhumansai/tinyjevclient tinyhumansai/tinymemory tinyhumansai/tinyruntime tinyhumansai/tinysweeper tinyhumansai/tinytools tinyhumansai/tinyvoice tinyhumansai/tinywallet tinyhumansai/teeny-discord \
-              senamakel/openhuman senamakel/opencompany senamakel/fomotrader senamakel/medulla senamakel/riemann senamakel/rust-template \
+              senamakel/openhuman senamakel/opencompany senamakel/medulla senamakel/riemann senamakel/rust-template \
               senamakel/llm-ladder-router senamakel/tinyagents senamakel/tinybus senamakel/tinychannels senamakel/tinycortex senamakel/tinydesktop \
               senamakel/tinydocs senamakel/tinymemory senamakel/tinyruntime senamakel/tinysweeper senamakel/tinywallet; do
     git -C "$repo" remote add origin "git@github.com:$slug.git"
