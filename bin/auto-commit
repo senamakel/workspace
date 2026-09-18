@@ -301,7 +301,8 @@ emit() {
 #
 # So take, in order of how precisely each names the edited checkout:
 #   1. `file_path` — Edit, Write and NotebookEdit name the exact file touched
-#   2. `workdir` — the directory Codex actually ran the command in
+#   2. a tool directory (`workdir`, `working_dir`, or `workspace`) — the
+#      directory Codex or an integration actually ran the command in
 #   3. the last `cd` target in a Bash command, resolved against the session cwd
 #   4. the event's `cwd`, which is right whenever the session sits in the
 #      checkout being edited
@@ -313,7 +314,20 @@ event_target() {
     [ -d "$dir" ] && { printf '%s' "$dir"; return 0; }
   fi
 
-  workdir="$(printf '%s' "$EVENT" | jq -r '.tool_input.workdir // .tool_input.cwd // empty' 2>/dev/null || true)"
+  # Codex's native shell tool calls this `workdir`. Connectors have also used
+  # `working_dir` and `workspace`; accepting all three keeps a linked worktree
+  # from being mistaken for the session's launch checkout. Prefer the precise
+  # per-tool directory to the session-level cwd in every case.
+  workdir="$(printf '%s' "$EVENT" | jq -r '
+    .tool_input.workdir
+    // .tool_input.working_dir
+    // .tool_input.workspace
+    // .tool_input.cwd
+    // .workdir
+    // .working_dir
+    // .workspace
+    // empty
+  ' 2>/dev/null || true)"
   if [ -n "$workdir" ]; then
     case "$workdir" in
       /*) dir="$workdir" ;;
@@ -406,11 +420,13 @@ LOG_BRANCH="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 # `senamakel/math-agent` was added on 2026-08-30, on the same terms: it is
 # private, so its diff now leaves the machine on every checkpoint.
 #
-# Still deliberately absent: the backends, `medulla-v1`, `medulla-v2`, the
-# `workflow-*` superprojects and the security-advisory forks, and the forks of
-# third-party projects (`tauri-cef`, `homebrew-core` and the rest), which carry
-# somebody else's code and belong to their upstream's review, not to a
-# checkpoint.
+# Still deliberately absent: `medulla-v1`, `medulla-v2`, the other private
+# backends and security-advisory forks, and the forks of third-party projects
+# (`tauri-cef`, `homebrew-core` and the rest), which carry somebody else's code
+# and belong to their upstream's review, not to a checkpoint. The active
+# `workflow-opencompany` superproject, its `backend` and `dashboard`
+# submodules, are included below at the owner's request: Codex routinely works
+# inside their linked worktrees.
 #
 # Refresh it with:
 #   gh repo list tinyhumansai --limit 200 --no-archived --source \
@@ -434,7 +450,8 @@ tinyhumansai/tiny.place:tinyhumansai/tinyagents:tinyhumansai/tinyanalyzer:tinyhu
 tinyhumansai/tinybox:tinyhumansai/tinycortex:tinyhumansai/tinydesktop:tinyhumansai/tinydocs:tinyhumansai/tinyflows:tinyhumansai/tinyhosts:tinyhumansai/tinyhivemind:tinyhumansai/tinyinference:tinyhumansai/tinyjuice:tinyhumansai/tinyloops:\
 tinyhumansai/tinymcp:tinyhumansai/tinymemory:tinyhumansai/tinyruntime:tinyhumansai/tinyruntime-nodejs:\
 tinyhumansai/tinyruntime-python:tinyhumansai/tinyskills:tinyhumansai/tinysweeper:tinyhumansai/tinyteams:tinyhumansai/tinywallet:\
-tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:\
+tinyhumansai/tinyvoice:tinyhumansai/tinyworkspaces:tinyhumansai/tinyfinance:tinyhumansai/tinyjevclient:tinyhumansai/tinytools:tinyhumansai/teeny-discord:\
+tinyhumansai/whisper-rs-sys:tinyhumansai/workspace:tinyhumansai/backend:tinyhumansai/dashboard:tinyhumansai/workflow-opencompany:\
 senamakel/.github:senamakel/ad-engine:senamakel/constitution:senamakel/fomotrader:senamakel/mascots:senamakel/math-agent:senamakel/medulla:\
 senamakel/llm-ladder-router:senamakel/medulla-src:senamakel/opencompany:senamakel/openhuman:senamakel/portal:senamakel/sdk:\
 senamakel/skill-registry:senamakel/riemann:senamakel/rust-template:\
@@ -444,7 +461,7 @@ senamakel/tinybox:senamakel/tinycortex:senamakel/tinydesktop:senamakel/tinydocs:
 senamakel/tinyhivemind:senamakel/tinyinference:senamakel/tinyjuice:senamakel/tinyloops:senamakel/tinymcp:\
 senamakel/tinymemory:senamakel/tinyruntime:senamakel/tinyruntime-nodejs:senamakel/tinyruntime-python:\
 senamakel/tinyskills:senamakel/tinysweeper:senamakel/tinyteams:senamakel/tinyvoice:senamakel/tinywallet:\
-senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace}"
+senamakel/tinyworkspaces:senamakel/whisper-rs-sys:senamakel/workspace:senamakel/backend:senamakel/dashboard:senamakel/workflow-opencompany}"
 ALLOWED_REMOTES="${AUTO_COMMIT_REMOTES:-origin upstream}"
 
 # git@host:owner/repo.git, https://host/owner/repo, ssh://git@host/owner/repo/
