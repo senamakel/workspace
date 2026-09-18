@@ -110,6 +110,18 @@ fire_codex() {
        "$COMMAND" --hook 2>&1)
 }
 
+# Some Codex integrations name the per-tool directory `working_dir` instead
+# of `workdir`. The hook must still prefer it over the long-lived session cwd.
+fire_codex_working_dir() {
+  local launch_repo="$1" work_repo="$2" state="$3" stub="${4:-}"
+  jq -n --arg s "session-fixed" --arg launch "$launch_repo" --arg workdir "$work_repo" \
+    '{session_id: $s, cwd: $launch, hook_event_name: "PostToolUse", tool_name: "apply_patch",
+      tool_input: {command: "*** Begin Patch", working_dir: $workdir}, tool_response: {}}' \
+    | (cd "$launch_repo" && AUTO_COMMIT_CMD="$stub" XDG_STATE_HOME="$state" \
+       AUTO_COMMIT_LOG="${AUTO_COMMIT_LOG:-$TEST_ROOT/unread.log}" \
+       "$COMMAND" --hook 2>&1)
+}
+
 # Feeds an event whose tool ran in a different checkout from the harness cwd.
 fire_from() {
   local launch_repo="$1" work_repo="$2" state="$3" stub="${4:-}"
@@ -173,7 +185,8 @@ test_commits_the_codex_workdir_not_the_session_cwd() {
   # Reading only `cwd` meant every invocation inspected the launch checkout,
   # found it clean, and silently saved nothing for hours.
   launch_repo="$(make_repo codex-launch)"
-  work_repo="$(make_repo codex-workdir)"
+  work_repo="$TEST_ROOT/codex-launch-worktree"
+  git -C "$launch_repo" worktree add -q -b codex-workdir "$work_repo"
   state="$(state_dir codex-workdir)"
   stub="$(make_stub codexworkdir "chore: checkpoint the worktree codex is in")"
   git -C "$launch_repo" switch -q main
@@ -187,6 +200,26 @@ test_commits_the_codex_workdir_not_the_session_cwd() {
     "that worktree is clean afterwards"
   assert_eq 1 "$(count_commits "$launch_repo")" \
     "the launch checkout, which changed nothing, is untouched"
+}
+
+test_commits_the_codex_working_dir_not_the_session_cwd() {
+  local launch_repo work_repo state stub
+  command -v jq >/dev/null 2>&1 || return 0
+  launch_repo="$(make_repo codex-working-dir-launch)"
+  work_repo="$TEST_ROOT/codex-working-dir-worktree"
+  git -C "$launch_repo" worktree add -q -b codex-working-dir "$work_repo"
+  state="$(state_dir codex-working-dir)"
+  stub="$(make_stub codexworkingdir "chore: checkpoint the Codex working directory")"
+  printf 'worktree change\n' > "$work_repo/new.txt"
+
+  AUTO_COMMIT_EVERY=1 fire_codex_working_dir "$launch_repo" "$work_repo" "$state" "$stub" >/dev/null
+
+  assert_eq 2 "$(count_commits "$work_repo")" \
+    "the linked worktree named by working_dir is committed"
+  assert_eq "" "$(git -C "$work_repo" status --porcelain)" \
+    "the linked worktree is clean afterwards"
+  assert_eq 1 "$(count_commits "$launch_repo")" \
+    "the session checkout remains untouched"
 }
 
 test_commits_only_every_nth_tool_call() {
@@ -1253,6 +1286,7 @@ run_test "the allowlist matches any remote and is overridable" test_allowlist_ma
 run_test "commits on every tool call by default" test_commits_on_every_tool_call_by_default
 run_test "commits the tool worktree instead of the launch checkout" test_commits_the_tool_worktree_not_the_launch_checkout
 run_test "commits the codex workdir instead of the session cwd" test_commits_the_codex_workdir_not_the_session_cwd
+run_test "commits the Codex working_dir instead of the session cwd" test_commits_the_codex_working_dir_not_the_session_cwd
 run_test "commits only every Nth tool call when configured" test_commits_only_every_nth_tool_call
 run_test "uses the generated subject" test_uses_the_generated_subject
 run_test "keeps an already-conventional subject verbatim" test_keeps_a_conventional_subject_verbatim
